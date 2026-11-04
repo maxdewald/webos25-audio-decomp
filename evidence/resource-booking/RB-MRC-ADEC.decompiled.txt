@@ -1,0 +1,166 @@
+/* @000158d8 mrc::ResourceCalculator::calcAdecResources */
+
+/* mrc::ResourceCalculator::calcAdecResources(int, int, int) */
+
+int mrc::ResourceCalculator::calcAdecResources(int param_1,int param_2,int param_3)
+
+{
+  vector *pvVar1;
+  int in_r3;
+  int in_stack_00000000;
+  int *local_30;
+  undefined4 local_2c;
+  int local_28;
+  undefined4 local_24;
+  undefined2 uStack_20;
+  undefined1 local_1e;
+  undefined1 local_1d;
+  
+  *(undefined4 *)param_1 = 0;
+  *(undefined4 *)(param_1 + 4) = 0;
+  *(undefined4 *)(param_1 + 8) = 0;
+  if ((((uint)(in_stack_00000000 == 6) & (uint)param_3 >> 1) != 0) &&
+     ((in_r3 - 2U & 0xfffffffd) == 0)) {
+    local_24 = local_24 & 0xffffff00;
+    local_28 = 0x36636161;
+    local_2c = 4;
+    local_30 = &local_28;
+    pvVar1 = (vector *)ResourceTable::lookup((ResourceTable *)(param_2 + 4),(string *)&local_30);
+    concatResourceList((vector *)param_1,pvVar1);
+    if (local_30 != &local_28) {
+      operator_delete(local_30,local_28 + 1);
+    }
+  }
+  if (param_3 << 0x1d < 0) {
+    local_2c = 3;
+    local_28 = 0x6d6370;
+    local_30 = &local_28;
+    pvVar1 = (vector *)ResourceTable::lookup((ResourceTable *)(param_2 + 4),(string *)&local_30);
+    concatResourceList((vector *)param_1,pvVar1);
+    if (local_30 != &local_28) {
+      operator_delete(local_30,local_28 + 1);
+    }
+  }
+  if (param_3 << 0x1c < 0) {
+    local_2c = 3;
+    local_28 = 0x737464;
+    local_30 = &local_28;
+    pvVar1 = (vector *)ResourceTable::lookup((ResourceTable *)(param_2 + 4),(string *)&local_30);
+    concatResourceList((vector *)param_1,pvVar1);
+    if (local_30 != &local_28) {
+      operator_delete(local_30,local_28 + 1);
+    }
+  }
+  if (param_3 << 0x1b < 0) {
+    local_28 = 0x65737464;
+    local_2c = 4;
+    local_24 = local_24 & 0xffffff00;
+    local_30 = &local_28;
+    pvVar1 = (vector *)ResourceTable::lookup((ResourceTable *)(param_2 + 4),(string *)&local_30);
+    concatResourceList((vector *)param_1,pvVar1);
+    if (local_30 != &local_28) {
+      operator_delete(local_30,local_28 + 1);
+    }
+  }
+  if (param_3 << 0x1a < 0) {
+    local_2c = 6;
+    local_24._2_2_ = (ushort)(local_24 >> 0x10) & 0xff00;
+    local_28 = 0x6765706d;
+    local_24 = CONCAT22(local_24._2_2_,0x682d);
+    local_30 = &local_28;
+    pvVar1 = (vector *)ResourceTable::lookup((ResourceTable *)(param_2 + 4),(string *)&local_30);
+    concatResourceList((vector *)param_1,pvVar1);
+    if (local_30 != &local_28) {
+      operator_delete(local_30,local_28 + 1);
+    }
+  }
+  if (param_3 << 0x19 < 0) {
+    local_2c = 3;
+    local_28 = 0x346361;
+    local_30 = &local_28;
+    pvVar1 = (vector *)ResourceTable::lookup((ResourceTable *)(param_2 + 4),(string *)&local_30);
+    concatResourceList((vector *)param_1,pvVar1);
+    if (local_30 != &local_28) {
+      operator_delete(local_30,local_28 + 1);
+    }
+  }
+  if (param_3 << 0x18 < 0) {
+    local_2c = 5;
+    local_24._1_3_ = (uint3)(local_24 >> 8) & 0xffff00;
+    local_28 = 0x6f6d7461;
+    local_24 = CONCAT31(local_24._1_3_,'s');
+    local_30 = &local_28;
+    pvVar1 = (vector *)ResourceTable::lookup((ResourceTable *)(param_2 + 4),(string *)&local_30);
+    concatResourceList((vector *)param_1,pvVar1);
+    if (local_30 != &local_28) {
+      operator_delete(local_30,local_28 + 1);
+    }
+  }
+  if (param_3 << 0x17 < 0) {
+    local_28._0_1_ = 'd';
+    local_28._1_1_ = 'e';
+    local_28._2_1_ = 's';
+    local_28._3_1_ = 'c';
+    local_24._0_1_ = 'r';
+    local_24._1_1_ = 'i';
+    local_24._2_1_ = 'p';
+    local_24._3_1_ = 't';
+    uStack_20 = 0x6f69;
+    local_1e = 0x6e;
+    local_2c = 0xb;
+    local_1d = 0;
+    local_30 = &local_28;
+    pvVar1 = (vector *)ResourceTable::lookup((ResourceTable *)(param_2 + 4),(string *)&local_30);
+    concatResourceList((vector *)param_1,pvVar1);
+    if (local_30 != &local_28) {
+      operator_delete(local_30,local_28 + 1);
+    }
+  }
+  if (param_3 << 0x16 < 0) {
+    local_2c = 3;
+    local_28 = 0x74616d;
+    local_30 = &local_28;
+    pvVar1 = (vector *)ResourceTable::lookup((ResourceTable *)(param_2 + 4),(string *)&local_30);
+    concatResourceList((vector *)param_1,pvVar1);
+    if (local_30 != &local_28) {
+      operator_delete(local_30,local_28 + 1);
+    }
+  }
+  if (param_3 << 0x15 < 0) {
+    local_2c = 3;
+    local_28 = 0x78616d;
+    local_30 = &local_28;
+    pvVar1 = (vector *)ResourceTable::lookup((ResourceTable *)(param_2 + 4),(string *)&local_30);
+    concatResourceList((vector *)param_1,pvVar1);
+    if (local_30 != &local_28) {
+      operator_delete(local_30,local_28 + 1);
+    }
+  }
+  if (param_3 << 0x14 < 0) {
+    local_28 = 0x666d6169;
+    local_2c = 4;
+    local_24 = local_24 & 0xffffff00;
+    local_30 = &local_28;
+    pvVar1 = (vector *)ResourceTable::lookup((ResourceTable *)(param_2 + 4),(string *)&local_30);
+    concatResourceList((vector *)param_1,pvVar1);
+    if (local_30 != &local_28) {
+      operator_delete(local_30,local_28 + 1);
+    }
+  }
+  if ((*(int *)param_1 == *(int *)(param_1 + 4)) || (param_3 << 0x1f < 0)) {
+    local_2c = 7;
+    local_28._0_1_ = 'd';
+    local_28._1_1_ = 'e';
+    local_28._2_1_ = 'f';
+    local_28._3_1_ = 'a';
+    local_24 = 0x746c75;
+    local_30 = &local_28;
+    pvVar1 = (vector *)ResourceTable::lookup((ResourceTable *)(param_2 + 4),(string *)&local_30);
+    concatResourceList((vector *)param_1,pvVar1);
+    if (local_30 != &local_28) {
+      operator_delete(local_30,local_28 + 1);
+    }
+  }
+  return param_1;
+}
+

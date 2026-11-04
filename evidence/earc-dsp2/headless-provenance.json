@@ -1,0 +1,122 @@
+{
+  "command": [
+    "/opt/homebrew/opt/ghidra/libexec/support/analyzeHeadless",
+    "build/ghidra/audio_a0_dsp2.main_60000000.bin",
+    "audio_a0_dsp2.main_60000000.bin",
+    "-process",
+    "audio_a0_dsp2.main_60000000.bin",
+    "-readOnly",
+    "-noanalysis",
+    "-max-cpu",
+    "2",
+    "-scriptPath",
+    "evidence/earc-dsp2;tools",
+    "-postScript",
+    "EarcDsp2Export.java",
+    "evidence/earc-dsp2",
+    "-log",
+    "evidence/earc-dsp2/headless.log",
+    "-scriptlog",
+    "evidence/earc-dsp2/script.log"
+  ],
+  "scoped_environment": {
+    "JAVA_HOME": "/opt/homebrew/opt/openjdk@21",
+    "HOME": "evidence/earc-dsp2/home",
+    "JAVA_TOOL_OPTIONS": "-Duser.home=evidence/earc-dsp2/home -Djava.util.prefs.userRoot=evidence/earc-dsp2/java-prefs -Dapplication.settingsdir=evidence/earc-dsp2/ghidra-settings -Dapplication.cachedir=evidence/earc-dsp2/ghidra-cache"
+  },
+  "before": {
+    "audio_a0_dsp2.main_60000000.bin.gpr": {
+      "size": 0,
+      "mtime_ns": 1793805923646813454,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "audio_a0_dsp2.main_60000000.bin.rep/idata/00/00000000.prp": {
+      "size": 509,
+      "mtime_ns": 1793805961130895793,
+      "sha256": "4d6a0611381e014e446d377719ee732748ea7ae28ca476e272e2f9a6521d4fe4"
+    },
+    "audio_a0_dsp2.main_60000000.bin.rep/idata/00/~00000000.db/db.1.gbf": {
+      "size": 25624576,
+      "mtime_ns": 1793805961147962419,
+      "sha256": "47e0401040e592cbbcee8f686172490effed26b1cd95fd1a5d9ea82659f90c75"
+    },
+    "audio_a0_dsp2.main_60000000.bin.rep/idata/~index.bak": {
+      "size": 129,
+      "mtime_ns": 1793805961153371693,
+      "sha256": "7f6c0afd03b914f207bb44487f0df5cdfec5bbf8bd92e72dd6a742132fa19c66"
+    },
+    "audio_a0_dsp2.main_60000000.bin.rep/idata/~index.dat": {
+      "size": 129,
+      "mtime_ns": 1793806207566919182,
+      "sha256": "7f6c0afd03b914f207bb44487f0df5cdfec5bbf8bd92e72dd6a742132fa19c66"
+    },
+    "audio_a0_dsp2.main_60000000.bin.rep/project.prp": {
+      "size": 156,
+      "mtime_ns": 1793805923655062597,
+      "sha256": "f7f48a016009a3d360cac95622a6a4a8d4d68cbc874e3c83c0f6e0c2ad285939"
+    },
+    "audio_a0_dsp2.main_60000000.bin.rep/user/~index.dat": {
+      "size": 59,
+      "mtime_ns": 1793805923656944328,
+      "sha256": "0a5034997e47499d758115fa580ad21d96557d2a32c89f2263bcfd3fa8a9a6e5"
+    },
+    "audio_a0_dsp2.main_60000000.bin.rep/versioned/~index.bak": {
+      "size": 59,
+      "mtime_ns": 1793805961153113315,
+      "sha256": "0a5034997e47499d758115fa580ad21d96557d2a32c89f2263bcfd3fa8a9a6e5"
+    },
+    "audio_a0_dsp2.main_60000000.bin.rep/versioned/~index.dat": {
+      "size": 59,
+      "mtime_ns": 1793806207566568969,
+      "sha256": "0a5034997e47499d758115fa580ad21d96557d2a32c89f2263bcfd3fa8a9a6e5"
+    }
+  },
+  "after": {
+    "audio_a0_dsp2.main_60000000.bin.gpr": {
+      "size": 0,
+      "mtime_ns": 1793805923646813454,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "audio_a0_dsp2.main_60000000.bin.rep/idata/00/00000000.prp": {
+      "size": 509,
+      "mtime_ns": 1793805961130895793,
+      "sha256": "4d6a0611381e014e446d377719ee732748ea7ae28ca476e272e2f9a6521d4fe4"
+    },
+    "audio_a0_dsp2.main_60000000.bin.rep/idata/00/~00000000.db/db.1.gbf": {
+      "size": 25624576,
+      "mtime_ns": 1793805961147962419,
+      "sha256": "47e0401040e592cbbcee8f686172490effed26b1cd95fd1a5d9ea82659f90c75"
+    },
+    "audio_a0_dsp2.main_60000000.bin.rep/idata/~index.bak": {
+      "size": 129,
+      "mtime_ns": 1793805961153371693,
+      "sha256": "7f6c0afd03b914f207bb44487f0df5cdfec5bbf8bd92e72dd6a742132fa19c66"
+    },
+    "audio_a0_dsp2.main_60000000.bin.rep/idata/~index.dat": {
+      "size": 129,
+      "mtime_ns": 1793806207566919182,
+      "sha256": "7f6c0afd03b914f207bb44487f0df5cdfec5bbf8bd92e72dd6a742132fa19c66"
+    },
+    "audio_a0_dsp2.main_60000000.bin.rep/project.prp": {
+      "size": 156,
+      "mtime_ns": 1793805923655062597,
+      "sha256": "f7f48a016009a3d360cac95622a6a4a8d4d68cbc874e3c83c0f6e0c2ad285939"
+    },
+    "audio_a0_dsp2.main_60000000.bin.rep/user/~index.dat": {
+      "size": 59,
+      "mtime_ns": 1793805923656944328,
+      "sha256": "0a5034997e47499d758115fa580ad21d96557d2a32c89f2263bcfd3fa8a9a6e5"
+    },
+    "audio_a0_dsp2.main_60000000.bin.rep/versioned/~index.bak": {
+      "size": 59,
+      "mtime_ns": 1793805961153113315,
+      "sha256": "0a5034997e47499d758115fa580ad21d96557d2a32c89f2263bcfd3fa8a9a6e5"
+    },
+    "audio_a0_dsp2.main_60000000.bin.rep/versioned/~index.dat": {
+      "size": 59,
+      "mtime_ns": 1793806207566568969,
+      "sha256": "0a5034997e47499d758115fa580ad21d96557d2a32c89f2263bcfd3fa8a9a6e5"
+    }
+  },
+  "source_project_unchanged": true
+}

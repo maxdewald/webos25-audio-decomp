@@ -1,0 +1,9 @@
+Rockhopper release 10.3.1-3006 (ponytail-papikonda)
+
+INSTANCE /proc/aaudio/processors/dsp2/lipsync/04230020
+
+status
+name=lipsync_04230020
+uid=0x04230020
+
+lstatus

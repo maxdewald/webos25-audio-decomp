@@ -1,0 +1,27 @@
+[
+  {
+    "target_raw": "0x001dc609",
+    "file_offset": "0x0000b700",
+    "raw_va": "0x0000b700"
+  },
+  {
+    "target_raw": "0x00195481",
+    "file_offset": "0x000067c0",
+    "raw_va": "0x000067c0"
+  },
+  {
+    "target_raw": "0x001c186d",
+    "file_offset": "0x00009ec0",
+    "raw_va": "0x00009ec0"
+  },
+  {
+    "target_raw": "0x001c186d",
+    "file_offset": "0x00504298",
+    "raw_va": "0x00514298"
+  },
+  {
+    "target_raw": "0x004a19ac",
+    "file_offset": "0x00504294",
+    "raw_va": "0x00514294"
+  }
+]

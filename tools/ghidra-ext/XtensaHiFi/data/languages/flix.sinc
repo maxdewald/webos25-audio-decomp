@@ -1,0 +1,17 @@
+
+# LG audio DSP (HiFi core, RG-2018.9): every op0=0xE/0xF FLIX bundle is 8 bytes
+# (measured by sweeping between 6.5k known function entries). Slot semantics are core-specific
+# TIE and unknown, so a bundle is decoded as an opaque op carrying its raw payload.
+define token flix64(64)
+    fx_op0 = (0,3)
+    fx_lo  = (4,31)
+    fx_hi  = (32,63)
+;
+
+define pcodeop flix;
+:FLIX "{"^fx_lo^","^fx_hi^"}" is fx_op0=0xe & fx_lo & fx_hi {
+        flix(fx_lo:4, fx_hi:4);
+}
+:FLIX "{"^fx_lo^","^fx_hi^"}" is fx_op0=0xf & fx_lo & fx_hi {
+        flix(fx_lo:4, fx_hi:4);
+}

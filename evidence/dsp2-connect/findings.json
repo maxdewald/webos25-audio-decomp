@@ -1,0 +1,51 @@
+{
+  "target": {
+    "file": "build/fw/audio_a0_dsp2.main_60000000.bin",
+    "sha256_main_segment": "d1735e7ad803d5da3f4dfd778a5936d3f962a91e1d26f896ec1dba8423b7d3cd",
+    "sha256_original_audio_a0_dsp2_bin_as_given": "c32c0f65f8a4238075530417dfdda012c64317a1a9270a4e7bf80d5ce7db134d",
+    "base": "0x60000000",
+    "port_current_first_offset": "+0x140 (word 0x50) — confirmed: written from FIRST_AU events in add_pending_obj_locked (0x6007217e) and read as up_peer->current_first in aud_module_chain_locked (0x600748b9); read for key 'acmod' in aud_port_sync_locked (0x60073002..12)",
+    "module_first_event_out_offset": "+0xa8 (word 0x2a) — set by aud_module_default_event on FIRST_AU at an INPUT, read at 0x6007212a"
+  },
+  "q1_connect_resends_first": {
+    "answer": "No. aud_connector_connect (0x6006f600) and aud_module_connect (0x60074154) never touch out_port->current_first (+0x140) and send no event. aud_module_connect only sets in_port->up_peer (+0xec, s32i at 0x6007416d) under async_up_lock and appends in_port to out_port->down_peer_root (aud_link_add_tail 0x6007417f). Nothing — neither the stored first nor a dummy — is sent at connect time. The output port is reused if it already exists (aud_module_new_output loop 0x60073cb2..0x60073cc1 -> 0x60073cea), so its current_first survives a re-route; the new input port is calloc-like zeroed (0x158 bytes, 0x60073be8) so in_port->current_first starts NULL. The first-event hand-over is deferred to the first data chain (see q2).",
+    "confidence": "high",
+    "evidence_addresses": ["0x6006f609", "0x6006f627", "0x6006f65a", "0x6006f697", "0x60074163", "0x6007416d", "0x6007417f", "0x60073cb9", "0x60073cea", "0x60073ba0", "0x60073be8"],
+    "source_vs_firmware": "match (module.c aud_module_connect 1315-1330, module_connector.c aud_connector_connect 66-98). No FLIX in either function.",
+    "unknowns": ["impl->deleting_port of specific modules (called from aud_module_disconnect 0x60074096) could drop an output port on disconnect; not analysed", "the 'already have output port' log path in aud_module_new_output goes through FLIX 0x60073cf5 (log-level test, inferred)"]
+  },
+  "q2_pending_first_replay": {
+    "answer": "Neither foreach_down_peer_push_data (0x60072694) nor aud_port_push_event (0x600727a4) contains replay logic; neither reads +0x140. The replay is in aud_module_chain_locked (0x600746d4), called by foreach_down_peer_push_data at 0x60072788 for each down-peer. Trigger: peer(input port)->current_first (+0x140) == NULL (0x600747c5/0x600747ca). Then: if peer->up_peer (+0xec) != NULL and up_peer->current_first != NULL -> e = aud_object_get(up_peer->current_first), i.e. THE STORED FIRST EVENT OBJECT ITSELF (refcount++, same object, same key-values) (0x600748b2..0x600748c2); else e = aud_event_new_first() — an empty dummy (type=1, flags DOWNWARD|SYNC, no key-values; 0x60069e20). e is stored in peer->current_first (0x6007490d) and delivered via module->impl->event(module, peer, get(e)) (0x60074910..0x60074920). Separately, on the OUTPUT side, add_pending_obj_locked (0x60072078) fills an empty out_port->current_first when DATA is queued: from module->first_event_out (+0xa8, the module's last INPUT first event) if set, else a dummy aud_event_new_first(); this only sets the stored pointer and does not push any event downstream.",
+    "strings_exact": {
+      "0x60043254": "last without first.. at output%d of %s\\n",
+      "0x6004327c": "data without first at output%d of %s. using previous first event\\n",
+      "0x600432c0": "data without first at output%d of %s. make dummy first event\\n",
+      "0x60043950": "chain without first at input%d of %s. get first event from up_peer..\\n",
+      "0x60043998": "no first at up_peer. make new\\n",
+      "0x600439b8": "NULL e.\\n",
+      "0x60043930": "data index %6d, Throwing...%s\\n",
+      "0x600433f4": "%s.%s%d : write to %d bytes to %s.%s%d\\n"
+    },
+    "string_refs": {
+      "0x60043254": "add_pending_obj_locked 0x600721a7 (LAST_AU with current_first==NULL)",
+      "0x6004327c": "add_pending_obj_locked 0x600721cd (DATA, current_first==NULL, module->first_event_out!=NULL)",
+      "0x600432c0": "add_pending_obj_locked 0x600721eb (DATA, current_first==NULL, first_event_out==NULL)",
+      "0x60043950": "aud_module_chain_locked 0x60074947",
+      "0x60043998": "aud_module_chain_locked 0x60074960",
+      "0x600439b8": "aud_module_chain_locked 0x600748ee"
+    },
+    "confidence": "high for the chain_locked replay (no FLIX on the up_peer/+0x140 test or the store/impl->event call); medium-high for the add_pending_obj_locked DATA test",
+    "evidence_addresses": ["0x60072788", "0x600747c5", "0x600747ca", "0x600748b2", "0x600748b9", "0x600748bf", "0x600748d1", "0x6007490d", "0x60074910", "0x60074920", "0x6007212a", "0x6007213a", "0x600721b6", "0x60069e3e", "0x60069e48"],
+    "flix_on_path": ["0x600748aa (between beqz 0x600748ca and l32i up_peer at 0x600748b2; a12=log mask loaded at 0x600748a6, branch target 0x60074938 prints the 'chain without first' info and jumps back to 0x600748b2 — inferred to be the log-level bbsi only)", "0x600748c9 (before aud_event_new_first; 0x60074956 prints 'no first at up_peer' and jumps to 0x600748d1 — inferred log-level test)", "0x60072122 (inferred: obj->class=='data' test; a11=obj->class and a12='data' loaded immediately before)", "0x60072132 (inferred: log-level test leading to 'using previous first event' at 0x600721c2)"],
+    "source_vs_firmware": "match (module.c add_pending_obj_locked 58-99 and aud_module_chain_locked 1416-1437). Firmware strings are byte-identical to source format strings.",
+    "unknowns": ["FLIX bundles listed above are decoded only by inference", "what each module's impl->event does with the replayed FIRST (e.g. whether gain/fader/delay forward it downstream) is outside this scope", "the replayed event bypasses aud_module_event_locked; per-port bookkeeping there (adjust_thread_priority etc.) is not done for the replay — consistent with source"]
+  },
+  "q3_reroute_after_first": {
+    "answer": "Yes, with conditions — but lazily. A new downstream peer connected after the FIRST was already synced receives nothing at connect time; on the first DATA that flows to it, aud_module_chain_locked sees its current_first==NULL and hands it the upstream output port's stored current_first object (same refcounted event, hence the original es/codec/data-rate key-values), via impl->event, before chaining the data. It gets an empty dummy instead if, at that moment, up_peer->current_first is NULL: e.g. after a LAST_AU cleared it (0x60072118..1a), if the output port was newly created by the connect and never carried a FIRST (then add_pending_obj_locked may itself have stored module->first_event_out or a dummy when data was queued — so the peer gets that, which is the module's input-side first, or a value-less dummy), or if the output port was deleted/recreated (e.g. via a module's deleting_port or aud_module_del_output_port).",
+    "confidence": "high for the mechanism; medium for real-world outcome (depends on whether the upstream output port persists and on module impl->event behaviour)",
+    "evidence_addresses": ["0x6007416d", "0x60073cea", "0x60073be8", "0x60072788", "0x600748b9", "0x600748bf", "0x6007490d", "0x60074920", "0x60072118", "0x60072cce"],
+    "source_vs_firmware": "match; source comment at module.c ~1309 explicitly states output ports are kept so a later instance reuses the same first event — firmware behaviour is consistent (output port reused, input port deleted on disconnect).",
+    "unknowns": ["whether the kernel-side reroute path uses aud_connector_connect/aud_module_connect only, or also deletes the upstream output port (aud_module_del_output_port 0x60073fd4 not analysed)", "whether data actually reaches the new peer (if no data flows, no FIRST is ever delivered)", "module-specific impl->event handling of the replayed FIRST"]
+  },
+  "files": ["6006f600_aud_connector_connect.asm", "60073b70_aud_module_new_input.asm", "60073c98_aud_module_new_output.asm", "60073dd8_aud_module_new_input_port_output_port.asm", "60074154_aud_module_connect.asm", "60074048_aud_module_disconnect.asm", "60072078_add_pending_obj_locked.asm", "60072694_foreach_down_peer_push_data.asm", "600727a4_aud_port_push_event.asm", "600746d4_aud_module_chain_locked.asm", "60072c08_aud_port_sync_locked.asm", "60069e20_aud_event_new_first.asm", "60043254_strings.asm", "strings.tsv", "connect-firstevent.c", "run-listings.sh", "dump_strings.py"]
+}

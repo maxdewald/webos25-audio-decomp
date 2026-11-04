@@ -1,0 +1,102 @@
+INVESTIGATOR 4: AUDIOOUTPUTD / LIBUMI LUNA AND OUTPUT DECISIONS
+Offline reconstruction, not original source. No payload was executed.
+Primary report: findings.json. Evidence names LOCAL-LUNA-* are local, not REA IDs.
+
+IDENTITIES AND ADDRESSES
+audiooutputd SHA256 026331391098d078a1941a95ec78fe8a23c05c5d944555c7bab431d8410d15f4
+libumi SHA256 f1ac7b61ac389af0329f36112e3b316c1f8575b1fecf79aed07986d1a873a764
+ELF raw VA + 0x10000 = existing Ghidra address for both targets.
+Thumb pointers have low bit set. validated-anchors.json records file offsets/bytes.
+
+CALLABLE CONTRACTS
+Service com.webos.service.audiooutput, category /quality.
+Raw method table 0x20be4 / Ghidra 0x30be4: setSettings, setQualityAttribute, getSettings.
+setSettings schema: only required category:string, value:object.
+  category=setMixer, value={"mix":false}; JSON bool, not string.
+  Changed mix updates libumi byte +0x7c and recomputes; unchanged mix does not.
+  category=soundOutputMode, value={"soundOutput":"external_arc","mode":"passThrough"}.
+  This checks mode existence but reapplies CURRENT stored digital mode; it does
+  not consume mode's value or switch the actual current output enum here.
+  A separate statically verified storage route is category=sound with the sole
+  value key soundOutputDigital:"passThrough". Its side effects remain untested.
+  category=external_arc carries earcCapability:[case-sensitive codec strings].
+  advancedEarcCapability:[{"audioCodingType":"PCM","maxChannelNumber":8}]
+  sets device PCM limit; arcActivation and audioDeviceType control activation.
+  WARNING: omitting advancedEarcCapability resets device channels to 0; omitting
+  supportIamf clears its support byte even in a capabilities-only update.
+
+setQualityAttribute schema: required categoryType:string, requestType:string;
+optional pipelineInfo/categoryInfo objects, activeState/isGameMode booleans;
+no additional outer properties. requestType="setAudioInputInfo" selects input metadata.
+categoryType is not read by the inspected client/TV path; "inputInfo" is only a
+schema-valid candidate string, not a recovered enum or standalone callable method.
+pipelineInfo needs nonempty pipelineId and resource as STRINGS, with existing
+sourceType/sourceAttribute preserved. resource is NOT under categoryInfo.
+categoryInfo carries codec (lowercase string), channel (number or numeric string).
+updatePipelineInfo may create a record. Category merge matches pipelineId/resource
+against the stored record. Current audio-map promotion is activeState-dependent;
+pipelinePurpose=["audiodescription"] instead selects the secondary map.
+This is a direct static metadata route, with no kernel hook/origin check visible.
+It does NOT prove actual resource allocation, ownership, decoding or current TV state.
+Reply success may come from downstream middleware even if metadata merge failed.
+
+DIRECT PASS-THROUGH TABLE
+input codec                 capability token     ct
+truehd, truehd_atmos         TrueHD                6
+mat, mat_atmos               MAT2PCM               7
+eac3, eac3_atmos             DD+                   5
+ac3                         DD                    2
+pcm                         PCM                   1
+dts                         DTS                   4
+dts_hd                      DTSHD                 8
+dts_hd_ma                   DTSHD_MA             10
+dts_x_p1                    DTSX_P1              11
+Japan+AAC-source predicate: aac/MPEG4AACLC ->9, else aac/AAC ->3.
+That source predicate accepts HDMI/TV/DP/USB, or MEDIA atsc30/dtv_8k/dtv,
+and requires input codec aac. No general HDMI-only direct-pass-through gate found.
+Missing capability is fallback, not hard rejection. DTS fallback priority:
+DTSX_P2/P1 ->11; DTSHD_MA ->10; DTS ->4; none ->1; mo=1 in each fallback.
+Other-input fallback uses AAC eligibility, then PCM-like or MAT2PCM/DD+/DD/PCM.
+MAT2PCM is suppressed under matprofile1. WowCast uses a separate capability list;
+its failure can cause intermediate fallback writes before direct eARC reapplication.
+
+CHANNEL / MIX / CONTROL WORDS
+eARC writer raw 0x31b64 / Ghidra 0x41b64 sends [st,ct,cn,sr,mo]=[2,ct,cn,0,mo].
+st=2 and sr=0 are exact fixed values here, not recovered wider enum meanings.
+Direct pass-through starts mo=(mix ? 1 : 0).
+Explicit cn is enabled only for input pcm/iamf, ct=1 and digital mode != pcm.
+Valid channels are exactly 2/6/8. Otherwise compressed direct cn remains 0.
+Ordinary PCM: min(valid input,valid device); down-clamp forces mo=1.
+Invalid input/device channels: cn=0, mo=1.
+Supported IAMF with valid input channels: cn=input, mo=1, bypasses device clamp.
+Converted device PCM capability: 0->0, 1..5->2, 6->6, >=7->8.
+Examples, conditional on all gates:
+  dts_hd_ma + DTSHD_MA + mix=false + passThrough -> [2,10,0,0,0].
+  pcm input8/device8 + mix=false + passThrough -> [2,1,8,0,0].
+  pcm input8/device6 + mix=false + passThrough -> [2,1,6,0,1].
+  pcm input6/device8 + mix=false + passThrough -> [2,1,6,0,0].
+These shapes are NOT actionable and were NOT sent. Metadata PCM does not create PCM.
+
+ON/OFF AND REMAINING BLOCKERS
+Current output digital-support gate is separate from its string allowlist.
+Non-digital current output forces digital mode pcm. inputDownMix +0x211 also
+forces ct1/mo1. Harmony prevents direct pass-through. Actual output-type setters
+are called even when eARC is off; a submitted type is not transmitted audio.
+ARC-related current output + non-none device: activation ARC ->(1,0), eARC ->(0,1),
+None/not_ready ->(0,0). Unknown activation returns false without a defined change.
+ARC writer only accepts ct {1,2,3,4,5,9}; eARC policy emits 10/11 too.
+RUNNING KERNEL ct maximum/mismatch: UNKNOWN. No source-only enum assumption made.
+No visible callback-local sender check. LS2 caller ACL/roles/API permissions:
+UNKNOWN, not unrestricted. Actual pipeline/resource state, receiver capability
+truth, driver acceptance and end-to-end output remain unverified.
+No audiod/resource-assignment/sink/DSP reverse engineering is claimed.
+
+CHECKS AND NEXT EXPERIMENT
+JSON integrity, two hashes, unique IDs/reference links, original ELF instruction
+bytes and all ct immediates/literals validated by node verify-evidence.mjs.
+Raw method table asserted by node extract-evidence.mjs. Wrong ARM-mode listing
+was rejected and replaced with Thumb before branch conclusions were made.
+Propose only: owner-approved passive capture of intended sender ACL, existing
+pipeline/resource metadata, real receiver limits and an LG-generated five-word
+output write during real PCM multichannel. Then consider a single reversible,
+authorized mixer change. Do not inject invented metadata as the first experiment.

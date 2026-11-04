@@ -1,0 +1,1587 @@
+### uname
+Linux LGwebOSTV 5.4.268-329.ptl4tv.5 #1 SMP PREEMPT Mon Sep 8 05:02:25 UTC 2025 aarch64 GNU/Linux
+### product
+OLED42C27LA
+10.3.1
+### aud params
+ablind_major=241
+acapture_poolname=audio_buffer
+allow_nonsecure_connect=Y
+aplayback_poolname=audio_buffer
+aproc_debug=N
+aud_disable_aad=N
+aud_dsp0_init_cmds=(null)
+aud_dsp1_init_cmds=(null)
+aud_dsp_boot_timeout=600
+aud_dsp_dump=Y
+aud_dsp_dump_max=1
+aud_dsp_dump_timeout=10
+aud_dsp_reset_count=0
+aud_monitor_dsp=Y
+aud_monitor_gstc=Y
+audio_compressed_layout=0
+audio_imc_sync_timeout=5
+aui_count=2
+encoder_processing_delay=0,30,30,20,20
+max_access_size=32768
+next_proc_id=8
+no_dsp_message=N
+no_glue_on_inter_legacy=Y
+shared_size=262144
+speaker_processing_delay=0,10,0,15,20
+uimc_major=242
+uimc_noncached=N
+use_printk_message=N
+debug_level=0
+ram_sizes=28835840,15728640,14155776,8388608
+rom_sizes=8388608,5242880,3145728,3670016
+### /proc/aaudio tree
+/proc/aaudio:
+blind_call
+blind_readers
+callv
+dot_block_connection
+dot_module_connection
+dsp0
+dsp1
+dsp2
+dsp3
+instances
+irq_command
+logmask
+module
+processors
+register
+roles
+
+/proc/aaudio/dsp0:
+debug_bin
+debug_bm_report
+debug_registry_dump
+debug_xos_load
+debug_xos_sizes
+debug_xos_thread
+debug_xos_timer
+dot_module_connection
+dot_registry
+dump_aud_data_cache
+dump_heap_cell
+dump_module_connection
+irq_status
+print_free_heap
+print_version
+psched_info
+sched_dump_run_list
+sched_info
+sched_module_result
+sched_run_all
+show_heap_status
+
+/proc/aaudio/dsp1:
+debug_bin
+debug_bm_report
+debug_registry_dump
+debug_xos_load
+debug_xos_sizes
+debug_xos_thread
+debug_xos_timer
+dot_module_connection
+dot_registry
+dump_aud_data_cache
+dump_heap_cell
+dump_module_connection
+irq_status
+print_free_heap
+print_version
+psched_info
+sched_dump_run_list
+sched_info
+sched_module_result
+sched_run_all
+se_test
+show_heap_status
+
+/proc/aaudio/dsp2:
+debug_bin
+debug_bm_report
+debug_registry_dump
+debug_xos_load
+debug_xos_sizes
+debug_xos_thread
+debug_xos_timer
+dot_module_connection
+dot_registry
+dump_aud_data_cache
+dump_heap_cell
+dump_module_connection
+irq_status
+print_free_heap
+print_version
+psched_info
+sched_dump_run_list
+sched_info
+sched_module_result
+sched_run_all
+show_heap_status
+
+/proc/aaudio/dsp3:
+debug_bin
+debug_bm_report
+debug_registry_dump
+debug_xos_load
+debug_xos_sizes
+debug_xos_thread
+debug_xos_timer
+dot_module_connection
+dot_registry
+dump_aud_data_cache
+dump_heap_cell
+dump_module_connection
+irq_status
+print_free_heap
+print_version
+psched_info
+sched_dump_run_list
+sched_info
+sched_module_result
+sched_run_all
+show_heap_status
+
+/proc/aaudio/instances:
+02110001
+02160001
+02170001
+02170002
+021c0001
+023c0001
+03100001
+03100002
+03180001
+03230001
+03250001
+032d0001
+032d0002
+04100001
+04110001
+04110002
+04160001
+04190001
+04190002
+04190003
+04190004
+041b0001
+041b0004
+041b0005
+041b0006
+041b0007
+041b0009
+041c0001
+041c0002
+041c0003
+041c0004
+041c0005
+04230003
+04240003
+04260003
+04270001
+
+/proc/aaudio/module:
+AACENC_P0
+AAD_IN
+ADC_IN
+AD_MIX
+AISOUND
+ARC
+ARM MAN
+BUF_MAN_ARM
+BUF_MAN_DSP0
+BUF_MAN_DSP1
+BUF_MAN_DSP2
+BUF_MAN_DSP3
+BYPASS_D0
+BYPASS_D1
+BYPASS_D2
+BYPASS_D3
+BYPASS_D4
+BYPASS_D5
+BYPASS_D6
+BYPASS_D7
+BYPASS_P0
+BYPASS_P1
+BYPASS_T
+CTRLSRC_D0
+CTRLSRC_D1
+CTRLSRC_P0
+CTRLSRC_P1
+CTRLSRC_P2
+CTRLSRC_P3
+DAP
+DEC_0
+DEC_1
+DEC_2
+DEC_3
+DSP0_DBG
+DSP0_MAN
+DSP1_DBG
+DSP1_MAN
+DSP2_DBG
+DSP2_MAN
+DSP3_DBG
+DSP3_MAN
+DTO_0
+DTO_1
+DTO_2
+DTO_3
+DTSENC_P0
+DTSVIRTUALX
+ENC_0
+ENC_1
+ENC_P0
+EXT_BUF_0
+EXT_BUF_1
+EXT_BUF_10
+EXT_BUF_11
+EXT_BUF_12
+EXT_BUF_13
+EXT_BUF_14
+EXT_BUF_2
+EXT_BUF_3
+EXT_BUF_4
+EXT_BUF_5
+EXT_BUF_6
+EXT_BUF_7
+EXT_BUF_8
+EXT_BUF_9
+FILE_DUMP
+FS23TIMER
+GLUE_D0
+GLUE_D1
+GLUE_D2
+GLUE_D3
+GLUE_D4
+GLUE_D5
+GLUE_D6
+GLUE_D7
+GLUE_E0
+GLUE_E1
+GLUE_E2
+GLUE_E3
+GLUE_E4
+GLUE_E5
+GLUE_E6
+GLUE_E7
+GLUE_M0
+GLUE_M1
+GLUE_M2
+GLUE_M3
+GLUE_M4
+GLUE_M5
+GLUE_M6
+GLUE_M7
+GLUE_P0
+GLUE_P1
+GLUE_P2
+GLUE_P3
+GLUE_P4
+GLUE_P5
+GLUE_P6
+GLUE_P7
+HDMI_IN_0
+HDMI_IN_1
+I2S_IN_0
+I2S_IN_1
+IMC_ARM
+IMC_DSP0
+IMC_DSP1
+IMC_DSP2
+IMC_DSP3
+INCTRL_0
+INCTRL_1
+INCTRL_10
+INCTRL_11
+INCTRL_2
+INCTRL_3
+INCTRL_4
+INCTRL_5
+INCTRL_6
+INCTRL_7
+INCTRL_8
+INCTRL_9
+INCTRL_D0
+INCTRL_D1
+INCTRL_D2
+INCTRL_D3
+INCTRL_D4
+INCTRL_D5
+INCTRL_D6
+INCTRL_D7
+INCTRL_D8
+INCTRL_D9
+MATENC_P0
+MATENC_P1
+MIX_0
+MIX_1
+MIX_D2
+MSSRC_0
+MSSRC_1
+MSSRC_2
+OUTES_ARC
+OUTES_IEC
+OUT_ARC
+OUT_HP
+OUT_IEC
+OUT_SPK
+PCM
+PCMCVT_D0
+PCMCVT_D1
+PCMCVT_D10
+PCMCVT_D11
+PCMCVT_D2
+PCMCVT_D3
+PCMCVT_D4
+PCMCVT_D5
+PCMCVT_D6
+PCMCVT_D7
+PCMCVT_D8
+PCMCVT_D9
+PCMCVT_P0
+PCMCVT_P1
+PCMCVT_P10
+PCMCVT_P11
+PCMCVT_P12
+PCMCVT_P13
+PCMCVT_P2
+PCMCVT_P3
+PCMCVT_P4
+PCMCVT_P5
+PCMCVT_P6
+PCMCVT_P7
+PCMCVT_P8
+PCMCVT_P9
+PCMCVT_T
+PCMREN_D0
+PCMREN_P0
+PCMSUB
+PCM_0
+PCM_OUT
+REFORM_0
+REFORM_1
+REFORM_2
+REFORM_3
+RTS_0
+RTS_1
+RTS_D0
+RTS_D1
+SE
+SE_0
+SE_1
+SIF_IN
+SIN_GEN
+SOLA_D0
+SOLA_D1
+SOLA_P0
+SOLA_P1
+SPDIF
+SPDIF_0
+SYS_MIX
+TP_IN_0
+TP_IN_1
+
+/proc/aaudio/module/AACENC_P0:
+status
+
+/proc/aaudio/module/AAD_IN:
+status
+
+/proc/aaudio/module/ADC_IN:
+status
+
+/proc/aaudio/module/AD_MIX:
+status
+
+/proc/aaudio/module/AISOUND:
+status
+
+/proc/aaudio/module/ARC:
+status
+
+/proc/aaudio/module/ARM MAN:
+status
+
+/proc/aaudio/module/BUF_MAN_ARM:
+status
+
+/proc/aaudio/module/BUF_MAN_DSP0:
+status
+
+/proc/aaudio/module/BUF_MAN_DSP1:
+status
+
+/proc/aaudio/module/BUF_MAN_DSP2:
+status
+
+/proc/aaudio/module/BUF_MAN_DSP3:
+status
+
+/proc/aaudio/module/BYPASS_D0:
+status
+
+/proc/aaudio/module/BYPASS_D1:
+status
+
+/proc/aaudio/module/BYPASS_D2:
+status
+
+/proc/aaudio/module/BYPASS_D3:
+status
+
+/proc/aaudio/module/BYPASS_D4:
+### modules
+AACENC_P0
+AAD_IN
+ADC_IN
+AD_MIX
+AISOUND
+ARC
+ARM MAN
+BUF_MAN_ARM
+BUF_MAN_DSP0
+BUF_MAN_DSP1
+BUF_MAN_DSP2
+BUF_MAN_DSP3
+BYPASS_D0
+BYPASS_D1
+BYPASS_D2
+BYPASS_D3
+BYPASS_D4
+BYPASS_D5
+BYPASS_D6
+BYPASS_D7
+BYPASS_P0
+BYPASS_P1
+BYPASS_T
+CTRLSRC_D0
+CTRLSRC_D1
+CTRLSRC_P0
+CTRLSRC_P1
+CTRLSRC_P2
+CTRLSRC_P3
+DAP
+DEC_0
+DEC_1
+DEC_2
+DEC_3
+DSP0_DBG
+DSP0_MAN
+DSP1_DBG
+DSP1_MAN
+DSP2_DBG
+DSP2_MAN
+DSP3_DBG
+DSP3_MAN
+DTO_0
+DTO_1
+DTO_2
+DTO_3
+DTSENC_P0
+DTSVIRTUALX
+ENC_0
+ENC_1
+ENC_P0
+EXT_BUF_0
+EXT_BUF_1
+EXT_BUF_10
+EXT_BUF_11
+EXT_BUF_12
+EXT_BUF_13
+EXT_BUF_14
+EXT_BUF_2
+EXT_BUF_3
+EXT_BUF_4
+EXT_BUF_5
+EXT_BUF_6
+EXT_BUF_7
+EXT_BUF_8
+EXT_BUF_9
+FILE_DUMP
+FS23TIMER
+GLUE_D0
+GLUE_D1
+GLUE_D2
+GLUE_D3
+GLUE_D4
+GLUE_D5
+GLUE_D6
+GLUE_D7
+GLUE_E0
+GLUE_E1
+GLUE_E2
+GLUE_E3
+GLUE_E4
+GLUE_E5
+GLUE_E6
+GLUE_E7
+GLUE_M0
+GLUE_M1
+GLUE_M2
+GLUE_M3
+GLUE_M4
+GLUE_M5
+GLUE_M6
+GLUE_M7
+GLUE_P0
+GLUE_P1
+GLUE_P2
+GLUE_P3
+GLUE_P4
+GLUE_P5
+GLUE_P6
+GLUE_P7
+HDMI_IN_0
+HDMI_IN_1
+I2S_IN_0
+I2S_IN_1
+IMC_ARM
+IMC_DSP0
+IMC_DSP1
+IMC_DSP2
+IMC_DSP3
+INCTRL_0
+INCTRL_1
+INCTRL_10
+INCTRL_11
+INCTRL_2
+INCTRL_3
+INCTRL_4
+INCTRL_5
+INCTRL_6
+INCTRL_7
+INCTRL_8
+INCTRL_9
+INCTRL_D0
+INCTRL_D1
+INCTRL_D2
+INCTRL_D3
+INCTRL_D4
+INCTRL_D5
+INCTRL_D6
+INCTRL_D7
+INCTRL_D8
+INCTRL_D9
+MATENC_P0
+MATENC_P1
+MIX_0
+MIX_1
+MIX_D2
+MSSRC_0
+MSSRC_1
+MSSRC_2
+OUTES_ARC
+OUTES_IEC
+OUT_ARC
+OUT_HP
+OUT_IEC
+OUT_SPK
+PCM
+PCMCVT_D0
+PCMCVT_D1
+PCMCVT_D10
+PCMCVT_D11
+PCMCVT_D2
+PCMCVT_D3
+PCMCVT_D4
+PCMCVT_D5
+PCMCVT_D6
+PCMCVT_D7
+PCMCVT_D8
+PCMCVT_D9
+PCMCVT_P0
+PCMCVT_P1
+PCMCVT_P10
+PCMCVT_P11
+PCMCVT_P12
+PCMCVT_P13
+PCMCVT_P2
+PCMCVT_P3
+PCMCVT_P4
+PCMCVT_P5
+PCMCVT_P6
+PCMCVT_P7
+PCMCVT_P8
+PCMCVT_P9
+PCMCVT_T
+PCMREN_D0
+PCMREN_P0
+PCMSUB
+PCM_0
+PCM_OUT
+REFORM_0
+REFORM_1
+REFORM_2
+REFORM_3
+RTS_0
+RTS_1
+RTS_D0
+RTS_D1
+SE
+SE_0
+SE_1
+SIF_IN
+SIN_GEN
+SOLA_D0
+SOLA_D1
+SOLA_P0
+SOLA_P1
+SPDIF
+SPDIF_0
+SYS_MIX
+TP_IN_0
+TP_IN_1
+### dot_module_connection (idle)
+digraph {
+ rankdir="LR";
+ node [color=black, fillcolor=white, style=filled, shape=box, fontname="sans"]
+ subgraph cluster_proc7_00000000d1dbd0b9_processor_7 {
+  label="processor_7
+proc_id:7";
+ }
+ subgraph cluster_proc4_00000000ccd9ac20_dsp2 {
+  label="dsp2
+proc_id:4";
+   subgraph cluster_inst_000000007fe07b1e_mixerbin_04270001 {
+    label="mixerbin_04270001";
+    mixerbin_04270001_000000007cd6e9fa_in0 [label="in0"];
+    mixerbin_04270001_000000002d018a97_in1 [label="in1"];
+    mixerbin_04270001_00000000ac9f5e0e_in11 [label="in11"];
+    mixerbin_04270001_00000000d927317f_in10 [label="in10"];
+    mixerbin_04270001_00000000b7564afa_out0 [label="out0"];
+   }
+   subgraph cluster_inst_0000000061662cfa_srcbin_04260003 {
+    label="srcbin_04260003";
+    srcbin_04260003_00000000993a4caf_in0 [label="in0"];
+    srcbin_04260003_00000000bf0f13f4_out0 [label="out0"];
+   }
+   subgraph cluster_inst_0000000007d9833a_sola_04240003 {
+    label="sola_04240003";
+    sola_04240003_00000000053e1abc_in0 [label="in0"];
+    sola_04240003_000000006b456340_out0 [label="out0"];
+   }
+   subgraph cluster_inst_00000000d72efb50_lipsync_04230003 {
+    label="lipsync_04230003";
+    lipsync_04230003_000000006698fe82_in0 [label="in0"];
+    lipsync_04230003_000000009a95f21c_out0 [label="out0"];
+   }
+   subgraph cluster_inst_000000001e0db5ea_delay_041c0005 {
+    label="delay_041c0005";
+    delay_041c0005_0000000039442e76_in0 [label="in0"];
+    delay_041c0005_00000000b731dad4_out0 [label="out0"];
+   }
+   subgraph cluster_inst_000000006f4f8a75_delay_041c0004 {
+    label="delay_041c0004";
+    delay_041c0004_00000000aa7d45ed_in0 [label="in0"];
+    delay_041c0004_00000000323c7b82_out0 [label="out0"];
+   }
+   subgraph cluster_inst_00000000b51b5b5b_delay_041c0003 {
+    label="delay_041c0003";
+    delay_041c0003_000000004e32fd5e_in0 [label="in0"];
+    delay_041c0003_000000003ed1e4f0_out0 [label="out0"];
+   }
+   subgraph cluster_inst_0000000049aab92c_delay_041c0002 {
+    label="delay_041c0002";
+    delay_041c0002_0000000045ecafbe_in0 [label="in0"];
+    delay_041c0002_0000000014d0d14e_out0 [label="out0"];
+   }
+   subgraph cluster_inst_000000003b740d15_delay_041c0001 {
+    label="delay_041c0001";
+    delay_041c0001_00000000c2ff36b6_out0 [label="out0"];
+   }
+   subgraph cluster_inst_0000000050567a3c_gain_041b0009 {
+    label="gain_041b0009";
+    gain_041b0009_00000000884a27b7_in0 [label="in0"];
+    gain_041b0009_000000009ffa21d0_out0 [label="out0"];
+   }
+   subgraph cluster_inst_000000009efd4845_gain_041b0007 {
+    label="gain_041b0007";
+    gain_041b0007_00000000dfcfe302_in0 [label="in0"];
+    gain_041b0007_00000000f7354617_out0 [label="out0"];
+   }
+   subgraph cluster_inst_00000000438f1596_gain_041b0006 {
+    label="gain_041b0006";
+    gain_041b0006_000000000696c40a_in0 [label="in0"];
+   }
+   subgraph cluster_inst_00000000fb410b28_gain_041b0005 {
+    label="gain_041b0005";
+    gain_041b0005_00000000c154440b_in0 [label="in0"];
+    gain_041b0005_00000000083f8517_out0 [label="out0"];
+   }
+   subgraph cluster_inst_000000004e0acbdb_gain_041b0004 {
+    label="gain_041b0004";
+    gain_041b0004_00000000b8076fb4_in0 [label="in0"];
+    gain_041b0004_00000000e1ba4004_out0 [label="out0"];
+   }
+   subgraph cluster_inst_000000005cde40e7_gain_041b0001 {
+    label="gain_041b0001";
+    gain_041b0001_0000000095d9e5b7_in0 [label="in0"];
+    gain_041b0001_0000000086667a1b_out0 [label="out0"];
+   }
+   subgraph cluster_inst_000000000eb95374_fader_04190004 {
+    label="fader_04190004";
+    fader_04190004_00000000614f6319_out0 [label="out0"];
+   }
+   subgraph cluster_inst_00000000922c6f97_fader_04190003 {
+    label="fader_04190003";
+    fader_04190003_0000000021d22b18_out0 [label="out0"];
+   }
+   subgraph cluster_inst_00000000f0fd797b_fader_04190002 {
+    label="fader_04190002";
+    fader_04190002_00000000ad4f3661_out0 [label="out0"];
+   }
+   subgraph cluster_inst_00000000362b13fd_fader_04190001 {
+    label="fader_04190001";
+    fader_04190001_000000000d29fc19_out0 [label="out0"];
+   }
+   subgraph cluster_inst_00000000e7fa0c6c_bypass_04160001 {
+    label="bypass_04160001";
+    bypass_04160001_00000000698e0eb1_in0 [label="in0"];
+   }
+   subgraph cluster_inst_00000000cea5ab95_gluepw_04110002 {
+    label="gluepw_04110002";
+    gluepw_04110002_00000000a1f56b12_in0 [label="in0"];
+   }
+   subgraph cluster_inst_000000002956a138_gluepw_04110001 {
+    label="gluepw_04110001";
+    gluepw_04110001_0000000088556817_in0 [label="in0"];
+   }
+   subgraph cluster_inst_000000004f7fb3d9_gluepr_04100001 {
+    label="gluepr_04100001";
+    gluepr_04100001_00000000b50c007b_out0 [label="out0"];
+   }
+ }
+ subgraph cluster_proc5_0000000074b10e87_dsp3 {
+  label="dsp3
+proc_id:5";
+ }
+ subgraph cluster_proc3_00000000c8376eb9_dsp1 {
+  label="dsp1
+proc_id:3";
+   subgraph cluster_inst_000000009cd89bea_outctrlbin_032d0002 {
+    label="outctrlbin_032d0002";
+    outctrlbin_032d0002_00000000678f4988_in0 [label="in0"];
+    outctrlbin_032d0002_000000003f0047ec_out0 [label="out0"];
+   }
+   subgraph cluster_inst_00000000de33262e_outctrlbin_032d0001 {
+    label="outctrlbin_032d0001";
+    outctrlbin_032d0001_00000000cf85a54f_in0 [label="in0"];
+    outctrlbin_032d0001_00000000c9e521f9_out0 [label="out0"];
+   }
+   subgraph cluster_inst_0000000090d57168_output_hp_03250001 {
+    label="output_hp_03250001";
+    output_hp_03250001_00000000a72f5da1_in0 [label="in0"];
+   }
+   subgraph cluster_inst_00000000a7a1dcf3_output_arc_03230001 {
+    label="output_arc_03230001";
+    output_arc_03230001_0000000064656b4c_in0 [label="in0"];
+   }
+   subgraph cluster_inst_000000003c84767c_queue_03180001 {
+    label="queue_03180001";
+    queue_03180001_00000000456aebcc_in0 [label="in0"];
+    queue_03180001_000000005fdd07e8_out0 [label="out0"];
+   }
+   subgraph cluster_inst_000000009bbe47c2_gluepr_03100002 {
+    label="gluepr_03100002";
+    gluepr_03100002_00000000da53ecce_out0 [label="out0"];
+   }
+   subgraph cluster_inst_00000000c018ac70_gluepr_03100001 {
+    label="gluepr_03100001";
+    gluepr_03100001_000000001b2a09f2_out0 [label="out0"];
+   }
+ }
+ subgraph cluster_proc2_0000000075028622_dsp0 {
+  label="dsp0
+proc_id:2";
+   subgraph cluster_inst_000000007fefc225_decoderbin_023c0001 {
+    label="decoderbin_023c0001";
+    decoderbin_023c0001_000000001b2732b6_in0 [label="in0"];
+    decoderbin_023c0001_0000000090c2371f_out0 [label="out0"];
+   }
+   subgraph cluster_inst_000000002754cc75_hdmi1_021c0001 {
+    label="hdmi1_021c0001";
+    hdmi1_021c0001_0000000052ce38ad_out1 [label="out1"];
+    hdmi1_021c0001_00000000b7762572_out0 [label="out0"];
+   }
+   subgraph cluster_inst_0000000065db79ec_input_queue_02170002 {
+    label="input_queue_02170002";
+    input_queue_02170002_00000000b9e886a1_in0 [label="in0"];
+    input_queue_02170002_00000000d9b50c12_out0 [label="out0"];
+   }
+   subgraph cluster_inst_00000000d8f3d1ec_input_queue_02170001 {
+    label="input_queue_02170001";
+    input_queue_02170001_000000005fd90ce6_in0 [label="in0"];
+    input_queue_02170001_00000000951d696a_out0 [label="out0"];
+   }
+   subgraph cluster_inst_00000000d622fbfc_bypass_02160001 {
+    label="bypass_02160001";
+    bypass_02160001_00000000f23459a1_in0 [label="in0"];
+   }
+   subgraph cluster_inst_00000000bc6482c1_gluepw_02110001 {
+    label="gluepw_02110001";
+    gluepw_02110001_000000009ad2d3df_in0 [label="in0"];
+   }
+ }
+ mixerbin_04270001_00000000b7564afa_out0 -> gluepw_04110002_00000000a1f56b12_in0;
+ mixerbin_04270001_00000000b7564afa_out0 -> gluepw_04110001_0000000088556817_in0;
+ shared_buf_000000007005aec8 [label="phys:0x00000000868d5000
+size:262144
+offset:0x142ad000"];
+ subgraph cluster_proc4_00000000ccd9ac20_dsp2 {
+   subgraph cluster_inst_00000000cea5ab95_gluepw_04110002 {
+     gluepw_04110002_out [label="jumper"];
+   }
+ }
+ gluepw_04110002_out -> shared_buf_000000007005aec8 [style=dotted];
+ subgraph cluster_proc3_00000000c8376eb9_dsp1 {
+   subgraph cluster_inst_000000009bbe47c2_gluepr_03100002 {
+     gluepr_03100002_in [label="jumper"];
+   }
+ }
+ shared_buf_000000007005aec8 -> gluepr_03100002_in [style=dotted];
+ shared_buf_00000000f3107a96 [label="phys:0x0000000086855000
+size:262144
+offset:0x1422d000"];
+ subgraph cluster_proc4_00000000ccd9ac20_dsp2 {
+   subgraph cluster_inst_000000002956a138_gluepw_04110001 {
+     gluepw_04110001_out [label="jumper"];
+   }
+ }
+ gluepw_04110001_out -> shared_buf_00000000f3107a96 [style=dotted];
+ subgraph cluster_proc3_00000000c8376eb9_dsp1 {
+   subgraph cluster_inst_00000000c018ac70_gluepr_03100001 {
+     gluepr_03100001_in [label="jumper"];
+   }
+ }
+ shared_buf_00000000f3107a96 -> gluepr_03100001_in [style=dotted];
+ srcbin_04260003_00000000bf0f13f4_out0 -> sola_04240003_00000000053e1abc_in0;
+ sola_04240003_000000006b456340_out0 -> lipsync_04230003_000000006698fe82_in0;
+ lipsync_04230003_000000009a95f21c_out0 -> gain_041b0006_000000000696c40a_in0;
+ delay_041c0005_00000000b731dad4_out0 -> gain_041b0009_00000000884a27b7_in0;
+ delay_041c0004_00000000323c7b82_out0 -> gain_041b0007_00000000dfcfe302_in0;
+ delay_041c0003_000000003ed1e4f0_out0 -> gain_041b0005_00000000c154440b_in0;
+ delay_041c0002_0000000014d0d14e_out0 -> gain_041b0004_00000000b8076fb4_in0;
+ delay_041c0001_00000000c2ff36b6_out0 -> gain_041b0001_0000000095d9e5b7_in0;
+ gain_041b0009_000000009ffa21d0_out0 -> mixerbin_04270001_000000007cd6e9fa_in0;
+ gain_041b0007_00000000f7354617_out0 -> mixerbin_04270001_000000002d018a97_in1;
+ gain_041b0005_00000000083f8517_out0 -> mixerbin_04270001_00000000ac9f5e0e_in11;
+ gain_041b0004_00000000e1ba4004_out0 -> mixerbin_04270001_00000000d927317f_in10;
+ gain_041b0001_0000000086667a1b_out0 -> bypass_04160001_00000000698e0eb1_in0;
+ fader_04190004_00000000614f6319_out0 -> delay_041c0005_0000000039442e76_in0;
+ fader_04190003_0000000021d22b18_out0 -> delay_041c0004_00000000aa7d45ed_in0;
+ fader_04190002_00000000ad4f3661_out0 -> delay_041c0003_000000004e32fd5e_in0;
+ fader_04190001_000000000d29fc19_out0 -> delay_041c0002_0000000045ecafbe_in0;
+ gluepr_04100001_00000000b50c007b_out0 -> srcbin_04260003_00000000993a4caf_in0;
+ outctrlbin_032d0002_000000003f0047ec_out0 -> output_arc_03230001_0000000064656b4c_in0;
+ outctrlbin_032d0001_00000000c9e521f9_out0 -> output_hp_03250001_00000000a72f5da1_in0;
+ queue_03180001_000000005fdd07e8_out0 -> outctrlbin_032d0002_00000000678f4988_in0;
+ gluepr_03100002_00000000da53ecce_out0 -> queue_03180001_00000000456aebcc_in0;
+ gluepr_03100001_000000001b2a09f2_out0 -> outctrlbin_032d0001_00000000cf85a54f_in0;
+ decoderbin_023c0001_0000000090c2371f_out0 -> gluepw_02110001_000000009ad2d3df_in0;
+ shared_buf_000000005b9e2c5c [label="phys:0x0000000086915000
+size:262144
+offset:0x142ed000"];
+ subgraph cluster_proc2_0000000075028622_dsp0 {
+   subgraph cluster_inst_00000000bc6482c1_gluepw_02110001 {
+     gluepw_02110001_out [label="jumper"];
+   }
+ }
+ gluepw_02110001_out -> shared_buf_000000005b9e2c5c [style=dotted];
+ subgraph cluster_proc4_00000000ccd9ac20_dsp2 {
+   subgraph cluster_inst_000000004f7fb3d9_gluepr_04100001 {
+     gluepr_04100001_in [label="jumper"];
+   }
+ }
+ shared_buf_000000005b9e2c5c -> gluepr_04100001_in [style=dotted];
+ hdmi1_021c0001_0000000052ce38ad_out1 -> input_queue_02170002_00000000b9e886a1_in0;
+ hdmi1_021c0001_00000000b7762572_out0 -> input_queue_02170001_000000005fd90ce6_in0;
+ input_queue_02170002_00000000d9b50c12_out0 -> bypass_02160001_00000000f23459a1_in0;
+ input_queue_02170001_00000000951d696a_out0 -> decoderbin_023c0001_000000001b2732b6_in0;
+}
+### instance props (skipping appsink, which blocks)
+## gluepw_02110001
+thread-priority=(int)0
+drop-output-data=(bool)false
+drop-output-meta=(bool)false
+block-module=(bool)false
+log-mask=(int)7
+log-level=0x00000007
+do-chain-profile=(bool)false
+chain-profile=0
+cowork-uid=(int)68157441
+shbuf-offset=(int)338612224
+merge-meta-pcm=(bool)true
+## bypass_02160001
+thread-priority=(int)0
+drop-output-data=(bool)false
+drop-output-meta=(bool)false
+block-module=(bool)false
+log-mask=(int)7
+log-level=0x00000007
+do-chain-profile=(bool)false
+chain-profile=0
+## input_queue_02170001
+thread-priority=(int)0
+drop-output-data=(bool)false
+drop-output-meta=(bool)false
+block-module=(bool)false
+log-mask=(int)7
+log-level=0x00000007
+do-chain-profile=(bool)false
+chain-profile=0
+max-length=(int)2048
+wait-length=(int)0
+stop-length=(int)0
+fade-length=(int)0
+chunk-length=(int)0
+queued-length=(int)0
+padding-length=(int)0
+state=wait
+draw-dot-on-wait=(int)0
+enable_underflow=(bool)true
+send_underflow=(int)0
+underflow-count=(int)0
+max-queued-length=(int)0
+set-flush=(bool)false
+bypass=(bool)false
+block-queue=(bool)false
+underflow=(bool)true
+## input_queue_02170002
+thread-priority=(int)0
+drop-output-data=(bool)false
+drop-output-meta=(bool)false
+block-module=(bool)false
+log-mask=(int)7
+log-level=0x00000007
+do-chain-profile=(bool)false
+chain-profile=0
+max-length=(int)2048
+wait-length=(int)0
+stop-length=(int)0
+fade-length=(int)0
+chunk-length=(int)0
+queued-length=(int)0
+padding-length=(int)0
+state=wait
+draw-dot-on-wait=(int)0
+enable_underflow=(bool)true
+send_underflow=(int)0
+underflow-count=(int)0
+max-queued-length=(int)0
+set-flush=(bool)false
+bypass=(bool)false
+block-queue=(bool)false
+underflow=(bool)true
+## hdmi1_021c0001
+thread-priority=(int)0
+drop-output-data=(bool)true
+drop-output-meta=(bool)false
+block-module=(bool)false
+log-mask=(int)15
+log-level=0x0000000f
+do-chain-profile=(bool)false
+chain-profile=0
+start=(int)0
+drop=(bool)true
+multi-pcm-out=(int)0
+overflow-count=(int)0
+data-drop-mode=(int)2
+codec=(int)0
+hdmi-port=(int)0
+mode=(int)0
+channel-num=(int)2
+sampling-freq=(int)48000
+int-count=(int)0
+clock-count=(int)48000
+internal_buf_size=(int)0
+bc_buffering_size=(int)65536
+## decoderbin_023c0001
+thread-priority=(int)0
+drop-output-data=(bool)false
+drop-output-meta=(bool)false
+block-module=(bool)false
+log-mask=(int)7
+log-level=0x00000007
+do-chain-profile=(bool)false
+chain-profile=0
+decoder-uid=<unknown_type>
+codec=<unknown_type>
+dec-id=<unknown_type>
+connect=<unknown_type>
+dummy-codec=<unknown_type>
+workerbin-uid=(int)0
+## gluepr_03100001
+thread-priority=(int)0
+drop-output-data=(bool)false
+drop-output-meta=(bool)false
+block-module=(bool)false
+log-mask=(int)7
+log-level=0x00000007
+do-chain-profile=(bool)false
+chain-profile=0
+cowork-uid=(int)68222977
+shbuf-offset=(int)337825792
+merge-meta-pcm=(bool)true
+## gluepr_03100002
+thread-priority=(int)0
+drop-output-data=(bool)false
+drop-output-meta=(bool)false
+block-module=(bool)false
+log-mask=(int)7
+log-level=0x00000007
+do-chain-profile=(bool)false
+chain-profile=0
+cowork-uid=(int)68222978
+shbuf-offset=(int)338350080
+merge-meta-pcm=(bool)true
+## queue_03180001
+thread-priority=(int)0
+drop-output-data=(bool)false
+drop-output-meta=(bool)false
+block-module=(bool)false
+log-mask=(int)7
+log-level=0x00000007
+do-chain-profile=(bool)false
+chain-profile=0
+max-length=(int)0
+wait-length=(int)0
+stop-length=(int)0
+fade-length=(int)0
+chunk-length=(int)0
+queued-length=(int)0
+padding-length=(int)0
+state=running
+draw-dot-on-wait=(int)0
+enable_underflow=(bool)true
+send_underflow=(int)0
+underflow-count=(int)0
+max-queued-length=(int)256
+set-flush=(bool)false
+bypass=(bool)false
+block-queue=(bool)false
+underflow=(bool)true
+## output_arc_03230001
+thread-priority=(int)0
+drop-output-data=(bool)false
+drop-output-meta=(bool)false
+block-module=(bool)false
+log-mask=(int)7
+log-level=0x00000007
+do-chain-profile=(bool)false
+chain-profile=0/194189922060
+max-length=(int)1024
+wait-length=(int)512
+stop-length=(int)0
+queued-length=(int)0
+output-channels=(int)2
+stride-shift=(int)3
+underflow-count=(int)5
+bc-filled=(int)4096
+bc-init-filled=(int)2048
+bc-write-time=(long long)145160
+latency=(int)473019899
+## output_hp_03250001
+thread-priority=(int)0
+drop-output-data=(bool)false
+drop-output-meta=(bool)false
+block-module=(bool)false
+log-mask=(int)7
+log-level=0x00000007
+do-chain-profile=(bool)false
+chain-profile=0
+max-length=(int)1024
+wait-length=(int)512
+stop-length=(int)0
+queued-length=(int)0
+output-channels=(int)2
+stride-shift=(int)3
+underflow-count=(int)21
+bc-filled=(int)3328
+bc-init-filled=(int)2048
+bc-write-time=(long long)42814
+latency=(int)473016044
+## outctrlbin_032d0001
+thread-priority=(int)0
+drop-output-data=(bool)false
+drop-output-meta=(bool)false
+block-module=(bool)false
+log-mask=(int)7
+log-level=0x00000007
+do-chain-profile=(bool)false
+chain-profile=0/358592415626
+gain=(int)8388608
+fade-gain=(int)-1
+mute-output=(bool)true
+delay=(int)0
+## outctrlbin_032d0002
+thread-priority=(int)0
+drop-output-data=(bool)false
+drop-output-meta=(bool)false
+block-module=(bool)false
+log-mask=(int)7
+log-level=0x00000007
+do-chain-profile=(bool)false
+chain-profile=0/358589715449
+gain=(int)8388608
+fade-gain=(int)-1
+mute-output=(bool)false
+delay=(int)0
+## gluepr_04100001
+thread-priority=(int)0
+drop-output-data=(bool)false
+drop-output-meta=(bool)false
+block-module=(bool)false
+log-mask=(int)7
+log-level=0x00000007
+do-chain-profile=(bool)false
+chain-profile=0
+cowork-uid=(int)34668545
+shbuf-offset=(int)338612224
+merge-meta-pcm=(bool)true
+## gluepw_04110001
+thread-priority=(int)0
+drop-output-data=(bool)false
+drop-output-meta=(bool)false
+block-module=(bool)false
+log-mask=(int)7
+log-level=0x00000007
+do-chain-profile=(bool)false
+chain-profile=0
+cowork-uid=(int)51380225
+shbuf-offset=(int)337825792
+merge-meta-pcm=(bool)true
+## gluepw_04110002
+thread-priority=(int)0
+drop-output-data=(bool)false
+drop-output-meta=(bool)false
+block-module=(bool)false
+log-mask=(int)7
+log-level=0x00000007
+do-chain-profile=(bool)false
+chain-profile=0
+cowork-uid=(int)51380226
+shbuf-offset=(int)338350080
+merge-meta-pcm=(bool)true
+## bypass_04160001
+thread-priority=(int)0
+drop-output-data=(bool)false
+drop-output-meta=(bool)false
+block-module=(bool)false
+log-mask=(int)7
+log-level=0x00000007
+do-chain-profile=(bool)false
+chain-profile=0/358653136744
+## fader_04190001
+thread-priority=(int)0
+drop-output-data=(bool)false
+drop-output-meta=(bool)false
+block-module=(bool)false
+log-mask=(int)7
+log-level=0x00000007
+do-chain-profile=(bool)false
+chain-profile=0
+max-length=(int)512
+wait-length=(int)256
+stop-length=(int)0
+fade-length=(int)256
+chunk-length=(int)256
+queued-length=(int)0
+padding-length=(int)512
+state=wait
+draw-dot-on-wait=(int)0
+enable_underflow=(bool)false
+send_underflow=(int)0
+underflow-count=(int)0
+max-queued-length=(int)768
+set-flush=(bool)false
+bypass=(bool)false
+block-queue=(bool)false
+underflow=(bool)true
+## fader_04190002
+thread-priority=(int)0
+drop-output-data=(bool)false
+drop-output-meta=(bool)false
+block-module=(bool)false
+log-mask=(int)7
+log-level=0x00000007
+do-chain-profile=(bool)false
+chain-profile=0
+max-length=(int)512
+wait-length=(int)256
+stop-length=(int)0
+fade-length=(int)256
+chunk-length=(int)256
+queued-length=(int)0
+padding-length=(int)512
+state=wait
+draw-dot-on-wait=(int)0
+enable_underflow=(bool)false
+send_underflow=(int)0
+underflow-count=(int)0
+max-queued-length=(int)768
+set-flush=(bool)false
+bypass=(bool)false
+block-queue=(bool)false
+underflow=(bool)true
+## fader_04190003
+thread-priority=(int)0
+drop-output-data=(bool)false
+drop-output-meta=(bool)false
+block-module=(bool)false
+log-mask=(int)7
+log-level=0x00000007
+do-chain-profile=(bool)false
+chain-profile=0
+max-length=(int)512
+wait-length=(int)256
+stop-length=(int)0
+fade-length=(int)256
+chunk-length=(int)256
+queued-length=(int)0
+padding-length=(int)512
+state=wait
+draw-dot-on-wait=(int)0
+enable_underflow=(bool)false
+send_underflow=(int)0
+underflow-count=(int)0
+max-queued-length=(int)0
+set-flush=(bool)false
+bypass=(bool)false
+block-queue=(bool)false
+underflow=(bool)true
+## fader_04190004
+thread-priority=(int)0
+drop-output-data=(bool)false
+drop-output-meta=(bool)false
+block-module=(bool)false
+log-mask=(int)7
+log-level=0x00000007
+do-chain-profile=(bool)false
+chain-profile=0
+max-length=(int)512
+wait-length=(int)256
+stop-length=(int)0
+fade-length=(int)256
+chunk-length=(int)256
+queued-length=(int)0
+padding-length=(int)512
+state=wait
+draw-dot-on-wait=(int)0
+enable_underflow=(bool)false
+send_underflow=(int)0
+underflow-count=(int)12
+max-queued-length=(int)768
+set-flush=(bool)false
+bypass=(bool)false
+block-queue=(bool)false
+underflow=(bool)true
+## gain_041b0001
+thread-priority=(int)0
+drop-output-data=(bool)false
+drop-output-meta=(bool)false
+block-module=(bool)false
+log-mask=(int)7
+log-level=0x00000007
+do-chain-profile=(bool)false
+chain-profile=0
+gain=(int)8388608
+current-gain=(int)0
+fade-gain=(int)8388608
+final-gain=(int)0
+channel=(int)2
+mute-input=(bool)false
+mute-output=(bool)false
+fadetime-ms=(int)-1
+target-gain=(int)8388608
+delta-s=(int)0
+delta-g=(int)0
+stop-after=(int)0
+fade-type=(int)0
+## gain_041b0004
+thread-priority=(int)0
+drop-output-data=(bool)false
+drop-output-meta=(bool)false
+block-module=(bool)false
+log-mask=(int)7
+log-level=0x00000007
+do-chain-profile=(bool)false
+chain-profile=0
+gain=(int)-1
+current-gain=(int)8388608
+fade-gain=(int)8388608
+final-gain=(int)8388608
+channel=(int)2
+mute-input=(bool)false
+mute-output=(bool)false
+fadetime-ms=(int)-1
+target-gain=(int)8388608
+delta-s=(int)0
+delta-g=(int)0
+stop-after=(int)0
+fade-type=(int)0
+## gain_041b0005
+thread-priority=(int)0
+drop-output-data=(bool)false
+drop-output-meta=(bool)false
+block-module=(bool)false
+log-mask=(int)7
+log-level=0x00000007
+do-chain-profile=(bool)false
+chain-profile=0
+gain=(int)8388608
+current-gain=(int)8388608
+fade-gain=(int)8388608
+final-gain=(int)8388608
+channel=(int)2
+mute-input=(bool)false
+mute-output=(bool)false
+fadetime-ms=(int)-1
+target-gain=(int)8388608
+delta-s=(int)0
+delta-g=(int)0
+stop-after=(int)0
+fade-type=(int)0
+## gain_041b0006
+thread-priority=(int)0
+drop-output-data=(bool)false
+drop-output-meta=(bool)false
+block-module=(bool)false
+log-mask=(int)7
+log-level=0x00000007
+do-chain-profile=(bool)false
+chain-profile=0
+gain=(int)8388608
+current-gain=(int)0
+fade-gain=(int)8388608
+final-gain=(int)0
+channel=(int)2
+mute-input=(bool)false
+mute-output=(bool)false
+fadetime-ms=(int)-1
+target-gain=(int)8388608
+delta-s=(int)0
+delta-g=(int)0
+stop-after=(int)0
+fade-type=(int)0
+## gain_041b0007
+thread-priority=(int)0
+drop-output-data=(bool)false
+drop-output-meta=(bool)false
+block-module=(bool)false
+log-mask=(int)7
+log-level=0x00000007
+do-chain-profile=(bool)false
+chain-profile=0
+gain=(int)8388608
+current-gain=(int)0
+fade-gain=(int)8388608
+final-gain=(int)0
+channel=(int)2
+mute-input=(bool)true
+mute-output=(bool)true
+fadetime-ms=(int)-1
+target-gain=(int)8388608
+delta-s=(int)0
+delta-g=(int)0
+stop-after=(int)0
+fade-type=(int)0
+## gain_041b0009
+thread-priority=(int)0
+drop-output-data=(bool)false
+drop-output-meta=(bool)false
+block-module=(bool)false
+log-mask=(int)7
+log-level=0x00000007
+do-chain-profile=(bool)false
+chain-profile=0
+gain=(int)8388608
+current-gain=(int)8388608
+fade-gain=(int)8388608
+final-gain=(int)8388608
+channel=(int)2
+mute-input=(bool)true
+mute-output=(bool)true
+fadetime-ms=(int)-1
+target-gain=(int)8388608
+delta-s=(int)0
+delta-g=(int)0
+stop-after=(int)0
+fade-type=(int)0
+## delay_041c0001
+thread-priority=(int)0
+drop-output-data=(bool)false
+drop-output-meta=(bool)false
+block-module=(bool)false
+log-mask=(int)7
+log-level=0x00000007
+do-chain-profile=(bool)false
+chain-profile=0
+delay=(int)0
+packet-count=(int)0
+queued-length=0
+delayed=(bool)false
+number-packet=(int)1
+au-length=(int)256
+## delay_041c0002
+thread-priority=(int)0
+drop-output-data=(bool)false
+drop-output-meta=(bool)false
+block-module=(bool)false
+log-mask=(int)7
+log-level=0x00000007
+do-chain-profile=(bool)false
+chain-profile=0
+delay=(int)0
+packet-count=(int)0
+queued-length=0
+delayed=(bool)false
+number-packet=(int)1
+au-length=(int)256
+## delay_041c0003
+thread-priority=(int)0
+drop-output-data=(bool)false
+drop-output-meta=(bool)false
+block-module=(bool)false
+log-mask=(int)7
+log-level=0x00000007
+do-chain-profile=(bool)false
+chain-profile=0
+delay=(int)0
+packet-count=(int)0
+queued-length=0
+delayed=(bool)false
+number-packet=(int)1
+au-length=(int)256
+## delay_041c0004
+thread-priority=(int)0
+drop-output-data=(bool)false
+drop-output-meta=(bool)false
+block-module=(bool)false
+log-mask=(int)7
+log-level=0x00000007
+do-chain-profile=(bool)false
+chain-profile=0
+delay=(int)0
+packet-count=(int)0
+queued-length=0
+delayed=(bool)false
+number-packet=(int)1
+au-length=(int)256
+## delay_041c0005
+thread-priority=(int)0
+drop-output-data=(bool)false
+drop-output-meta=(bool)false
+block-module=(bool)false
+log-mask=(int)7
+log-level=0x00000007
+do-chain-profile=(bool)false
+chain-profile=0
+delay=(int)40
+packet-count=(int)0
+queued-length=0
+delayed=(bool)false
+number-packet=(int)1
+au-length=(int)256
+## lipsync_04230003
+thread-priority=(int)0
+drop-output-data=(bool)false
+drop-output-meta=(bool)false
+block-module=(bool)false
+log-mask=(int)7
+log-level=0x00000007
+do-chain-profile=(bool)false
+chain-profile=0
+debug-skip-count=(int)0
+debug-repeat-count=(int)0
+debug-discontinuity-count=(int)0
+debug-free-run-count=(int)0
+channels=(int)2
+fs=(int)48
+bytePerSample=(int)4
+nSamplePerFrame=(int)256
+discard_param=(int)0
+LipsyncOnOff=(int)0
+upperbound=(int)1
+lowerbound=(int)32
+ConstantOffset=(int)150
+freerunupperbound=(int)5000
+freerunlowerbound=(int)5000
+clockType=(int)256
+BaseCT=(int)0
+BaseST=(int)0
+ui32BaseCT=(int)0
+ui32BaseST=(int)0
+NodelayOnOff=(int)0
+over_protection=(int)0
+print-interval=(int)375
+count_transition=(int)2
+start-pts=(int)0
+end-pts=(int)0
+gap-handling=(int)0
+presented-pts-index=(int)-1
+additional_bound=(int)0
+autotest_mode=(int)0
+offset=(int)150
+speed-in=(int)1000
+param_channel=(int)2
+dataType=(int)0
+idle_time=(int)11
+state=(int)1
+seamless-mode=(bool)false
+## sola_04240003
+thread-priority=(int)0
+drop-output-data=(bool)false
+drop-output-meta=(bool)false
+block-module=(bool)false
+log-mask=(int)7
+log-level=0x00000007
+do-chain-profile=(bool)false
+chain-profile=0
+rate-in=(int)1000
+rate-out=(int)1000
+channels=(int)2
+internal_buf_size=(int)0
+seamless-mode=(int)0
+## srcbin_04260003
+thread-priority=(int)0
+drop-output-data=(bool)false
+drop-output-meta=(bool)false
+block-module=(bool)false
+log-mask=(int)7
+log-level=0x00000007
+do-chain-profile=(bool)false
+chain-profile=0
+## mixerbin_04270001
+thread-priority=(int)0
+drop-output-data=(bool)false
+drop-output-meta=(bool)false
+block-module=(bool)false
+log-mask=(int)7
+log-level=0x00000007
+do-chain-profile=(bool)false
+chain-profile=0/194439330935
+mixing-mode=0
+mixing-mode-int=3
+enable-limiter=0
+main-audio-port=0
+fading-primary=0
+fading-secondary=0
+fading-system=0
+drc-mode=0
+dmx-mode=1
+metadata-type=0
+output-type=-1
+atmos-lock=-1
+enc-mode=<unknown_type>
+nullgen-start=1
+disconnect-output= 1 0 0 0
+connect-output= 1 0 0 0
+connect-in-out=(int)0
+ext-pcm-acmod=(int)0
+### arc state

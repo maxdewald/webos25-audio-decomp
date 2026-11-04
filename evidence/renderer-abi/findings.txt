@@ -1,0 +1,89 @@
+INVESTIGATOR 3: RENDERER CREATION / SHIPPED IOCTL ABI
+All evidence LOCAL. No TV execution, DSP access, shared-project modification,
+production edit, resource-booking analysis, or runtime lipsync analysis.
+
+RESULT
+The shipped kernel's ES getter logs "bypass is not yet created", then immediately
+calls renderer_create_bypass_pipeline(false). That log is not a failed creation.
+The later 0x4008522b request is message-queue/PID notification registration.
+The captured kernel rejects it with -25 (ENOTTY); the sink ignores its return.
+This is a real userspace/kernel ABI mismatch for notification, not an unsupported
+ES constructor ioctl. It does not prove a cause of silence or audible success.
+
+CREATION SEQUENCE
+change_state -> lgao_open -> KADP_InitSystem -> replay preopen properties
+caller index/resource-info -> lgao_set_port -> ao.index
+caps -> lgao_open_renderer -> open(/dev/lg/aren0)
+  -> SET_INDEX(index + (isMixer ? 4 : 0)) -> aren_open
+  -> bm_create_block("renderer", index) -> renderer_create/main pipeline
+  -> aimc init -> SET_PROC_ID
+  -> lgao_set_audio_info -> lgao_config -> SET_PCM_INFO (32 bytes)
+  -> lgao_connect_renderer -> create main/bypass appsrc -> registry sync
+  -> ADD_QUEUE -> GET_UID -> GET_TAIL_UID -> connect main appsrc and appsink
+  -> GET_BYPASS_UID -> aren_get_uid(index,true)
+     -> pcm_bypass || pcm_multi_ch ? PCM getter : ES getter
+     -> lazy constructor -> head UID -> connect bypass appsrc
+  -> SET_BYPASS_FADER -> SET_QUEUE_MAX_LENGTH
+  -> 0x4008522b {msgq_id,pid} -> SIGUSR1 handler (ioctl return ignored)
+first events use the already-connected appsrcs; they do not allocate the head.
+Independent trigger: block preconnect to port 0x100 with absent pipeline creates ES.
+
+GATES
+Uppercase BYPASS integer nonzero: drop_renderer=1, exit caps path.
+Integer DUMMY present: exit caps path (field value not tested).
+Lowercase es boolean: metadata at ao+0x5c when present; no constructor.
+pcm-bypass=0 AND pcm-multi-ch=0: GET_BYPASS_UID selects ES queue -> lipsync.
+Either PCM flag nonzero: selects PCM rts -> srcbin -> lipsync.
+PCM setters only cache bytes; lgao_config serializes them unless already PLAY.
+ES getter reuses ANY existing bypass, including existing PCM; no mode check.
+PCM getter reuses only an already-created PCM bypass; otherwise reconstructs it.
+New caps creation path checks nonnegative index and drop_renderer==0.
+
+ABI
+0x4008522b = dir=1 (_IOC_WRITE), type=0x52 ('R'), nr=0x2b (43), size=8.
+DWARF: aren_msgpid_to_signal_t, two int32 fields msgq_id@0, pid@4.
+Local macro name is reconstructed; official request macro name not recovered.
+Correct modern source header: aud_kapi_renderer.h, requests through 42 only.
+Do not confuse legacy audio_kapi_renderer.h's differently sized request nr43.
+Shipped dispatch raw offset 0xc30494 independently rejects exact command:
+0xc304dc -> 0xc30660 -> 0xc3078c -> 0xc3081c -> 0xc3082c -> 0xc308a8
+-> default 0xc308e0 -> error text at 0x185d338 -> x20=-25 at 0xc30914.
+Compat wrapper at 0xc30cf0 forwards unchanged.
+
+KEY RAW ADDRESSES (userspace Ghidra = raw + 0x10000)
+sink connect 0x1441c; GET_BYPASS_UID call 0x14728; notification call 0x147d4.
+sink open_renderer 0x14924; SET_INDEX call 0x14956.
+sink config renderer 0x16fc4; SET_PCM_INFO call 0x1702e.
+kernel aren_get_uid 0xc35ab0; PCM getter 0xc251d0; ES getter 0xc25340.
+kernel constructor 0xc21894; created flag store 0xc21988.
+Kernel numbers are decompressed Image offsets, not live KASLR addresses.
+
+INDEX / OWNERSHIP
+Sink has index property and resource-info audio-port/mixer-port. lgao_set_port
+accepts audio 0/1, or audio=-1 with mixer 0..6; mixer mode adds 4 on open.
+Kernel accepts renderer index 0..9, rejects already-open entries. No automatic
+free-index allocator is exposed here. SET_INDEX result is ignored by sink and
+kernel still stores requested index even when aren_open fails: runtime return
+capture matters. Caller sees module UIDs, not a renderer pointer.
+libkadaptor is system initialization here; direct aren ioctls live in the sink.
+
+IDENTITY / LIMITS
+Original kernel SHA256 2b835f62a57891f72f715cfa0293f51113aeaa8c90838ba5b5d400525a8b68cd
+Existing extraction SHA256 0606410b32b19fd10f77bb3bdd9b5c618380c717076638418169b7e7bbff80db
+All 140 LZ4P blocks match existing /tmp/k329.Image, no fresh extraction persisted.
+Other hashes, stable LOCAL-RABI evidence IDs and complete distinctions: findings.json.
+Sink event full decompile failed (Duplicate VariablePiece); relevant gates and
+call order verified in raw instructions, not a complete event reconstruction.
+No historical UID/errno/fd trace, live kernel check, or audible outcome observed.
+
+SMALLEST NEXT RUNTIME EXPERIMENT (NOT EXECUTED)
+Observer-only syscall/fd trace of one existing authorized playback startup:
+record SET_INDEX return, SET_PCM_INFO before GET_BYPASS_UID, returned nonzero UID,
+existing connection-success log, then notification ENOTTY on same aren fd.
+Do not inject commands or guess a free renderer index. This distinguishes an
+index/open/head failure from the missing notification command without DSP work.
+
+VALIDATION
+python3 collect.py: byte identity, raw literals, payload decode, exact branch witness.
+clang -std=c11 -Wall -Wextra -Werror -fsyntax-only abi_test.c: host-only layout check.
+Reconstructed header is an evidence artifact, not original source or install code.

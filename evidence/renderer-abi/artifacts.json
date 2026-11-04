@@ -1,0 +1,52 @@
+{
+  "sink": {
+    "path": "orig/usr/lib/gstreamer-1.0/libgstlgaudiosink.so",
+    "sha256": "90dba3ef32704ce4096bf1e6045d2879d0c2192d507bc04d1e8e98437f420a43",
+    "size": 463824
+  },
+  "decoder": {
+    "path": "orig/usr/lib/gstreamer-1.0/libgstlgaudiodec.so",
+    "sha256": "84db367e1ea3eeb4b589bf63910140cfd43ea77f2db124ae6882fbee8ebb6bb7",
+    "size": 986004
+  },
+  "kadaptor": {
+    "path": "orig/usr/lib/libkadaptor.so.2.0.1",
+    "sha256": "c1ad006a8a880474c3a64424d92a1130be456c2c1ab496cb8f8be310460e81aa",
+    "size": 3339748
+  },
+  "kernel_image": {
+    "path": "orig/boot/Image-5.4.268-329.decompressed",
+    "sha256": "0606410b32b19fd10f77bb3bdd9b5c618380c717076638418169b7e7bbff80db",
+    "size": 36692480
+  },
+  "kernel_compressed": {
+    "path": "orig/boot/Image.lz4-5.4.268-329.ptl4tv.5",
+    "sha256": "2b835f62a57891f72f715cfa0293f51113aeaa8c90838ba5b5d400525a8b68cd",
+    "size": 21052822
+  },
+  "core/aud/renderer.c": {
+    "path": "../dts_restore_plus/re/lge-src/linux-and-kdriver_paluma-5/kdriver/core/aud/renderer.c",
+    "sha256": "eed2466c6ae699ec53fc7d8080ee885c024f89f460e797911da74175cf59a610",
+    "size": 51243
+  },
+  "core/aud/driver.c": {
+    "path": "../dts_restore_plus/re/lge-src/linux-and-kdriver_paluma-5/kdriver/core/aud/driver.c",
+    "sha256": "80d387f575c155450c4df897217c2cb1a8ac6d3fcbaa855114805f1f591f371f",
+    "size": 30681
+  },
+  "core/aud/aapi_media.c": {
+    "path": "../dts_restore_plus/re/lge-src/linux-and-kdriver_paluma-5/kdriver/core/aud/aapi_media.c",
+    "sha256": "43e29b1bced995eed9421f57abec5b49d53236b7c2a59fbf317472a4c08a2e4b",
+    "size": 43769
+  },
+  "core/aud/block_manager.c": {
+    "path": "../dts_restore_plus/re/lge-src/linux-and-kdriver_paluma-5/kdriver/core/aud/block_manager.c",
+    "sha256": "351c80ebf46a349a9c663cd199de957e66842553f20f88dd8afeb145170e20df",
+    "size": 59561
+  },
+  "include/aud_kapi_renderer.h": {
+    "path": "../dts_restore_plus/re/lge-src/linux-and-kdriver_paluma-5/kdriver/include/aud_kapi_renderer.h",
+    "sha256": "30c168804624e3c50704e2e8ff81f8785904e2b32edf9a521cdb92058b587fbd",
+    "size": 8655
+  }
+}

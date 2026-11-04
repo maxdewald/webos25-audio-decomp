@@ -1,0 +1,212 @@
+[
+  {
+    "name": "state_dispatch",
+    "address": "0x60007380",
+    "rows": [
+      {
+        "index": 0,
+        "state_name": "LIPSYNC_OFF",
+        "entry_address": "0x60007380",
+        "target": "0x600a2966",
+        "target_listing_present": true
+      },
+      {
+        "index": 1,
+        "state_name": "LIPSYNC_RUN",
+        "entry_address": "0x60007384",
+        "target": "0x600a2966",
+        "target_listing_present": true
+      },
+      {
+        "index": 2,
+        "state_name": "NORMAL",
+        "entry_address": "0x60007388",
+        "target": "0x600a2af1",
+        "target_listing_present": true
+      },
+      {
+        "index": 3,
+        "state_name": "SKIP  ",
+        "entry_address": "0x6000738c",
+        "target": "0x600a2a48",
+        "target_listing_present": true
+      },
+      {
+        "index": 4,
+        "state_name": "REPEAT",
+        "entry_address": "0x60007390",
+        "target": "0x600a2b9a",
+        "target_listing_present": true
+      },
+      {
+        "index": 5,
+        "state_name": "FR-RUN",
+        "entry_address": "0x60007394",
+        "target": "0x600a2b7b",
+        "target_listing_present": true
+      },
+      {
+        "index": 6,
+        "state_name": "IDLE  ",
+        "entry_address": "0x60007398",
+        "target": "0x600a2b57",
+        "target_listing_present": true
+      },
+      {
+        "index": 7,
+        "state_name": "EXCEPT",
+        "entry_address": "0x6000739c",
+        "target": "0x600a2b29",
+        "target_listing_present": true
+      },
+      {
+        "index": 8,
+        "state_name": "ESNORM",
+        "entry_address": "0x600073a0",
+        "target": "0x600a2af1",
+        "target_listing_present": true
+      },
+      {
+        "index": 9,
+        "state_name": "TONORM",
+        "entry_address": "0x600073a4",
+        "target": "0x600a2ad7",
+        "target_listing_present": true
+      },
+      {
+        "index": 10,
+        "state_name": "NODLAY",
+        "entry_address": "0x600073a8",
+        "target": "0x600a2966",
+        "target_listing_present": true
+      },
+      {
+        "index": 11,
+        "state_name": "WRONG ",
+        "entry_address": "0x600073ac",
+        "target": "0x600a2acb",
+        "target_listing_present": true
+      },
+      {
+        "index": 12,
+        "state_name": "FREERUN_WITHNOTI",
+        "entry_address": "0x600073b0",
+        "target": "0x600a2966",
+        "target_listing_present": true
+      },
+      {
+        "index": 13,
+        "state_name": "E-NORM",
+        "entry_address": "0x600073b4",
+        "target": "0x600a2a94",
+        "target_listing_present": true
+      }
+    ],
+    "coverage": "14 entries selected from explicit action index bound; state guard is opaque FLIX"
+  },
+  {
+    "name": "action_dispatch",
+    "address": "0x600073d0",
+    "rows": [
+      {
+        "index": 0,
+        "state_name": "LIPSYNC_OFF",
+        "entry_address": "0x600073d0",
+        "target": "0x600a3904",
+        "target_listing_present": true
+      },
+      {
+        "index": 1,
+        "state_name": "LIPSYNC_RUN",
+        "entry_address": "0x600073d4",
+        "target": "0x600a3796",
+        "target_listing_present": true
+      },
+      {
+        "index": 2,
+        "state_name": "NORMAL",
+        "entry_address": "0x600073d8",
+        "target": "0x600a3904",
+        "target_listing_present": true
+      },
+      {
+        "index": 3,
+        "state_name": "SKIP  ",
+        "entry_address": "0x600073dc",
+        "target": "0x600a38a4",
+        "target_listing_present": true
+      },
+      {
+        "index": 4,
+        "state_name": "REPEAT",
+        "entry_address": "0x600073e0",
+        "target": "0x600a3796",
+        "target_listing_present": true
+      },
+      {
+        "index": 5,
+        "state_name": "FR-RUN",
+        "entry_address": "0x600073e4",
+        "target": "0x600a3904",
+        "target_listing_present": true
+      },
+      {
+        "index": 6,
+        "state_name": "IDLE  ",
+        "entry_address": "0x600073e8",
+        "target": "0x600a38e7",
+        "target_listing_present": true
+      },
+      {
+        "index": 7,
+        "state_name": "EXCEPT",
+        "entry_address": "0x600073ec",
+        "target": "0x600a3904",
+        "target_listing_present": true
+      },
+      {
+        "index": 8,
+        "state_name": "ESNORM",
+        "entry_address": "0x600073f0",
+        "target": "0x600a38d3",
+        "target_listing_present": true
+      },
+      {
+        "index": 9,
+        "state_name": "TONORM",
+        "entry_address": "0x600073f4",
+        "target": "0x600a38b9",
+        "target_listing_present": true
+      },
+      {
+        "index": 10,
+        "state_name": "NODLAY",
+        "entry_address": "0x600073f8",
+        "target": "0x600a3904",
+        "target_listing_present": true
+      },
+      {
+        "index": 11,
+        "state_name": "WRONG ",
+        "entry_address": "0x600073fc",
+        "target": "0x600a3904",
+        "target_listing_present": true
+      },
+      {
+        "index": 12,
+        "state_name": "FREERUN_WITHNOTI",
+        "entry_address": "0x60007400",
+        "target": "0x600a3904",
+        "target_listing_present": true
+      },
+      {
+        "index": 13,
+        "state_name": "E-NORM",
+        "entry_address": "0x60007404",
+        "target": "0x600a388b",
+        "target_listing_present": true
+      }
+    ],
+    "coverage": "14 entries selected from explicit action index bound; state guard is opaque FLIX"
+  }
+]

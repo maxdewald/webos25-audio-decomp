@@ -1,0 +1,8 @@
+{
+  "container_magic": "LZ4P",
+  "decoded_size": 36692480,
+  "decoded_sha256": "0606410b32b19fd10f77bb3bdd9b5c618380c717076638418169b7e7bbff80db",
+  "matching_blocks": 140,
+  "block_count": 140,
+  "exact_match": true
+}

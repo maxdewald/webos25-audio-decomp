@@ -1,0 +1,236 @@
+
+/Users/max/projects/dts_restore_plus/re/webos25-audio-policy/bin/usr/lib/libmedia-resource-calculator.so.1:	file format elf32-littlearm
+
+Disassembly of section .text:
+
+000058d8 <_ZN3mrc18ResourceCalculator17calcAdecResourcesEiii>:
+    58d8:      	mvnsmi	lr, sp, lsr #18
+    58dc:      	cdpls	p0, #0x0, c11, c12, c6, #0x4
+    58e0:      	andhs	r4, r0, #20, #12
+    58e4:      	strmi	r4, [r8], r5, lsl #12
+    58e8:      	andhs	lr, r0, #192, #18
+    58ec:      	streq	pc, [r6], -r6, lsr #3
+    58f0:      	blx	0xfed9db00              @ imm = #-0x1267df8
+    58f4:      	ldmdbeq	r6!, {r1, r2, r7, r9, r10, r12, sp, lr, pc} ^
+    58f8:      	uadd16eq	lr, r4, r6
+    58fc:      	orrshi	pc, r5, r0, asr #32
+    5900:      	<unknown>
+    5904:      	<unknown>
+    5908:      	mrshi	pc, spsr
+    590c:      	<unknown>
+    5910:      	strteq	r8, [r2], r9, lsr #2
+    5914:      	mrshi	pc, apsr
+    5918:      	<unknown>
+    591c:      	strteq	r8, [r7], -r0, ror #1
+    5920:      	adcshi	pc, r12, r0, lsl #2
+    5924:      	<unknown>
+    5928:      	streq	r8, [r0, #0x93]!
+    592c:      	strbeq	sp, [r1, #-0x46e]!
+    5930:      	streq	sp, [r2, #-0x44b]!
+    5934:      	ldmib	r5, {r0, r1, r3, r5, r10, r12, lr, pc} ^
+    5938:      	addsmi	r2, r10, #0, #6
+    593c:      	strbeq	sp, [r3, r1]!
+    5940:      	blmi	0xff57adcc              @ imm = #-0xa8ab7c
+    5944:      	cdpge	p6, #0x0, c4, c2, c15, #0x3
+    5948:      	strls	r2, [r0], -r7, lsl #4
+    594c:      	andls	r4, r1, #2063597568
+    5950:      	muleq	r3, r3, r8
+    5954:      	<unknown>
+    5958:      	<unknown>
+    595c:      	<unknown>
+    5960:      	<unknown>
+    5964:      	<unknown>
+    5968:      	ldrtmi	r1, [r9], -lr
+    596c:      	ldcl	p7, c15, [lr, #-1012]
+    5970:      	strtmi	r4, [r8], -r1, lsl #12
+    5974:      	stc	p7, c15, [r4, #1012]
+    5978:      	adcsmi	r9, r0, #0, #16
+    597c:      	stmdbls	r2, {r0, r1, r12, lr, pc}
+    5980:      	<unknown>
+    5984:      	strtmi	lr, [r8], -r12, lsl #26
+    5988:      	pop	{r1, r2, r12, sp, pc}
+    598c:      	vand	q12, q11, q8
+    5990:      	strbtmi	r1, [pc], -r9, ror #6
+    5994:      	msrvs	SPSR_fsc, #1610612748
+    5998:      	movwls	r10, #0x2e02
+    599c:      	movwls	r2, #0x1304
+    59a0:      	movwhs	r4, #0x639
+    59a4:      	andeq	pc, r4, r8, lsl #2
+    59a8:      	<unknown>
+    59ac:      	<unknown>
+    59b0:      	<unknown>
+    59b4:      	<unknown>
+    59b8:      	stmdals	r0, {r2, r5, r6, r8, r10, r11, sp, lr, pc}
+    59bc:      	ldrhtle	r4, [r10], r0
+    59c0:      	mrslo	r9, apsr
+    59c4:      	stcl	p7, c15, [r10], #1012
+    59c8:      	blmi	0xfed3f8a4              @ imm = #-0x12c612c
+    59cc:      	cdpge	p6, #0x0, c4, c2, c15, #0x3
+    59d0:      	<unknown>
+    59d4:      	strls	r0, [r0], -r4
+    59d8:      	ldmdavs	r11, {r0, r1, r3, r4, r5, r6, r10, lr}
+    59dc:      	andlo	pc, r8, sp, lsr #17
+    59e0:      	<unknown>
+    59e4:      	movwhs	r3, #0x300a
+    59e8:      	movwhs	r9, #0x301
+    59ec:      	andlo	pc, r11, sp, lsl #17
+    59f0:      	ldc	p7, c15, [r12, #-1012]
+    59f4:      	strtmi	r4, [r8], -r1, lsl #12
+    59f8:      	stcl	p7, c15, [r2, #-1012]
+    59fc:      	adcsmi	r9, r0, #0, #16
+    5a00:      	stmdbls	r2, {r0, r1, r2, r4, r7, r12, lr, pc}
+    5a04:      	<unknown>
+    5a08:      	ldr	lr, [r2, r10, asr #25]
+    5a0c:      	strbtmi	r4, [pc], -r4, lsr #23
+    5a10:      	ldrtmi	r10, [r9], -r2, lsl #28
+    5a14:      	andeq	pc, r4, r8, lsl #2
+    5a18:      	ldrbtmi	r9, [r11], #-1536
+    5a1c:      	<unknown>
+    5a20:      	<unknown>
+    5a24:      	andlo	pc, r10, sp, lsl #17
+    5a28:      	movwls	r2, #0x1303
+    5a2c:      	<unknown>
+    5a30:      	<unknown>
+    5a34:      	<unknown>
+    5a38:      	<unknown>
+    5a3c:      	stmdals	r0, {r1, r5, r8, r10, r11, sp, lr, pc}
+    5a40:      	<unknown>
+    5a44:      	stmdbls	r2, {r2, r4, r5, r6, r8, r9, r10, r11, sp, pc}
+    5a48:      	<unknown>
+    5a4c:      	strb	lr, [lr, -r8, lsr #25]!
+    5a50:      	<unknown>
+    5a54:      	<unknown>
+    5a58:      	<unknown>
+    5a5c:      	ldrbtmi	r0, [r10], #-3595
+    5a60:      	<unknown>
+    5a64:      	movwgt	r12, #0x3a07
+    5a68:      	<unknown>
+    5a6c:      	<unknown>
+    5a70:      	andeq	pc, r4, r8, lsl #2
+    5a74:      	<unknown>
+    5a78:      	<unknown>
+    5a7c:      	<unknown>
+    5a80:      	<unknown>
+    5a84:      	<unknown>
+    5a88:      	stmdals	r0, {r2, r3, r4, r5, r6, r7, r10, r11, sp, lr, pc}
+    5a8c:      	<unknown>
+    5a90:      	stmdbls	r2, {r2, r3, r6, r8, r9, r10, r11, sp, pc}
+    5a94:      	<unknown>
+    5a98:      	strb	lr, [r6, -r2, lsl #25]
+    5a9c:      	andhs	r4, r5, #133120
+    5aa0:      	cdpge	p6, #0x0, c4, c2, c15, #0x3
+    5aa4:      	andhs	r9, r0, #268435456
+    5aa8:      	<unknown>
+    5aac:      	muleq	r3, r3, r8
+    5ab0:      	andhs	pc, sp, sp, lsl #17
+    5ab4:      	<unknown>
+    5ab8:      	<unknown>
+    5abc:      	ldrtmi	r1, [r9], -r12
+    5ac0:      	ldc	p7, c15, [r4], #1012
+    5ac4:      	strtmi	r4, [r8], -r1, lsl #12
+    5ac8:      	ldcl	p7, c15, [r10], {253}
+    5acc:      	adcsmi	r9, r0, #0, #16
+    5ad0:      	svcge	#0x28f43f
+    5ad4:      	mrslo	r9, apsr
+    5ad8:      	stcl	p7, c15, [r0], #-1012
+    5adc:      	blmi	0x1cff76c               @ imm = #0x1cf9c88
+    5ae0:      	cdpge	p6, #0x0, c4, c2, c15, #0x3
+    5ae4:      	<unknown>
+    5ae8:      	strls	r0, [r0], -r4
+    5aec:      	ldmdavs	r11, {r0, r1, r3, r4, r5, r6, r10, lr}
+    5af0:      	andlo	pc, r8, sp, lsr #17
+    5af4:      	<unknown>
+    5af8:      	movwhs	r3, #0x300a
+    5afc:      	movwhs	r9, #0x301
+    5b00:      	andlo	pc, r11, sp, lsl #17
+    5b04:      	ldc	p7, c15, [r2], {253}
+    5b08:      	strtmi	r4, [r8], -r1, lsl #12
+    5b0c:      	ldc	p7, c15, [r8], #1012
+    5b10:      	adcsmi	r9, r0, #0, #16
+    5b14:      	svcge	#0x3f43f
+    5b18:      	mrslo	r9, apsr
+    5b1c:      	ldc	p7, c15, [lr], #-1012
+    5b20:      	blmi	0x18ff71c               @ imm = #0x18f9bf4
+    5b24:      	strbtmi	r2, [pc], -r6, lsl #4
+    5b28:      	andls	r10, r1, #2, #28
+    5b2c:      	ldrbtmi	r2, [r11], #-512
+    5b30:      	ldm	r3, {r9, r10, r12, pc}
+    5b34:      	<unknown>
+    5b38:      	andls	r2, r2, lr
+    5b3c:      	andeq	pc, r4, r8, lsl #2
+    5b40:      	andne	pc, r12, sp, lsr #17
+    5b44:      	<unknown>
+    5b48:      	<unknown>
+    5b4c:      	<unknown>
+    5b50:      	stmdals	r0, {r3, r4, r7, r10, r11, sp, lr, pc}
+    5b54:      	<unknown>
+    5b58:      	stmdbls	r2, {r0, r1, r2, r3, r4, r6, r7, r9, r10, r11, sp, pc}
+    5b5c:      	<unknown>
+    5b60:      	<unknown>
+    5b64:      	msrmi	SPSR_s, #1879048196
+    5b68:      	<unknown>
+    5b6c:      	mcrge	p3, #0x0, r5, c2, c3, #0x3
+    5b70:      	movwhs	r9, #0x4302
+    5b74:      	ldrtmi	r9, [r9], -r1, lsl #6
+    5b78:      	<unknown>
+    5b7c:      	strls	r0, [r0], -r4
+    5b80:      	andlo	pc, r12, sp, lsl #17
+    5b84:      	mrrc	p7, #0xf, pc, r2, c13
+    5b88:      	strtmi	r4, [r8], -r1, lsl #12
+    5b8c:      	ldcl	p7, c15, [r8], #-1012
+    5b90:      	adcsmi	r9, r0, #0, #16
+    5b94:      	mrcge	p4, #0x5, apsr_nzcv, c13, c15, #0x1
+    5b98:      	mrslo	r9, apsr
+    5b9c:      	bl	0xfffc3b98              @ imm = #-0x4200c
+    5ba0:      	blmi	0x113f684               @ imm = #0x1139adc
+    5ba4:      	cdpge	p6, #0x0, c4, c2, c15, #0x3
+    5ba8:      	<unknown>
+    5bac:      	strls	r0, [r0], -r4
+    5bb0:      	ldmdavs	r11, {r0, r1, r3, r4, r5, r6, r10, lr}
+    5bb4:      	andlo	pc, r8, sp, lsr #17
+    5bb8:      	<unknown>
+    5bbc:      	movwhs	r3, #0x300a
+    5bc0:      	movwhs	r9, #0x301
+    5bc4:      	andlo	pc, r11, sp, lsl #17
+    5bc8:      	ldc	p7, c15, [r0], #-1012
+    5bcc:      	strtmi	r4, [r8], -r1, lsl #12
+    5bd0:      	mrrc	p7, #0xf, pc, r6, c13
+    5bd4:      	adcsmi	r9, r0, #0, #16
+    5bd8:      	mrcge	p4, #0x4, apsr_nzcv, c8, c15, #0x1
+    5bdc:      	mrslo	r9, apsr
+    5be0:      	bl	0xff743bdc              @ imm = #-0x8c200c
+    5be4:      	blmi	0xd3f634                @ imm = #0xd39a48
+    5be8:      	cdpge	p6, #0x0, c4, c2, c15, #0x3
+    5bec:      	<unknown>
+    5bf0:      	strls	r0, [r0], -r4
+    5bf4:      	ldmdavs	r11, {r0, r1, r3, r4, r5, r6, r10, lr}
+    5bf8:      	andlo	pc, r8, sp, lsr #17
+    5bfc:      	<unknown>
+    5c00:      	movwhs	r3, #0x300a
+    5c04:      	movwhs	r9, #0x301
+    5c08:      	andlo	pc, r11, sp, lsl #17
+    5c0c:      	<unknown>
+    5c10:      	strtmi	r4, [r8], -r1, lsl #12
+    5c14:      	ldc	p7, c15, [r4], #-1012
+    5c18:      	adcsmi	r9, r0, #0, #16
+    5c1c:      	mrcge	p4, #0x3, apsr_nzcv, c3, c15, #0x1
+    5c20:      	mrslo	r9, apsr
+    5c24:      	bl	0xfeec3c20              @ imm = #-0x114200c
+    5c28:      	bllo	0xbf5e4                 @ imm = #0xb99b4
+    5c2c:      	movweq	pc, #0x2033
+    5c30:      	mcrge	p4, #0x3, pc, c6, c15, #0x3
+    5c34:      	andlo	pc, r12, sp, lsl #17
+    5c38:      	msrne	SPSR_c, #1610612740
+    5c3c:      	msrvs	SPSR_xc, #805306380
+    5c40:      	movwls	r4, #0x266f
+    5c44:      	cdpge	p3, #0x0, c2, c2, c4, #0x0
+    5c48:      	bl	0x217534                @ imm = #0x2118e4
+    5c4c:      	strls	r0, [r0], -r3
+    5c50:      	<unknown>
+    5c54:      	strmi	lr, [r1], -r12, ror #23
+    5c58:      	<unknown>
+    5c5c:      	stmdals	r0, {r1, r4, r10, r11, sp, lr, pc}
+    5c60:      	<unknown>
+    5c64:      	stmdbls	r2, {r0, r2, r3, r6, r9, r10, r11, sp, pc}
+    5c68:      	<unknown>
+    5c6c:      	<unknown>

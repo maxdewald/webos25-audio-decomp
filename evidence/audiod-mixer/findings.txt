@@ -1,0 +1,77 @@
+AUDIOD MIXER POLICY - INVESTIGATOR 1 OF 4
+Local static evidence only; not a REA Evidence record. No TV actions.
+
+Binary: acquired usr/sbin/audiod, SHA256
+170d468085255d381245693260840771b00d39c718473ec024566fb1df1ca3af
+Raw ELF VAs are used below. Ghidra = raw + 0x10000; not runtime ASLR VAs.
+
+RESULT
+The recovered audiod chain does NOT derive mix from codec, sound-output mode,
+source category, active-input count, game, BT, voice or system sounds. It takes
+a validated boolean from a registered Luna method and arbitrates by caller ID.
+The count at TVManager +0x2c4/+0x2c8 is mixing-holder IDs, NOT active inputs.
+
+DECISION TABLE (UMI forwarding must also be ready)
+true, new ID: add ID, send true.
+true, existing ID: no duplicate, send true.
+false, ID present, last holder: erase ID, send false.
+false, ID present, other holders remain: erase ID, no send, return success.
+false, ID absent, holder set empty: send false.
+false, ID absent, other holders remain: no send, return success.
+No incoming request: no state-to-boolean mapping recovered in this audiod path.
+
+INBOUND
+luna://com.webos.service.audio/tv/mixDigitalSoundOutput
+Request: {"mix":false,"callerId":"mixer-probe"}; callerId is optional.
+Only mix (boolean) and callerId (string) are accepted by the schema.
+Omitted/empty callerId uses LSMessageGetApplicationID, then sender service name.
+This is caller-facing, not an internal-only method. Actual bus permission and
+API support/stability for an arbitrary application remain unverified.
+
+OUTBOUND
+luna://com.webos.service.audiooutput/quality/setSettings
+{"category":"setMixer","value":{"mix":false,"callerId":"mixer-probe"}}
+value is a copy of the original request, not a freshly synthesized object.
+Top-level key is category, NOT key. Audiod does not await downstream effect.
+
+KEY ADDRESSES (raw / Ghidra)
+Callback:             0x001c186c / 0x001d186c
+Caller arbitration:   0x00195480 / 0x001a5480
+Remaining-ID compare: 0x001958d0 / 0x001a58d0
+False sender call:    0x00195910 / 0x001a5910
+setMixer sender:      0x001dc608 / 0x001ec608
+hasKey(mix):          0x001dc67c / 0x001ec67c
+setMixer literal:     0x004a2aec / 0x004b2aec
+AudioMixer wrapper:   0x000b6ec4 / 0x000c6ec4
+Audiod UMI wrapper:   0x000c15d8 / 0x000d15d8
+LSCallOneReply:       0x000c18c0 / 0x000d18c0
+Method table entry:   0x00514294 / 0x00524294
+
+COVERAGE AND LIMITS
+One recovered setMixer literal constructor; its two direct incoming calls are
+both arbitration branches, reached from the registered callback. All .text was
+indexed for direct calls and supported PC-relative string loads; no other
+absolute pointer to sender/arbitration was found outside dynsym. Computed
+indirection and callers in other service binaries are not exhaustively ruled out.
+The requested mode/source/game/BT/voice/system-sound truth table cannot be
+established from audiod alone. No codec-only conclusion is warranted.
+Other holder IDs can suppress false. UMI object +4 and ready byte +0x34 must be
+valid. Bus ACL, current holders, lifecycle cleanup, later overwrites and actual
+downstream no-mix realization remain unproven. Neighbor owns downstream policy.
+
+BEST NEXT EXPERIMENT (NOT EXECUTED)
+With authorization, passively correlate inbound mixDigitalSoundOutput sender IDs
+and outbound category:setMixer while changing one ordinary UI state at a time:
+speaker/ARC/optical, one/two inputs, game, BT, voice/TTS, system sound. Record
+requests, replies, timing and actual active states. A false reply with no outbound
+setMixer points to holder arbitration; outbound false with mixed output points
+downstream. Do not clear a real service's ID or assume no pre-existing holders.
+
+OUTPUTS / VALIDATION
+findings.json contains stable AMX-E01..E08 evidence and AMX-C01..C06 claims.
+Focused Ghidra pseudocode and instruction TSVs are retained, not original source.
+audiod.asm is bounded to relevant functions and registration slices.
+string-refs.json and call-refs.json retain structured offline search evidence.
+validate_findings.py checks identity, mapping, literals, method pointer, direct
+call sites, evidence links and the reconstructed decision table; see validation.json.
+No production/docs/shared scripts/DSP/projects/extensions were changed.

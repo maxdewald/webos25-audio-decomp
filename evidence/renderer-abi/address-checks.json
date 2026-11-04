@@ -1,0 +1,157 @@
+{
+  "sink_literals": {
+    "0x97b0": {
+      "raw_address": "0x1bd14",
+      "ghidra_address": "0x2bd14",
+      "string": "es"
+    },
+    "0x88ea": {
+      "raw_address": "0x1b388",
+      "ghidra_address": "0x2b388",
+      "string": "BYPASS"
+    },
+    "0x89a0": {
+      "raw_address": "0x1b404",
+      "ghidra_address": "0x2b404",
+      "string": "DUMMY"
+    },
+    "0x9084": {
+      "raw_address": "0x1b4c4",
+      "ghidra_address": "0x2b4c4",
+      "string": "audio"
+    }
+  },
+  "kernel_strings": {
+    "0x1562da0": "driver_aren_ioctl",
+    "0x185d338": "Invalid IOCTL Call!!! %x\n",
+    "0x185b0f8": "bypass is not yet created..\n",
+    "0x185a968": "renderer_bypass",
+    "0x185a978": "srcbin",
+    "0x185a980": "lipsync",
+    "0x189a458": "rts",
+    "0x171c140": "queue",
+    "0x185aff0": "renderer"
+  },
+  "notification_ioctl": {
+    "value": "0x4008522b",
+    "direction": 1,
+    "size": 8,
+    "type": 82,
+    "number": 43
+  },
+  "branch_witness": {
+    "request": "0x4008522b",
+    "result": "default: ENOTTY",
+    "default_offset": "0xc308e0",
+    "trace": [
+      {
+        "offset": "0xc304dc",
+        "word": "0x528a41c0"
+      },
+      {
+        "offset": "0xc304e0",
+        "word": "0x72a80100"
+      },
+      {
+        "offset": "0xc304e4",
+        "word": "0x6b00027f"
+      },
+      {
+        "offset": "0xc304e8",
+        "word": "0x54002e40"
+      },
+      {
+        "offset": "0xc304ec",
+        "word": "0x54000ba8"
+      },
+      {
+        "offset": "0xc30660",
+        "word": "0x528a4180"
+      },
+      {
+        "offset": "0xc30664",
+        "word": "0x72b00080"
+      },
+      {
+        "offset": "0xc30668",
+        "word": "0x6b00027f"
+      },
+      {
+        "offset": "0xc3066c",
+        "word": "0x54002360"
+      },
+      {
+        "offset": "0xc30670",
+        "word": "0x540008e9"
+      },
+      {
+        "offset": "0xc3078c",
+        "word": "0x528a4240"
+      },
+      {
+        "offset": "0xc30790",
+        "word": "0x72a80700"
+      },
+      {
+        "offset": "0xc30794",
+        "word": "0x6b00027f"
+      },
+      {
+        "offset": "0xc30798",
+        "word": "0x540015c0"
+      },
+      {
+        "offset": "0xc3079c",
+        "word": "0x54000409"
+      },
+      {
+        "offset": "0xc3081c",
+        "word": "0x528a4100"
+      },
+      {
+        "offset": "0xc30820",
+        "word": "0x72a80280"
+      },
+      {
+        "offset": "0xc30824",
+        "word": "0x6b00027f"
+      },
+      {
+        "offset": "0xc30828",
+        "word": "0x54001360"
+      },
+      {
+        "offset": "0xc3082c",
+        "word": "0x528a4400"
+      },
+      {
+        "offset": "0xc30830",
+        "word": "0x72a80400"
+      },
+      {
+        "offset": "0xc30834",
+        "word": "0x6b00027f"
+      },
+      {
+        "offset": "0xc30838",
+        "word": "0x54000381"
+      },
+      {
+        "offset": "0xc308a8",
+        "word": "0x528a4160"
+      },
+      {
+        "offset": "0xc308ac",
+        "word": "0x72a80180"
+      },
+      {
+        "offset": "0xc308b0",
+        "word": "0x6b00027f"
+      },
+      {
+        "offset": "0xc308b4",
+        "word": "0x54000161"
+      }
+    ]
+  }
+}

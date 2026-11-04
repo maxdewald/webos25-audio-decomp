@@ -1,0 +1,51 @@
+[
+  {
+    "owner_raw": "0x000c15d8",
+    "owner": "umiaudiomixer::setSettings(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>, pbnjson::JValue, bool (*)(LSHandle*, LSMessage*, void*), envelope*)",
+    "site_raw": "0x000c163a",
+    "target_raw": "0x0008183c",
+    "plt_symbol": "_ZN7pbnjson6JValueC1EPKc"
+  },
+  {
+    "owner_raw": "0x000c15d8",
+    "owner": "umiaudiomixer::setSettings(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>, pbnjson::JValue, bool (*)(LSHandle*, LSMessage*, void*), envelope*)",
+    "site_raw": "0x000c1650",
+    "target_raw": "0x000821c0",
+    "plt_symbol": "_ZN7pbnjson6JValueC1ERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE"
+  },
+  {
+    "owner_raw": "0x000c15d8",
+    "owner": "umiaudiomixer::setSettings(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>, pbnjson::JValue, bool (*)(LSHandle*, LSMessage*, void*), envelope*)",
+    "site_raw": "0x000c16b2",
+    "target_raw": "0x0008183c",
+    "plt_symbol": "_ZN7pbnjson6JValueC1EPKc"
+  },
+  {
+    "owner_raw": "0x000c15d8",
+    "owner": "umiaudiomixer::setSettings(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>, pbnjson::JValue, bool (*)(LSHandle*, LSMessage*, void*), envelope*)",
+    "site_raw": "0x000c18c0",
+    "target_raw": "0x00081b6c",
+    "plt_symbol": "LSCallOneReply"
+  },
+  {
+    "owner_raw": "0x001c186c",
+    "owner": "TVManager::_mixDigitalSoundOutput(LSHandle*, LSMessage*, void*)",
+    "site_raw": "0x001c1c8c",
+    "target_raw": "0x00081f2c",
+    "plt_symbol": "LSMessageGetApplicationID"
+  },
+  {
+    "owner_raw": "0x001c186c",
+    "owner": "TVManager::_mixDigitalSoundOutput(LSHandle*, LSMessage*, void*)",
+    "site_raw": "0x001c1e68",
+    "target_raw": "0x00081ad0",
+    "plt_symbol": "LSMessageGetSenderServiceName"
+  },
+  {
+    "owner_raw": "0x001dc608",
+    "owner": "TVManager::mixDigitalSoundOutput(pbnjson::JValue)",
+    "site_raw": "0x001dc67c",
+    "target_raw": "0x00081b9c",
+    "plt_symbol": "_ZNK7pbnjson6JValue6hasKeyERKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE"
+  }
+]

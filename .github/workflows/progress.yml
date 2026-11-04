@@ -1,0 +1,30 @@
+name: progress
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  status:
+    # ubuntu-22.04 ships the same GCC 11.4 as the original binaries.
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Toolchain
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq gcc-11-arm-linux-gnueabi libc6-dev-armel-cross llvm
+          sudo ln -sf /usr/bin/arm-linux-gnueabi-gcc-11 /usr/local/bin/arm-linux-gnueabi-gcc
+      # orig/ is not in git, so CI compiles src/ and reports coverage only.
+      - name: Status
+        run: |
+          python tools/progress.py status | tee status.txt
+          python tools/progress.py status --json > status.json
+          { echo '```'; cat status.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: progress
+          path: status.json

@@ -1,0 +1,590 @@
+{
+  "evidence_origin": "local cached Ghidra export + original ELF LLVM disassembly/DWARF",
+  "not_rea_mcp_evidence": true,
+  "target_executed": false,
+  "functions": [
+    {
+      "name": "gst_lg_audio_render_event",
+      "ghidra_entry": "0x18240",
+      "elf_symbol_value": "0x8241",
+      "elf_entry_thumb_bit_cleared": "0x8240",
+      "elf_symbol_size_including_literal_pools": 14772,
+      "elf_symbol_range_exclusive": [
+        "0x8240",
+        "0xbbf4"
+      ],
+      "entry": 98880,
+      "ghidra_body_byte_count_not_span": 11804,
+      "pseudocode_source": "decomp/libgstlgaudiosink.so.c",
+      "pseudocode_source_line": 2109,
+      "pseudocode_sha256": "5a05ca66b211f681b500742eccdb87e6fc697ca022d2a73eb789f67ecf925c98",
+      "assembly_rows_verified_against_original_bytes": 4967,
+      "mapping_symbols": [
+        {
+          "elf_va": "0x8240",
+          "kind": "t"
+        },
+        {
+          "elf_va": "0x8528",
+          "kind": "d"
+        },
+        {
+          "elf_va": "0x85b4",
+          "kind": "t"
+        },
+        {
+          "elf_va": "0x8e9c",
+          "kind": "d"
+        },
+        {
+          "elf_va": "0x902c",
+          "kind": "t"
+        },
+        {
+          "elf_va": "0x9c0c",
+          "kind": "d"
+        },
+        {
+          "elf_va": "0x9e6c",
+          "kind": "t"
+        },
+        {
+          "elf_va": "0xa61c",
+          "kind": "d"
+        },
+        {
+          "elf_va": "0xa624",
+          "kind": "t"
+        },
+        {
+          "elf_va": "0xaaf4",
+          "kind": "d"
+        },
+        {
+          "elf_va": "0xad54",
+          "kind": "t"
+        },
+        {
+          "elf_va": "0xb950",
+          "kind": "d"
+        }
+      ]
+    },
+    {
+      "name": "lgao_open_renderer",
+      "ghidra_entry": "0x27c40",
+      "elf_symbol_value": "0x17c41",
+      "elf_entry_thumb_bit_cleared": "0x17c40",
+      "elf_symbol_size_including_literal_pools": 300,
+      "elf_symbol_range_exclusive": [
+        "0x17c40",
+        "0x17d6c"
+      ],
+      "entry": 162880,
+      "ghidra_body_byte_count_not_span": 242,
+      "pseudocode_source": "decomp/libgstlgaudiosink.so.c",
+      "pseudocode_source_line": 9935,
+      "pseudocode_sha256": "fed69b24eccde26bdafd61e912fb0aeafa4a8d0803192d700f4492163ad26d0d",
+      "assembly_rows_verified_against_original_bytes": 119,
+      "mapping_symbols": [
+        {
+          "elf_va": "0x17c40",
+          "kind": "t"
+        },
+        {
+          "elf_va": "0x17d34",
+          "kind": "d"
+        }
+      ]
+    },
+    {
+      "name": "_lgao_open_renderer",
+      "ghidra_entry": "0x24924",
+      "elf_symbol_value": "0x14925",
+      "elf_entry_thumb_bit_cleared": "0x14924",
+      "elf_symbol_size_including_literal_pools": 444,
+      "elf_symbol_range_exclusive": [
+        "0x14924",
+        "0x14ae0"
+      ],
+      "entry": 149796,
+      "ghidra_body_byte_count_not_span": 386,
+      "pseudocode_source": "decomp/libgstlgaudiosink.so.c",
+      "pseudocode_source_line": 7038,
+      "pseudocode_sha256": "922106d74b70a0220266913bceb0d5e631abf608803f7c2c7c8d98d1fda0bb46",
+      "assembly_rows_verified_against_original_bytes": 175,
+      "mapping_symbols": [
+        {
+          "elf_va": "0x14924",
+          "kind": "t"
+        },
+        {
+          "elf_va": "0x14aa8",
+          "kind": "d"
+        }
+      ]
+    },
+    {
+      "name": "_lgao_connect_renderer",
+      "ghidra_entry": "0x2441c",
+      "elf_symbol_value": "0x1441d",
+      "elf_entry_thumb_bit_cleared": "0x1441c",
+      "elf_symbol_size_including_literal_pools": 1288,
+      "elf_symbol_range_exclusive": [
+        "0x1441c",
+        "0x14924"
+      ],
+      "entry": 148508,
+      "ghidra_body_byte_count_not_span": 1136,
+      "pseudocode_source": "decomp/libgstlgaudiosink.so.c",
+      "pseudocode_source_line": 6834,
+      "pseudocode_sha256": "d0e608c6b34d54c25ebef727450f4aa9ee2fe988b76a2227fc9079325af36299",
+      "assembly_rows_verified_against_original_bytes": 468,
+      "mapping_symbols": [
+        {
+          "elf_va": "0x1441c",
+          "kind": "t"
+        },
+        {
+          "elf_va": "0x1488c",
+          "kind": "d"
+        }
+      ]
+    },
+    {
+      "name": "lgao_connect_renderer",
+      "ghidra_entry": "0x26c6c",
+      "elf_symbol_value": "0x16c6d",
+      "elf_entry_thumb_bit_cleared": "0x16c6c",
+      "elf_symbol_size_including_literal_pools": 140,
+      "elf_symbol_range_exclusive": [
+        "0x16c6c",
+        "0x16cf8"
+      ],
+      "entry": 158828,
+      "ghidra_body_byte_count_not_span": 114,
+      "pseudocode_source": "decomp/libgstlgaudiosink.so.c",
+      "pseudocode_source_line": 8993,
+      "pseudocode_sha256": "406c5f757c044d95dbd1309f0bf7afd4b001ba82cea27bc0e9ac9db7485a4ed9",
+      "assembly_rows_verified_against_original_bytes": 55,
+      "mapping_symbols": [
+        {
+          "elf_va": "0x16c6c",
+          "kind": "t"
+        },
+        {
+          "elf_va": "0x16ce0",
+          "kind": "d"
+        }
+      ]
+    },
+    {
+      "name": "_lgao_config_set_renderer_param",
+      "ghidra_entry": "0x26fc4",
+      "elf_symbol_value": "0x16fc5",
+      "elf_entry_thumb_bit_cleared": "0x16fc4",
+      "elf_symbol_size_including_literal_pools": 114,
+      "elf_symbol_range_exclusive": [
+        "0x16fc4",
+        "0x17036"
+      ],
+      "entry": 159684,
+      "ghidra_body_byte_count_not_span": 114,
+      "pseudocode_source": "decomp/libgstlgaudiosink.so.c",
+      "pseudocode_source_line": 9261,
+      "pseudocode_sha256": "abe3d6b26195d6c41e65e29ee1d68cdc02b18b37024d22b77354e304484e9644",
+      "assembly_rows_verified_against_original_bytes": 37,
+      "mapping_symbols": []
+    },
+    {
+      "name": "lgao_config",
+      "ghidra_entry": "0x271f8",
+      "elf_symbol_value": "0x171f9",
+      "elf_entry_thumb_bit_cleared": "0x171f8",
+      "elf_symbol_size_including_literal_pools": 588,
+      "elf_symbol_range_exclusive": [
+        "0x171f8",
+        "0x17444"
+      ],
+      "entry": 160248,
+      "ghidra_body_byte_count_not_span": 500,
+      "pseudocode_source": "decomp/libgstlgaudiosink.so.c",
+      "pseudocode_source_line": 9397,
+      "pseudocode_sha256": "058776ee0d694ff99327857bdf4ee5b39fc918231a37714be3513ff6682003c7",
+      "assembly_rows_verified_against_original_bytes": 229,
+      "mapping_symbols": [
+        {
+          "elf_va": "0x171f8",
+          "kind": "t"
+        },
+        {
+          "elf_va": "0x173ec",
+          "kind": "d"
+        }
+      ]
+    },
+    {
+      "name": "lgao_set_audio_info",
+      "ghidra_entry": "0x2673c",
+      "elf_symbol_value": "0x1673d",
+      "elf_entry_thumb_bit_cleared": "0x1673c",
+      "elf_symbol_size_including_literal_pools": 328,
+      "elf_symbol_range_exclusive": [
+        "0x1673c",
+        "0x16884"
+      ],
+      "entry": 157500,
+      "ghidra_body_byte_count_not_span": 304,
+      "pseudocode_source": "decomp/libgstlgaudiosink.so.c",
+      "pseudocode_source_line": 8687,
+      "pseudocode_sha256": "f66183e8470227c73886d2079139b57a05318d4411f077c8875608208c499615",
+      "assembly_rows_verified_against_original_bytes": 122,
+      "mapping_symbols": [
+        {
+          "elf_va": "0x1673c",
+          "kind": "t"
+        },
+        {
+          "elf_va": "0x1686c",
+          "kind": "d"
+        }
+      ]
+    },
+    {
+      "name": "lgao_set_clocktype",
+      "ghidra_entry": "0x262a0",
+      "elf_symbol_value": "0x162a1",
+      "elf_entry_thumb_bit_cleared": "0x162a0",
+      "elf_symbol_size_including_literal_pools": 212,
+      "elf_symbol_range_exclusive": [
+        "0x162a0",
+        "0x16374"
+      ],
+      "entry": 156320,
+      "ghidra_body_byte_count_not_span": 180,
+      "pseudocode_source": "decomp/libgstlgaudiosink.so.c",
+      "pseudocode_source_line": 8430,
+      "pseudocode_sha256": "778a86eaeb0595854a92f2838284548c1d7536e20b8b13d04215cfdac415f440",
+      "assembly_rows_verified_against_original_bytes": 82,
+      "mapping_symbols": [
+        {
+          "elf_va": "0x162a0",
+          "kind": "t"
+        },
+        {
+          "elf_va": "0x16354",
+          "kind": "d"
+        }
+      ]
+    },
+    {
+      "name": "lgao_push_first_event",
+      "ghidra_entry": "0x282d0",
+      "elf_symbol_value": "0x182d1",
+      "elf_entry_thumb_bit_cleared": "0x182d0",
+      "elf_symbol_size_including_literal_pools": 1368,
+      "elf_symbol_range_exclusive": [
+        "0x182d0",
+        "0x18828"
+      ],
+      "entry": 164560,
+      "ghidra_body_byte_count_not_span": 1158,
+      "pseudocode_source": "decomp/libgstlgaudiosink.so.c",
+      "pseudocode_source_line": 10285,
+      "pseudocode_sha256": "4897c1a26214d0ac965bcf1f103ac1e26df51c21a52d416061f2fe562544d824",
+      "assembly_rows_verified_against_original_bytes": 508,
+      "mapping_symbols": [
+        {
+          "elf_va": "0x182d0",
+          "kind": "t"
+        },
+        {
+          "elf_va": "0x18758",
+          "kind": "d"
+        }
+      ]
+    },
+    {
+      "name": "_sig_handle",
+      "ghidra_entry": "0x24b2c",
+      "elf_symbol_value": "0x14b2d",
+      "elf_entry_thumb_bit_cleared": "0x14b2c",
+      "elf_symbol_size_including_literal_pools": 172,
+      "elf_symbol_range_exclusive": [
+        "0x14b2c",
+        "0x14bd8"
+      ],
+      "entry": 150316,
+      "ghidra_body_byte_count_not_span": 146,
+      "pseudocode_source": "decomp/libgstlgaudiosink.so.c",
+      "pseudocode_source_line": 7146,
+      "pseudocode_sha256": "e53af58f044d32205b756324db9313cb8cacb860b8339d2e64da2a70f0d49bf2",
+      "assembly_rows_verified_against_original_bytes": 69,
+      "mapping_symbols": [
+        {
+          "elf_va": "0x14b2c",
+          "kind": "t"
+        },
+        {
+          "elf_va": "0x14bc0",
+          "kind": "d"
+        }
+      ]
+    },
+    {
+      "name": "gst_lg_audio_render_callback_task",
+      "ghidra_entry": "0x17004",
+      "elf_symbol_value": "0x7005",
+      "elf_entry_thumb_bit_cleared": "0x7004",
+      "elf_symbol_size_including_literal_pools": 1236,
+      "elf_symbol_range_exclusive": [
+        "0x7004",
+        "0x74d8"
+      ],
+      "entry": 94212,
+      "ghidra_body_byte_count_not_span": 990,
+      "pseudocode_source": "decomp/libgstlgaudiosink.so.c",
+      "pseudocode_source_line": 1449,
+      "pseudocode_sha256": "19aa106294f2871e2f8fff6ace9b2b543df9d9ea22b15b83bf7271f65754c28b",
+      "assembly_rows_verified_against_original_bytes": 481,
+      "mapping_symbols": [
+        {
+          "elf_va": "0x7004",
+          "kind": "t"
+        },
+        {
+          "elf_va": "0x73e0",
+          "kind": "d"
+        }
+      ]
+    },
+    {
+      "name": "lgao_open",
+      "ghidra_entry": "0x24be0",
+      "elf_symbol_value": "0x14be1",
+      "elf_entry_thumb_bit_cleared": "0x14be0",
+      "elf_symbol_size_including_literal_pools": 544,
+      "elf_symbol_range_exclusive": [
+        "0x14be0",
+        "0x14e00"
+      ],
+      "entry": 150496,
+      "ghidra_body_byte_count_not_span": 488,
+      "pseudocode_source": "decomp/libgstlgaudiosink.so.c",
+      "pseudocode_source_line": 7188,
+      "pseudocode_sha256": "e60b8172ed756b886ba11addeaa8c14bb5ac864c85247e3a37da0fbc3df18c91",
+      "assembly_rows_verified_against_original_bytes": 181,
+      "mapping_symbols": [
+        {
+          "elf_va": "0x14dc8",
+          "kind": "d"
+        }
+      ]
+    },
+    {
+      "name": "lgao_play",
+      "ghidra_entry": "0x27f4c",
+      "elf_symbol_value": "0x17f4d",
+      "elf_entry_thumb_bit_cleared": "0x17f4c",
+      "elf_symbol_size_including_literal_pools": 900,
+      "elf_symbol_range_exclusive": [
+        "0x17f4c",
+        "0x182d0"
+      ],
+      "entry": 163660,
+      "ghidra_body_byte_count_not_span": 790,
+      "pseudocode_source": "decomp/libgstlgaudiosink.so.c",
+      "pseudocode_source_line": 10112,
+      "pseudocode_sha256": "233c1b5fb0aff248c0c681839c639e25380086a02ea266f7a4ae77b35e55cacf",
+      "assembly_rows_verified_against_original_bytes": 321,
+      "mapping_symbols": [
+        {
+          "elf_va": "0x17f4c",
+          "kind": "t"
+        },
+        {
+          "elf_va": "0x18264",
+          "kind": "d"
+        }
+      ]
+    },
+    {
+      "name": "lgao_feed",
+      "ghidra_entry": "0x28828",
+      "elf_symbol_value": "0x18829",
+      "elf_entry_thumb_bit_cleared": "0x18828",
+      "elf_symbol_size_including_literal_pools": 860,
+      "elf_symbol_range_exclusive": [
+        "0x18828",
+        "0x18b84"
+      ],
+      "entry": 165928,
+      "ghidra_body_byte_count_not_span": 794,
+      "pseudocode_source": "decomp/libgstlgaudiosink.so.c",
+      "pseudocode_source_line": 10490,
+      "pseudocode_sha256": "2ab088e35c7596f8c7566b7bb083c0262ba8fed6e9b57a5dfab57293d25fa81f",
+      "assembly_rows_verified_against_original_bytes": 295,
+      "mapping_symbols": [
+        {
+          "elf_va": "0x18828",
+          "kind": "t"
+        },
+        {
+          "elf_va": "0x18b44",
+          "kind": "d"
+        }
+      ]
+    },
+    {
+      "name": "lgao_get_event_mq_id",
+      "ghidra_entry": "0x24bd8",
+      "elf_symbol_value": "0x14bd9",
+      "elf_entry_thumb_bit_cleared": "0x14bd8",
+      "elf_symbol_size_including_literal_pools": 6,
+      "elf_symbol_range_exclusive": [
+        "0x14bd8",
+        "0x14bde"
+      ],
+      "entry": 150488,
+      "ghidra_body_byte_count_not_span": 6,
+      "pseudocode_source": "decomp/libgstlgaudiosink.so.c",
+      "pseudocode_source_line": 7178,
+      "pseudocode_sha256": "ef19a8cbe5fe045b663274f65da958a552489a575edfa501e18c3a09d8b97136",
+      "assembly_rows_verified_against_original_bytes": 2,
+      "mapping_symbols": [
+        {
+          "elf_va": "0x14bd8",
+          "kind": "t"
+        }
+      ]
+    }
+  ],
+  "functions_completed": 16,
+  "function_lookup_failures": 0,
+  "verified_listing_rows": 8111,
+  "inline_dies": [
+    {
+      "die": "0xb3e8",
+      "origin": "0x12c91",
+      "attributes": {
+        "DW_AT_abstract_origin": "[DW_FORM_ref4]\t(cu + 0x12c6e => {0x00012c91} \"gst_lg_audio_render_set_caps\")",
+        "DW_AT_entry_pc": "[DW_FORM_addr]\t(0x00008644)",
+        "DW_AT_GNU_entry_view": "[DW_FORM_data2]\t(0x0000)",
+        "DW_AT_ranges": "[DW_FORM_sec_offset]\t(0x000004d5",
+        "DW_AT_call_file": "[DW_FORM_implicit_const]\t(\"/usr/src/debug/lib32-gst-plugins-bsp/1.0.9-1240.70.papikonda.3-r41/build/gstlgaudio/../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiosink.c\")",
+        "DW_AT_call_line": "[DW_FORM_data2]\t(2342)",
+        "DW_AT_call_column": "[DW_FORM_data1]\t(11)",
+        "DW_AT_sibling": "[DW_FORM_ref4]\t(cu + 0xdf47 => {0x0000df6a})"
+      }
+    },
+    {
+      "die": "0x1dbc6",
+      "origin": "0x1de60",
+      "attributes": {
+        "DW_AT_abstract_origin": "[DW_FORM_ref4]\t(cu + 0x6d4e => {0x0001de60} \"_lgao_set_msgpid_to_signal\")",
+        "DW_AT_entry_pc": "[DW_FORM_addr]\t(0x000147b8)",
+        "DW_AT_GNU_entry_view": "[DW_FORM_data2]\t(0x0001)",
+        "DW_AT_ranges": "[DW_FORM_sec_offset]\t(0x00001dc7",
+        "DW_AT_call_file": "[DW_FORM_implicit_const]\t(\"/usr/src/debug/lib32-gst-plugins-bsp/1.0.9-1240.70.papikonda.3-r41/build/gstlgaudio/../../git/gst-plugins-bsp/../gstlgaudio/lgaudio/lgao.c\")",
+        "DW_AT_call_line": "[DW_FORM_data2]\t(1992)",
+        "DW_AT_call_column": "[DW_FORM_data1]\t(3)",
+        "DW_AT_sibling": "[DW_FORM_ref4]\t(cu + 0x6bea => {0x0001dcfc})"
+      }
+    },
+    {
+      "die": "0x2220e",
+      "origin": "0x1def2",
+      "attributes": {
+        "DW_AT_abstract_origin": "[DW_FORM_ref4]\t(cu + 0x6de0 => {0x0001def2} \"_sig_handle\")",
+        "DW_AT_entry_pc": "[DW_FORM_addr]\t(0x00014b3c)",
+        "DW_AT_GNU_entry_view": "[DW_FORM_data2]\t(0x0000)",
+        "DW_AT_ranges": "[DW_FORM_sec_offset]\t(0x00001e34",
+        "DW_AT_call_file": "[DW_FORM_implicit_const]\t(\"/usr/src/debug/lib32-gst-plugins-bsp/1.0.9-1240.70.papikonda.3-r41/build/gstlgaudio/../../git/gst-plugins-bsp/../gstlgaudio/lgaudio/lgao.c\")",
+        "DW_AT_call_line": "[DW_FORM_data2]\t(1871)",
+        "DW_AT_call_column": "[DW_FORM_data1]\t(13)"
+      }
+    }
+  ],
+  "set_caps_abstract_and_inline_dies": [
+    {
+      "offset": 46056,
+      "tag": "DW_TAG_inlined_subroutine",
+      "lines": [
+        "0x0000b3e8:       DW_TAG_inlined_subroutine [78] * (0x0000b134)",
+        "                    DW_AT_abstract_origin [DW_FORM_ref4]\t(cu + 0x12c6e => {0x00012c91} \"gst_lg_audio_render_set_caps\")",
+        "                    DW_AT_entry_pc [DW_FORM_addr]\t(0x00008644)",
+        "                    DW_AT_GNU_entry_view [DW_FORM_data2]\t(0x0000)",
+        "                    DW_AT_ranges [DW_FORM_sec_offset]\t(0x000004d5",
+        "                       [0x00008630, 0x00008634)",
+        "                       [0x00008638, 0x00008640)",
+        "                       [0x00008644, 0x0000879c)",
+        "                       [0x0000888e, 0x0000899e)",
+        "                       [0x000089a0, 0x00008a00)",
+        "                       [0x0000902c, 0x00009ba8)",
+        "                       [0x0000a0a0, 0x0000a0e6)",
+        "                       [0x0000a134, 0x0000a134)",
+        "                       [0x0000a27e, 0x0000a304)",
+        "                       [0x0000a324, 0x0000a35c)",
+        "                       [0x0000a384, 0x0000a7ca)",
+        "                       [0x0000a882, 0x0000adb6)",
+        "                       [0x0000ae1e, 0x0000aed0)",
+        "                       [0x0000af30, 0x0000b044)",
+        "                       [0x0000b048, 0x0000b09a)",
+        "                       [0x0000b0ec, 0x0000b1fe)",
+        "                       [0x0000b21c, 0x0000b934))",
+        "                    DW_AT_call_file [DW_FORM_implicit_const]\t(\"/usr/src/debug/lib32-gst-plugins-bsp/1.0.9-1240.70.papikonda.3-r41/build/gstlgaudio/../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiosink.c\")",
+        "                    DW_AT_call_line [DW_FORM_data2]\t(2342)",
+        "                    DW_AT_call_column [DW_FORM_data1]\t(11)",
+        "                    DW_AT_sibling [DW_FORM_ref4]\t(cu + 0xdf47 => {0x0000df6a})",
+        ""
+      ],
+      "attributes": {
+        "DW_AT_abstract_origin": "[DW_FORM_ref4]\t(cu + 0x12c6e => {0x00012c91} \"gst_lg_audio_render_set_caps\")",
+        "DW_AT_entry_pc": "[DW_FORM_addr]\t(0x00008644)",
+        "DW_AT_GNU_entry_view": "[DW_FORM_data2]\t(0x0000)",
+        "DW_AT_ranges": "[DW_FORM_sec_offset]\t(0x000004d5",
+        "DW_AT_call_file": "[DW_FORM_implicit_const]\t(\"/usr/src/debug/lib32-gst-plugins-bsp/1.0.9-1240.70.papikonda.3-r41/build/gstlgaudio/../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiosink.c\")",
+        "DW_AT_call_line": "[DW_FORM_data2]\t(2342)",
+        "DW_AT_call_column": "[DW_FORM_data1]\t(11)",
+        "DW_AT_sibling": "[DW_FORM_ref4]\t(cu + 0xdf47 => {0x0000df6a})"
+      },
+      "name": null,
+      "abstract_origin": 76945
+    },
+    {
+      "offset": 76945,
+      "tag": "DW_TAG_subprogram",
+      "lines": [
+        "0x00012c91:   DW_TAG_subprogram [106] * (0x0000002f)",
+        "                DW_AT_name [DW_FORM_strp]\t( .debug_str[0x000030f0] = \"gst_lg_audio_render_set_caps\")",
+        "                DW_AT_decl_file [DW_FORM_data1]\t(\"/usr/src/debug/lib32-gst-plugins-bsp/1.0.9-1240.70.papikonda.3-r41/build/gstlgaudio/../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiosink.c\")",
+        "                DW_AT_decl_line [DW_FORM_data2]\t(1092)",
+        "                DW_AT_decl_column [DW_FORM_data1]\t(1)",
+        "                DW_AT_prototyped [DW_FORM_flag_present]\t(true)",
+        "                DW_AT_type [DW_FORM_ref4]\t(cu + 0x0361 => {0x00000384} \"gboolean\")",
+        "                DW_AT_inline [DW_FORM_data1]\t(DW_INL_inlined)",
+        "                DW_AT_sibling [DW_FORM_ref4]\t(cu + 0x13db5 => {0x00013dd8})",
+        ""
+      ],
+      "attributes": {
+        "DW_AT_name": "[DW_FORM_strp]\t( .debug_str[0x000030f0] = \"gst_lg_audio_render_set_caps\")",
+        "DW_AT_decl_file": "[DW_FORM_data1]\t(\"/usr/src/debug/lib32-gst-plugins-bsp/1.0.9-1240.70.papikonda.3-r41/build/gstlgaudio/../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiosink.c\")",
+        "DW_AT_decl_line": "[DW_FORM_data2]\t(1092)",
+        "DW_AT_decl_column": "[DW_FORM_data1]\t(1)",
+        "DW_AT_prototyped": "[DW_FORM_flag_present]\t(true)",
+        "DW_AT_type": "[DW_FORM_ref4]\t(cu + 0x0361 => {0x00000384} \"gboolean\")",
+        "DW_AT_inline": "[DW_FORM_data1]\t(DW_INL_inlined)",
+        "DW_AT_sibling": "[DW_FORM_ref4]\t(cu + 0x13db5 => {0x00013dd8})"
+      },
+      "name": "gst_lg_audio_render_set_caps",
+      "abstract_origin": null
+    }
+  ],
+  "limits": [
+    "Cached function byte count is not a contiguous body span; assembly uses ELF symbol bounds and ARM mapping symbols.",
+    "Inline functions have no fabricated callable entry; their full containing decompilation is retained.",
+    "PC-relative string annotations are candidates from bounded local register tracking, not proven dataflow.",
+    "No fresh Ghidra decompilation was possible with authorized Java 21; cached digest verified instead.",
+    "No kernel implementation, DSP, physical clock or sample counter behavior established by this sink-only bundle."
+  ]
+}

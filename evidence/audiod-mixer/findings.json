@@ -1,0 +1,137 @@
+{
+  "schema_version": 1,
+  "investigator": "1 of 4",
+  "ownership": "AUDIOD MIXER POLICY",
+  "evidence_kind": "local static evidence; not a REA Evidence record",
+  "date": "2026-11-04",
+  "binary": {
+    "path": "orig/usr/sbin/audiod",
+    "sha256": "170d468085255d381245693260840771b00d39c718473ec024566fb1df1ca3af",
+    "format": "ELF32 little-endian ARM EABI5 PIE, stripped with dynamic C++ symbols",
+    "build_id_sha1": "92c7c69218811f92d7cf3d91759d28abda68ecf4",
+    "raw_image_base": "0x00000000",
+    "ghidra_image_base": "0x00010000",
+    "address_convention": "raw ELF VA is not a runtime ASLR address. Ghidra VA = raw ELF VA + 0x10000. Function instruction addresses below have Thumb bit cleared; function-pointer values have bit 0 set. The first LOAD maps file offset = raw VA through 0x004efe93. The second LOAD maps raw VA = file offset + 0x10000 starting file offset 0x004f06b0."
+  },
+  "scope": {
+    "included": ["audiod executable", "acquired orig/etc/palm/audiod JSON configuration", "new isolated audiod-mixer Ghidra project and local scripts"],
+    "excluded": ["all DSP artifacts", "libumi and audiooutputd implementation", "existing Ghidra projects", "installed extensions", "shared scripts", "TV SSH", "target execution or state changes", "production and documentation modifications"],
+    "coverage": "All .text instructions were indexed offline for direct BL/BLX/B/B.W call targets and a limited PC-relative string pattern; all dynamic defined text symbols and ELF PLT relocations were indexed. The five mixer chain functions and TVManager registration were selectively disassembled/decompiled. Exact occurrences and absolute pointers to the mixer keys and functions were checked. This is not a proof against arbitrary computed strings, computed indirect calls, ARM instruction/data ambiguity, or external service callers.",
+    "source_recovery_limit": "Ghidra output is pseudocode, not recovered original C++ text. This binary includes substantial instrumentation-counter noise. No on-device behavior, downstream success, bus ACL, or active caller set was observed."
+  },
+  "evidence": [
+    {
+      "id": "AMX-E01",
+      "status": "observed",
+      "summary": "Artifact identity and address convention.",
+      "sources": ["functions.tsv: image_base and sha256 header", "index_audiod.py: structured ELF parsing", "audiod binary ELF program headers"],
+      "raw_elf_addresses": ["0x00000000", "0x005006b0"],
+      "ghidra_addresses": ["0x00010000", "0x005106b0"]
+    },
+    {
+      "id": "AMX-E02",
+      "status": "observed",
+      "summary": "TVManager registers category /tv using LSRegisterCategoryAppend and LSCategorySetData. The method-table entry maps mixDigitalSoundOutput to the callback.",
+      "sources": ["focus-1be7e4.c: LAB_001c2654", "audiod.asm: raw 0x001b2666 and 0x001b27fe", "data-pointers.json", "string-refs.json: raw 0x001b2660 -> /tv"],
+      "raw_elf_addresses": ["0x001ae7e4", "0x001b2666", "0x001b27fe", "0x00514228", "0x00514294", "0x00514298", "0x004a19ac"],
+      "ghidra_addresses": ["0x001be7e4", "0x001c2666", "0x001c27fe", "0x00524228", "0x00524294", "0x00524298", "0x004b19ac"],
+      "details": "Method table argument is Ghidra 0x00524228 (raw 0x00514228), and mixDigitalSoundOutput entry is raw 0x00514294 with Thumb callback pointer 0x001c186d. /tv string is raw 0x0049ff08. Main contains Register [com.webos.service.audio] Successful."
+    },
+    {
+      "id": "AMX-E03",
+      "status": "observed",
+      "summary": "Callback validates required boolean mix and optional string callerId, rejects additional properties, and resolves missing/empty callerId from application ID or sender service name.",
+      "sources": ["focus-1a5480.c: function @001d186c", "string-refs.json: schema at raw 0x004a0a8c", "boundary-calls.json", "audiod.asm: raw 0x001c1c8c and 0x001c1e68"],
+      "raw_elf_addresses": ["0x001c186c", "0x001c1890", "0x004a0a8c", "0x001c1c8c", "0x001c1e68", "0x001c19fa"],
+      "ghidra_addresses": ["0x001d186c", "0x001d1890", "0x004b0a8c", "0x001d1c8c", "0x001d1e68", "0x001d19fa"],
+      "schema": {"type":"object","properties":{"mix":{"type":"boolean"},"callerId":{"type":"string"}},"required":["mix"],"additionalProperties":false},
+      "details": "LSMessageGetApplicationID is used first; when NULL, LSMessageGetSenderServiceName is used. The effective ID is passed separately to arbitration. The copied original JValue is forwarded, so a synthesized callerId is not necessarily inserted in value."
+    },
+    {
+      "id": "AMX-E04",
+      "status": "observed",
+      "summary": "Caller-ID arbitration is a deduplicated vector of strings at TVManager +0x2c4, end pointer +0x2c8. True adds a missing ID and forwards; false erases a matching ID and forwards only if the vector is empty.",
+      "sources": ["focus-1a5480.c: function @001a5480", "insns-1a5480.tsv: 0x001a58cc through 0x001a5910", "audiod.asm: raw 0x001958d0, 0x001958d4, 0x001958d6"],
+      "raw_elf_addresses": ["0x00195480", "0x0019566a", "0x001958cc", "0x001958d0", "0x001958d4", "0x001958d6", "0x00195910"],
+      "ghidra_addresses": ["0x001a5480", "0x001a566a", "0x001a58cc", "0x001a58d0", "0x001a58d4", "0x001a58d6", "0x001a5910"],
+      "details": "A suppressed false returns 1, so the callback can reply returnValue:true without issuing setMixer. This vector counts distinct caller IDs requesting mixing, not active media inputs. Repeated true for one ID is not a reference-count increment. False from an absent ID still forwards if the vector is already empty."
+    },
+    {
+      "id": "AMX-E05",
+      "status": "observed",
+      "summary": "The sole recovered setMixer-key construction is TVManager::mixDigitalSoundOutput. It checks hasKey(mix), not whether the boolean is true, and forwards the original JValue via AudioMixer::setSettings with null callback/envelope.",
+      "sources": ["focus-1a5480.c: function @001ec608", "boundary-calls.json: hasKey at raw 0x001dc67c", "string-refs.json: setMixer at raw 0x001dc6ee", "audiod.asm: raw 0x001dc766", "call-refs.json", "data-pointers.json"],
+      "raw_elf_addresses": ["0x001dc608", "0x001dc67c", "0x001dc6ee", "0x004a2aec", "0x001dc766"],
+      "ghidra_addresses": ["0x001ec608", "0x001ec67c", "0x001ec6ee", "0x004b2aec", "0x001ec766"],
+      "details": "Recovered incoming calls to the sender are raw 0x0019566a and 0x00195910, both in arbitration; arbitration's sole recovered direct caller is raw 0x001c19fa in the registered callback. No function-pointer/vtable copy of sender or arbitration was found outside dynsym."
+    },
+    {
+      "id": "AMX-E06",
+      "status": "observed",
+      "summary": "AudioMixer::setSettings forwards through its UMI interface only if pointer +4 is non-NULL and ready byte +0x34 is nonzero; otherwise returns 0.",
+      "sources": ["focus-1a5480.c: function @000c6ec4", "audiod.asm: raw AudioMixer::setSettings slice"],
+      "raw_elf_addresses": ["0x000b6ec4"],
+      "ghidra_addresses": ["0x000c6ec4"],
+      "details": "Virtual setSettings slot is +0x38. This is a forwarding readiness gate, not a derivation of mix."
+    },
+    {
+      "id": "AMX-E07",
+      "status": "observed",
+      "summary": "Audiod's umiaudiomixer::setSettings builds category/value JSON and calls audiooutput's quality/setSettings using LSCallOneReply.",
+      "sources": ["focus-d15d8.c: function @000d15d8", "string-refs.json: raw 0x000c1622, 0x000c16ac, 0x000c18be", "boundary-calls.json: LSCallOneReply raw 0x000c18c0"],
+      "raw_elf_addresses": ["0x000c15d8", "0x000c1622", "0x0049201c", "0x000c16ac", "0x004a5090", "0x000c18be", "0x004925bc", "0x000c18c0"],
+      "ghidra_addresses": ["0x000d15d8", "0x000d1622", "0x004a201c", "0x000d16ac", "0x004b5090", "0x000d18be", "0x004a25bc", "0x000d18c0"],
+      "endpoint": "luna://com.webos.service.audiooutput/quality/setSettings",
+      "example_payload": {"category":"setMixer","value":{"mix":false,"callerId":"mixer-probe"}},
+      "details": "category is the actual top-level key, not key. value is the original request object. mapSoundOutputToUmi is invoked first, but the validated mixer request cannot contain soundOutput. The sender passes callback/envelope as zero; audiod success here does not prove downstream effect."
+    },
+    {
+      "id": "AMX-E08",
+      "status": "observed",
+      "summary": "Acquired audiod JSON includes no setMixer/mix boolean policy mapping; mixerconfig selects PulseAudio and UMI, and module config loads TVManager.",
+      "sources": ["orig/etc/palm/audiod/mixerconfig.json", "orig/etc/palm/audiod/audiod_module_config.json", "orig/etc/palm/audiod/audiod_sound_output_config.json", "validation.json"],
+      "raw_elf_addresses": [],
+      "ghidra_addresses": []
+    }
+  ],
+  "claims": [
+    {"id":"AMX-C01","status":"observed","claim":"A registered caller-facing Luna message can request mix:false; this is not an internal-only audiod entry point.","evidence_ids":["AMX-E02","AMX-E03","AMX-E04"],"limitation":"Registration and schema do not establish caller permission, public API stability, or successful downstream action."},
+    {"id":"AMX-C02","status":"observed","claim":"In the recovered chain, mix is the validated request boolean. Audiod arbitrates its forwarding using caller IDs; it does not compute it from codec, sound-output mode, media source, game/BT/voice/system-sound state, or active-input count.","evidence_ids":["AMX-E03","AMX-E04","AMX-E05"],"limitation":"External callers may derive requests from those states. Arbitrary computed paths are outside the static completeness guarantee."},
+    {"id":"AMX-C03","status":"inferred","claim":"Sound-output changes and codec-only changes do not by themselves establish whether this audiod setMixer chain will send false or true. The caller request and remaining mixing-holder set must be known.","evidence_ids":["AMX-E03","AMX-E04","AMX-E05","AMX-E08"],"limitation":"This does not describe libumi/audiooutputd fallback policy, which belongs to another investigator."},
+    {"id":"AMX-C04","status":"observed","claim":"A false request can return success without sending anything if another mixing-holder ID remains. A last-holder false or false when already empty reaches setMixer if the UMI forwarding gate is ready.","evidence_ids":["AMX-E04","AMX-E05","AMX-E06"],"limitation":"No live holder list or readiness state was acquired."},
+    {"id":"AMX-C05","status":"unknown","claim":"Which external services send mixDigitalSoundOutput for HDMI/ARC/optical/TV speaker, source categories, one versus multiple active inputs, game, BT, voice/TTS, or system sounds is not established by this audiod artifact.","evidence_ids":["AMX-E02","AMX-E03","AMX-E05"],"limitation":"Recover caller binaries or capture authorized Luna traffic. Do not substitute codec assumptions."},
+    {"id":"AMX-C06","status":"unknown","claim":"Bus authorization, real current caller-ID holders, cleanup after caller exit, later policy overwrites, successful downstream setMixer acceptance, and actual passthrough/no-mixing realization remain unproven.","evidence_ids":["AMX-E03","AMX-E04","AMX-E06","AMX-E07"],"limitation":"Static audiod evidence alone cannot prove these runtime preconditions."}
+  ],
+  "decision_table": [
+    {"request_mix":true,"caller_already_present":false,"remaining_holder_count":"N+1","action":"insert ID, send mix:true","status":"observed","evidence_ids":["AMX-E04","AMX-E05"]},
+    {"request_mix":true,"caller_already_present":true,"remaining_holder_count":"N (unchanged)","action":"send mix:true; do not duplicate ID","status":"observed","evidence_ids":["AMX-E04","AMX-E05"]},
+    {"request_mix":false,"caller_already_present":true,"remaining_holder_count":0,"action":"erase ID, send mix:false","status":"observed","evidence_ids":["AMX-E04","AMX-E05"]},
+    {"request_mix":false,"caller_already_present":true,"remaining_holder_count":">0","action":"erase ID, no outbound setMixer, return success","status":"observed","evidence_ids":["AMX-E04"]},
+    {"request_mix":false,"caller_already_present":false,"remaining_holder_count":0,"action":"send mix:false","status":"observed","evidence_ids":["AMX-E04","AMX-E05"]},
+    {"request_mix":false,"caller_already_present":false,"remaining_holder_count":">0","action":"no outbound setMixer, return success","status":"observed","evidence_ids":["AMX-E04"]},
+    {"request_mix":"either","umi_ready":false,"action":"forwarding fails; no UMI send","status":"observed","evidence_ids":["AMX-E06"]},
+    {"condition":"TV speaker/ARC/optical/BT mode, HDMI/internal source, active-input count, game, voice/TTS or system-sound transition without a known incoming mix request","action":"cannot assign false or true from audiod alone","status":"unknown","evidence_ids":["AMX-E03","AMX-E04","AMX-E05"]}
+  ],
+  "trigger_chain": [
+    "Authorized Luna client -> luna://com.webos.service.audio/tv/mixDigitalSoundOutput with {mix:boolean, callerId?:string}",
+    "TVManager::_mixDigitalSoundOutput raw 0x001c186c: schema parse, caller identity resolution",
+    "TVManager::_mixDigitalSoundOutputImpl raw 0x00195480: mixing-holder arbitration",
+    "TVManager::mixDigitalSoundOutput raw 0x001dc608: require hasKey(mix), category setMixer",
+    "AudioMixer::setSettings raw 0x000b6ec4: UMI object/ready gate, virtual slot +0x38",
+    "umiaudiomixer::setSettings raw 0x000c15d8: {category:setMixer,value:original request} -> LSCallOneReply at raw 0x000c18c0",
+    "luna://com.webos.service.audiooutput/quality/setSettings; downstream libumi contract delegated to the neighboring contract investigator"
+  ],
+  "best_next_experiment": {
+    "status":"proposed_not_executed",
+    "goal":"Identify actual caller IDs and state predicates, and distinguish false suppression from downstream fallback.",
+    "procedure":"With separate authorization, passively record Luna calls to com.webos.service.audio/tv/mixDigitalSoundOutput and com.webos.service.audiooutput/quality/setSettings while changing one ordinary UI state at a time: TV speaker versus ARC/optical, one versus two active inputs, game, BT, voice/TTS, and system sound. Preserve sender identity, request/reply, ordering, source/input count and sound-output state. An audiod callback reply alone is insufficient; observe whether category:setMixer actually leaves audiod.",
+    "discriminating_observation":"A false request with no outbound category:setMixer is compatible with another remaining mixing-holder ID. An outbound value.mix:false followed by downstream mixed output moves the question to the neighbor's libumi/audiooutputd fallback/preconditions, not audiod boolean derivation.",
+    "optional_followup":"Only with explicit state-change authorization, use two unique caller IDs: A true, B true, A false, B false; expect sends true,true,nothing,false. Do not use or clear a real service's callerId and do not treat an unknown existing holder set as empty."
+  },
+  "validation": {
+    "status":"local_static_only",
+    "performed":["Focused Ghidra 12.2 script compilation and exports with max-cpu 2 in an isolated project", "Cross-checked caller-ID suppression against actual Thumb instructions", "Cross-checked hasKey(mix) and Luna calls against llvm-objdump PLT annotations", "Verified ELF SHA256 and address convention", "Scanned acquired audiod JSON for mixer-policy mappings", "VS Code diagnostics on local Java/Python helpers"],
+    "machine_check":"validate_findings.py produces validation.json and validates addresses, strings, method pointers, direct call sites, evidence references and decision-table cases",
+    "not_performed":["TV/runtime testing", "Luna invocation", "downstream libumi/audiooutputd reverse engineering", "DSP inspection", "production tests or release gates (no production edits)"]
+  }
+}

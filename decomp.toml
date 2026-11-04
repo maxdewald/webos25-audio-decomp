@@ -1,0 +1,200 @@
+# One [[target]] per original binary. Paths are relative to the repo root.
+#   symbols         function table exported by Ghidra (addr<TAB>size<TAB>name)
+#   src             reconstructed C; functions are tagged "/* @0x<addr> ... */"
+#   image_bias      Ghidra address minus raw file VA (ARM ELF: 0x10000)
+#   src_addr_bias   added to src tags that use raw VAs instead of Ghidra addresses
+
+[compiler]
+# Same GCC as the shipped userspace (.comment "GCC: (GNU) 11.4.0"), ARMv7-A Thumb-2,
+# soft-float EABI5. Built from tools/toolchain/Dockerfile.
+image = "webos25-decomp-gcc"
+cc = "arm-linux-gnueabi-gcc"
+cflags = ["-O2", "-mthumb", "-march=armv7-a", "-mfpu=neon", "-mfloat-abi=softfp",
+          "-fPIC", "-Wall", "-Isrc/include"]
+
+[[target]]
+name = "libumi"
+binary = "orig/usr/lib/libumi.so.1.0.0"
+symbols = "symbols/libumi.so.1.0.0.functions.tsv"
+src = "src/libumi"
+
+[[target]]
+name = "audiod"
+binary = "orig/usr/sbin/audiod"
+symbols = "symbols/audiod.functions.tsv"
+src = "src/audiod"
+
+[[target]]
+name = "libgstlgaudiosink"
+binary = "orig/usr/lib/gstreamer-1.0/libgstlgaudiosink.so"
+symbols = "symbols/libgstlgaudiosink.so.functions.tsv"
+src = "src/libgstlgaudiosink"
+src_addr_bias = 0x10000
+
+[[target]]
+name = "starfish-media-pipeline"
+binary = "orig/usr/sbin/starfish-media-pipeline"
+symbols = "symbols/starfish-media-pipeline.functions.tsv"
+src = "src/starfish-media-pipeline"
+
+[[target]]
+name = "libmedia-resource-calculator"
+binary = "orig/usr/lib/libmedia-resource-calculator.so.1"
+symbols = "symbols/libmedia-resource-calculator.so.1.functions.tsv"
+src = "src/libmedia-resource-calculator"
+
+[[target]]
+name = "audiooutputd"
+binary = "orig/usr/sbin/audiooutputd"
+symbols = "symbols/audiooutputd.functions.tsv"
+
+[[target]]
+name = "umediaserver"
+binary = "orig/usr/sbin/umediaserver"
+symbols = "symbols/umediaserver.functions.tsv"
+
+[[target]]
+name = "libgstlgaudiodec"
+binary = "orig/usr/lib/gstreamer-1.0/libgstlgaudiodec.so"
+symbols = "symbols/libgstlgaudiodec.so.functions.tsv"
+
+[[target]]
+name = "libgstdecproxy"
+binary = "orig/usr/lib/gstreamer-1.0/libgstdecproxy.so"
+
+[[target]]
+name = "libkadaptor"
+binary = "orig/usr/lib/libkadaptor.so.2.0.1"
+symbols = "symbols/libkadaptor.so.2.0.1.functions.tsv"
+
+[[target]]
+name = "libaa"
+binary = "orig/usr/lib/libaa.so.2.0.0"
+
+[[target]]
+name = "libpf"
+binary = "orig/usr/lib/libpf-1.0.so.1.0.0"
+
+[[target]]
+name = "libresource_mgr"
+binary = "orig/usr/lib/libresource_mgr.so.1.0.0"
+symbols = "symbols/libresource_mgr.so.1.0.0.functions.tsv"
+
+[[target]]
+name = "libresource_mgr_client"
+binary = "orig/usr/lib/libresource_mgr_client.so.1.0.0"
+symbols = "symbols/libresource_mgr_client.so.1.0.0.functions.tsv"
+
+[[target]]
+name = "libresource_mgr_client_c"
+binary = "orig/usr/lib/libresource_mgr_client_c.so.1.0.0"
+
+[[target]]
+name = "libAudioResources"
+binary = "orig/usr/lib/libAudioResources.so.1.0.0"
+symbols = "symbols/libAudioResources.so.1.0.0.functions.tsv"
+
+[[target]]
+name = "libaudio-adaptation-layer-amplifier"
+binary = "orig/usr/lib/libaudio-adaptation-layer-amplifier.so.1.0.0"
+symbols = "symbols/libaudio-adaptation-layer-amplifier.so.1.0.0.functions.tsv"
+
+[[target]]
+name = "libaudio-adaptation-layer-delay-gain"
+binary = "orig/usr/lib/libaudio-adaptation-layer-delay-gain.so.1.0.0"
+symbols = "symbols/libaudio-adaptation-layer-delay-gain.so.1.0.0.functions.tsv"
+
+[[target]]
+name = "libaudio-adaptation-layer-soundengine"
+binary = "orig/usr/lib/libaudio-adaptation-layer-soundengine.so.1.0.0"
+symbols = "symbols/libaudio-adaptation-layer-soundengine.so.1.0.0.functions.tsv"
+
+[[target]]
+name = "libav-connector"
+binary = "orig/usr/lib/libav-connector.so.1.0.0"
+symbols = "symbols/libav-connector.so.1.0.0.functions.tsv"
+
+[[target]]
+name = "libav-proxy"
+binary = "orig/usr/lib/libav-proxy.so.1.0.0"
+symbols = "symbols/libav-proxy.so.1.0.0.functions.tsv"
+
+[[target]]
+name = "libavacontroller"
+binary = "orig/usr/lib/libavacontroller.so.1.0.0"
+symbols = "symbols/libavacontroller.so.1.0.0.functions.tsv"
+
+[[target]]
+name = "libdile_audio_direct"
+binary = "orig/usr/lib/libdile_audio_direct.so.1.0.0"
+symbols = "symbols/libdile_audio_direct.so.1.0.0.functions.tsv"
+
+[[target]]
+name = "libdile_audio_pcm"
+binary = "orig/usr/lib/libdile_audio_pcm.so.1.0.0"
+
+[[target]]
+name = "libumedia_api"
+binary = "orig/usr/lib/libumedia_api.so.1.0.0"
+
+[[target]]
+name = "libums_connector"
+binary = "orig/usr/lib/libums_connector.so.1.0.0"
+
+[[target]]
+name = "libums_connector_impl"
+binary = "orig/usr/lib/libums_connector_impl.so.1.0.0"
+
+[[target]]
+name = "libums_connector_wrapper"
+binary = "orig/usr/lib/libums_connector_wrapper.so.1.0.0"
+
+[[target]]
+name = "libums_dbi"
+binary = "orig/usr/lib/libums_dbi.so.1.0.0"
+
+[[target]]
+name = "libums_pipeline"
+binary = "orig/usr/lib/libums_pipeline.so.1.0.0"
+symbols = "symbols/libums_pipeline.so.1.0.0.functions.tsv"
+
+[[target]]
+name = "libums_pipeline_mgr"
+binary = "orig/usr/lib/libums_pipeline_mgr.so.1.0.0"
+symbols = "symbols/libums_pipeline_mgr.so.1.0.0.functions.tsv"
+
+[[target]]
+name = "libums_registry"
+binary = "orig/usr/lib/libums_registry.so.1.0.0"
+
+# Cadence HiFi (Xtensa) DSP images. No compiler, so these report coverage only.
+[[target]]
+name = "dsp0"
+arch = "xtensa"
+binary = "orig/lib/firmware/audio_a0_dsp0.bin"
+symbols = "symbols/audio_a0_dsp0.main_60000000.bin.functions.tsv"
+src = "src/dsp0"
+
+[[target]]
+name = "dsp1"
+arch = "xtensa"
+binary = "orig/lib/firmware/audio_a0_dsp1.bin"
+symbols = "symbols/audio_a0_dsp1.main_60000000.bin.functions.tsv"
+src = "src/dsp1"
+
+[[target]]
+name = "dsp2"
+arch = "xtensa"
+binary = "orig/lib/firmware/audio_a0_dsp2.bin"
+symbols = "symbols/audio_a0_dsp2.main_60000000.bin.functions.tsv"
+src = "src/dsp2"
+
+[[target]]
+name = "dsp3"
+arch = "xtensa"
+binary = "orig/lib/firmware/audio_a0_dsp3.bin"
+
+[[target]]
+name = "kernel"
+arch = "aarch64"
+binary = "orig/boot/Image-5.4.268-329.decompressed"

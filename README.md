@@ -15,6 +15,7 @@ Source device: LG OLED42C27LA (C2), Rockhopper 10.3.1-3006, kernel 5.4.268-329.p
 | Path | Contents | In git |
 |---|---|---|
 | `orig/` | Original files pulled from the TV, mirroring `/` (`usr/lib`, `usr/sbin`, `lib/firmware`, `boot`, `etc`) | hashes only |
+| `lg-opensource/` | LG's published source for the same release, for reference: `kdriver/` (audio kernel driver), `gstreamer/` (git repo incl. `gst-plugins-cool`/decproxy), `pulseaudio/`, `kernel-k25lp-5.4.268-292/` (build tree with `.config`, `System.map`, `vmlinux`). Older than the shipped build | no |
 | `src/<target>/` | Reconstructed C, one directory per original binary. `src/include/` holds shared types | yes |
 | `symbols/` | Function tables per target (`addr<TAB>size<TAB>name`, Ghidra addresses) and recovered DSP symbol tables | yes |
 | `evidence/<topic>/` | Per-topic reports (`findings.json`/`.txt`) with address anchors, plus the scripts and validators that produced them | yes |
@@ -31,8 +32,12 @@ Source device: LG OLED42C27LA (C2), Rockhopper 10.3.1-3006, kernel 5.4.268-329.p
    rooted TV with the same firmware (paths are in `orig/SHA256SUMS`).
 2. Build the compiler image: `make toolchain`. It is the exact compiler LG used
    (GCC 11.4.0, ARMv7-A Thumb-2, soft-float EABI5).
-3. Optional, for the Xtensa evidence scripts: `uv sync`.
-4. Optional, to regenerate `decomp/` and `build/`: Ghidra 12.2 and
+3. Optional, LG's source for reference: from opensource.lge.com, model OLED42C27LA,
+   "webOS25 WG ReNew" (osSeq 512189). Tarball 3 gives `kdriver/`. Tarball 2 holds
+   `gstreamer_open_source.zip`, `openPulseAudio.tar.gz` and the k25lp kernel `.tgz`.
+   Unpack them into `lg-opensource/` under the names above.
+4. Optional, for the Xtensa evidence scripts: `uv sync`.
+5. Optional, to regenerate `decomp/` and `build/`: Ghidra 12.2 and
    `JAVA_HOME=/opt/homebrew/opt/openjdk@21`, plus the Xtensa language in
    `tools/ghidra-ext/XtensaHiFi` copied into `~/Library/ghidra/ghidra_12.2_PUBLIC/Extensions/`.
    Then `make decomp-arm` and `make decomp-dsp`.
@@ -97,9 +102,10 @@ In priority order:
 2. `audiod`: full Ghidra export (`tools/decomp.sh orig/usr/sbin/audiod`) to find other
    callers of `mixDigitalSoundOutput` and other policy feeding `setMixer`.
 3. `libpf` and `libgstdecproxy`: sender and receiver of `acquired-resource` (core-type,
-   audio-port, mixer-port). Compare decproxy with LG's published `gstdecproxy2.c`.
-4. `kernel`: check the shipped `_get_output_format` / `_set_output` in `alsa_sndout.c`
-   against the GPL source (`ct<=9` limit differs). Load as AARCH64 with kallsyms.
+   audio-port, mixer-port). Compare decproxy with
+   `lg-opensource/gstreamer/subprojects/gst-plugins-cool/gst/decproxy/gstdecproxy2.c`.
+4. `kernel`: check the shipped `_get_output_format` / `_set_output` against
+   `lg-opensource/kdriver/core/aud/alsa/alsa_sndout.c` (`ct<=9` limit differs). Load as AARCH64 with kallsyms.
 5. `dsp1`: re-export. 68 functions in `decomp/audio_a0_dsp1…c` still carry wrong names.
 6. DSP FLIX bundles: needs the core's TIE/ISA config or an `xt-objdump` for this core.
 7. `libaa`, `dsp3`: not looked at yet.

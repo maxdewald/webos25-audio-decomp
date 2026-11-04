@@ -27,7 +27,7 @@
     {
       "id": "LOCAL-RABI-001",
       "kind": "published_source",
-      "path": "../dts_restore_plus/re/lge-src/linux-and-kdriver_paluma-5/kdriver/core/aud/renderer.c",
+      "path": "lg-opensource/kdriver/core/aud/renderer.c",
       "lines": [1456, 1500],
       "observation": "PCM getter constructs with rtsPCM=true unless an existing PCM bypass is present; ES getter logs bypass is not yet created then constructs with rtsPCM=false when is_bypass_created is false.",
       "status": "observed",
@@ -69,7 +69,7 @@
       "id": "LOCAL-RABI-005",
       "kind": "published_source",
       "status": "observed",
-      "paths": ["../dts_restore_plus/re/lge-src/linux-and-kdriver_paluma-5/kdriver/include/aud_kapi_renderer.h", "../dts_restore_plus/re/lge-src/linux-and-kdriver_paluma-5/kdriver/core/aud/driver.c"],
+      "paths": ["lg-opensource/kdriver/include/aud_kapi_renderer.h", "lg-opensource/kdriver/core/aud/driver.c"],
       "lines": [[33, 73], [565, 855]],
       "observation": "Correct modern renderer ABI header is aud_kapi_renderer.h, magic R. Published request list ends at 42 (SET_VSP_MODE); no request 43 or aren_msgpid_to_signal_t handler. Legacy audio_kapi_renderer.h separately reuses magic R and number 43 for a differently sized FEED_BYPASS structure; it is not the modern aren handler. Modern switch compares full encoded command, not number alone.",
       "limitation": "Source snapshot alone cannot establish shipped handler absence. LOCAL-RABI-007 supplies independent kernel proof."
@@ -109,7 +109,7 @@
       "artifact": "kernel_image",
       "raw_address": "0xc21894",
       "files": ["kernel-constructor.asm", "address-checks.json"],
-      "source": {"path": "../dts_restore_plus/re/lge-src/linux-and-kdriver_paluma-5/kdriver/core/aud/renderer.c", "lines": [1376, 1409]},
+      "source": {"path": "lg-opensource/kdriver/core/aud/renderer.c", "lines": [1376, 1409]},
       "observation": "Constructor obtains preferred processor, deletes previous pipeline if nonnull, creates named renderer_bypass. False mode appends queue (string 0x171c140); true mode appends rts (0x189a458), srcbin (0x185a978), registers rts and sets defaults. Both append lipsync (0x185a980), register it and set defaults, forward input and output port 0x100 to pipeline port 0, store mode at renderer+0x4d (0xc21980) and created=true at renderer+0x4c (0xc21988). Pipeline name string at 0x185a968. Names and structure agree with source. No claim about execution inside those processing modules."
     },
     {
@@ -140,10 +140,10 @@
       "artifact": "kernel_image",
       "files": ["kernel-open.asm", "kernel-dispatch.asm", "sink-set_port.asm", "sink-open_renderer.asm"],
       "source": [
-        {"path": "../dts_restore_plus/re/lge-src/linux-and-kdriver_paluma-5/kdriver/core/aud/driver.c", "lines": [521, 560]},
-        {"path": "../dts_restore_plus/re/lge-src/linux-and-kdriver_paluma-5/kdriver/core/aud/aapi_media.c", "lines": [1085, 1119]},
-        {"path": "../dts_restore_plus/re/lge-src/linux-and-kdriver_paluma-5/kdriver/core/aud/block_manager.c", "lines": [1462, 1530]},
-        {"path": "../dts_restore_plus/re/lge-src/linux-and-kdriver_paluma-5/kdriver/core/aud/renderer.c", "lines": [1689, 1713]}
+        {"path": "lg-opensource/kdriver/core/aud/driver.c", "lines": [521, 560]},
+        {"path": "lg-opensource/kdriver/core/aud/aapi_media.c", "lines": [1085, 1119]},
+        {"path": "lg-opensource/kdriver/core/aud/block_manager.c", "lines": [1462, 1530]},
+        {"path": "lg-opensource/kdriver/core/aud/renderer.c", "lines": [1689, 1713]}
       ],
       "observation": "Published device open allocates per-fd metadata, not a selected renderer. Shipped SET_INDEX calls aren_open at 0xc30b18 and stores requested index at private_data+0x10 at 0xc30b24 even if aren_open fails. Shipped aren_open 0xc355c4 bounds-checks index 0..9, rejects already-open entries, calls bm_create_block(renderer,index) at 0xc35634, stores pointer and open flag. Source explains zero-allocation and constructor dispatch; renderer_create initializes is_bypass_created=false and main pipeline, not bypass. Sink index is caller-supplied: index property or resource-info audio-port/mixer-port -> lgao_set_port -> ao.index -> SET_INDEX. lgao_set_port accepts audio port 0/1, or audioPort=-1 and mixerPort 0..6, latter also sets mixer mode; open adds 4 for mixer. No kernel automatic free-index ioctl or renderer pointer returned to caller; caller receives module UIDs via GET_UID/GET_BYPASS_UID/GET_TAIL_UID. No resource-booking service was analyzed."
     },
@@ -172,7 +172,7 @@
       "id": "LOCAL-RABI-015",
       "kind": "published_source_and_shipped_kernel_constructor_caller",
       "status": "observed",
-      "source": {"path": "../dts_restore_plus/re/lge-src/linux-and-kdriver_paluma-5/kdriver/core/aud/renderer.c", "lines": [1530, 1544]},
+      "source": {"path": "lg-opensource/kdriver/core/aud/renderer.c", "lines": [1530, 1544]},
       "raw_addresses": ["0xc21a0c", "0xc21a98", "0xc21ad0"],
       "observation": "Independent source creation trigger: renderer_preconnect with port==BYPASS_PORT (0x100) and pipeline_bypass==NULL calls renderer_create_bypass_pipeline(false). Shipped raw instructions at 0xc21a0c, 0xc21a98, 0xc21ad0 have the matching gate and constructor call. Source main-pipeline recreation also rebuilds bypass when is_bypass_created was already true (renderer.c 1449-1451).",
       "limitation": "No analysis of downstream connection policy or module runtime performed."

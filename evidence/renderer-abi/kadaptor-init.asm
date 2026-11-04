@@ -1,5 +1,5 @@
 
-/Users/max/projects/dts_restore_plus/re/webos25-audio-policy/bin/usr/lib/libkadaptor.so.2.0.1:	file format elf32-littlearm
+orig/usr/lib/libkadaptor.so.2.0.1:	file format elf32-littlearm
 
 Disassembly of section .text:
 

@@ -268,7 +268,7 @@
   {
     "id": "RB-SRC-DECPROXY-EVENT",
     "kind": "local_source_or_config_excerpt",
-    "sourcePath": "../dts_restore_plus/re/lge-src/code/gstreamer/subprojects/gst-plugins-cool/gst/decproxy/gstdecproxy2.c",
+    "sourcePath": "lg-opensource/gstreamer/subprojects/gst-plugins-cool/gst/decproxy/gstdecproxy2.c",
     "sha256": "ec49269c4574eae7b7342ca7b0a8b528b6df6f7e610ec39834cb6d15bd5df878",
     "startLine": 1360,
     "endLine": 1403,
@@ -278,7 +278,7 @@
   {
     "id": "RB-SRC-DECPROXY-SELECT",
     "kind": "local_source_or_config_excerpt",
-    "sourcePath": "../dts_restore_plus/re/lge-src/code/gstreamer/subprojects/gst-plugins-cool/gst/decproxy/gstdecproxy2.c",
+    "sourcePath": "lg-opensource/gstreamer/subprojects/gst-plugins-cool/gst/decproxy/gstdecproxy2.c",
     "sha256": "ec49269c4574eae7b7342ca7b0a8b528b6df6f7e610ec39834cb6d15bd5df878",
     "startLine": 1421,
     "endLine": 1562,
@@ -288,7 +288,7 @@
   {
     "id": "RB-SRC-PLAYSINK",
     "kind": "local_source_or_config_excerpt",
-    "sourcePath": "../dts_restore_plus/re/lge-src/code/gstreamer/subprojects/gst-plugins-base/gst/playback/gstplaysink.c",
+    "sourcePath": "lg-opensource/gstreamer/subprojects/gst-plugins-base/gst/playback/gstplaysink.c",
     "sha256": "1989f06ffdc9dc0f5649d78d686f158419ce5ad5148153ba6edb96d4ddcaec5d",
     "startLine": 2979,
     "endLine": 3006,

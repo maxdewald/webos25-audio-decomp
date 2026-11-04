@@ -18,7 +18,7 @@ app / media pipeline
 audiod                     mixer.c                 mixDigitalSoundOutput -> setMixer{mix}
 audiooutputd + libumi      output_policy.c         picks ct/cn/mo, writes "Sndout EARC Outputtype"
 lgaudiosink                renderer.c              opens /dev/lg/aren, creates the bypass head
-kernel alsa_sndout.c       (GPL source, lge-src)   _get_output_format / _set_output
+kernel alsa_sndout.c       (lg-opensource/kdriver) _get_output_format / _set_output
 dsp2                       renderer_path.c         renderer bypass head: first-event replay, lipsync clock
 dsp1                       output_arc.c            output_arc: ES/HBR lane writer, eARC rate
 dsp0                       decoders.c              decoder inventory (no DTS decoder)

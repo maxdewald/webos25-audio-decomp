@@ -2,6 +2,9 @@
 /orig/**
 !/orig/SHA256SUMS
 
+# LG's published GPL/LGPL source (opensource.lge.com), 2.8 GB, reference only
+/lg-opensource/
+
 # Regenerable: Ghidra databases, split DSP images, compiled objects, full pseudocode
 /build/
 /decomp/

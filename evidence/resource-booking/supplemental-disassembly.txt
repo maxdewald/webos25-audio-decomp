@@ -1,7 +1,7 @@
 
 LOCAL EVIDENCE RB-SMP-ALLOCATE
 
-/Users/max/projects/dts_restore_plus/re/webos25-audio-policy/bin/usr/sbin/starfish-media-pipeline:	file format elf32-littlearm
+orig/usr/sbin/starfish-media-pipeline:	file format elf32-littlearm
 
 Disassembly of section .text:
 
@@ -956,7 +956,7 @@ Disassembly of section .text:
 
 LOCAL EVIDENCE RB-SMP-LOADOPTIONS
 
-/Users/max/projects/dts_restore_plus/re/webos25-audio-policy/bin/usr/sbin/starfish-media-pipeline:	file format elf32-littlearm
+orig/usr/sbin/starfish-media-pipeline:	file format elf32-littlearm
 
 Disassembly of section .text:
 
@@ -4517,7 +4517,7 @@ Disassembly of section .text:
 
 LOCAL EVIDENCE RB-SMP-RMCTOR
 
-/Users/max/projects/dts_restore_plus/re/webos25-audio-policy/bin/usr/sbin/starfish-media-pipeline:	file format elf32-littlearm
+orig/usr/sbin/starfish-media-pipeline:	file format elf32-littlearm
 
 Disassembly of section .text:
 
@@ -4820,7 +4820,7 @@ Disassembly of section .text:
 
 LOCAL EVIDENCE RB-MRC-LOOKUP
 
-/Users/max/projects/dts_restore_plus/re/webos25-audio-policy/bin/usr/lib/libmedia-resource-calculator.so.1:	file format elf32-littlearm
+orig/usr/lib/libmedia-resource-calculator.so.1:	file format elf32-littlearm
 
 Disassembly of section .text:
 
@@ -4870,7 +4870,7 @@ Disassembly of section .text:
 
 LOCAL EVIDENCE RB-MRC-CTOR
 
-/Users/max/projects/dts_restore_plus/re/webos25-audio-policy/bin/usr/lib/libmedia-resource-calculator.so.1:	file format elf32-littlearm
+orig/usr/lib/libmedia-resource-calculator.so.1:	file format elf32-littlearm
 
 Disassembly of section .text:
 
@@ -4955,7 +4955,7 @@ Disassembly of section .text:
 
 LOCAL EVIDENCE RB-UMS-ACQUIRE
 
-/Users/max/projects/dts_restore_plus/re/webos25-audio-policy/bin/usr/sbin/umediaserver:	file format elf32-littlearm
+orig/usr/sbin/umediaserver:	file format elf32-littlearm
 
 Disassembly of section .text:
 
@@ -6046,7 +6046,7 @@ Disassembly of section .text:
 
 LOCAL EVIDENCE RB-PF-SETRESOURCE-FULL
 
-/Users/max/projects/dts_restore_plus/re/webos25-audio-policy/bin/usr/lib/libpf-1.0.so.1.0.0:	file format elf32-littlearm
+orig/usr/lib/libpf-1.0.so.1.0.0:	file format elf32-littlearm
 
 Disassembly of section .text:
 

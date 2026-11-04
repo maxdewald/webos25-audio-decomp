@@ -115,7 +115,7 @@ def collect():
     metadata = {}
     for name, filename in ARTIFACTS.items():
         metadata[name] = {'path': str(filename), 'sha256': digest(filename), 'size': filename.stat().st_size}
-    source_directory = ROOT / '../dts_restore_plus/re/lge-src/linux-and-kdriver_paluma-5/kdriver'
+    source_directory = ROOT / 'lg-opensource/kdriver'
     for relative in ['core/aud/renderer.c', 'core/aud/driver.c', 'core/aud/aapi_media.c',
                      'core/aud/block_manager.c', 'include/aud_kapi_renderer.h']:
         filename = source_directory / relative

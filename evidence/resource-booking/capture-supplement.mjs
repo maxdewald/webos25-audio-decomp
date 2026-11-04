@@ -136,7 +136,7 @@ records.push({ id: 'RB-MRC-DEFAULT-TABLE', kind: 'original_binary_embedded_json'
   rawElfVirtualAddress: hex(tableStart), ghidraAddress: hex(tableStart + 0x10000),
   byteLength: tableBytes.length, sha256: digest(tableBytes), table });
 
-const publicRoot = '../dts_restore_plus/re/lge-src/code/gstreamer/subprojects';
+const publicRoot = 'lg-opensource/gstreamer/subprojects';
 const sourceRanges = [
   ['RB-SRC-DECPROXY-EVENT', `${publicRoot}/gst-plugins-cool/gst/decproxy/gstdecproxy2.c`, 1360, 1403],
   ['RB-SRC-DECPROXY-SELECT', `${publicRoot}/gst-plugins-cool/gst/decproxy/gstdecproxy2.c`, 1421, 1562],

@@ -1,5 +1,5 @@
 
-/Users/max/projects/dts_restore_plus/re/webos25-audio-policy/bin/usr/sbin/audiooutputd:	file format elf32-littlearm
+orig/usr/sbin/audiooutputd:	file format elf32-littlearm
 
 Disassembly of section .init:
 

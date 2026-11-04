@@ -1,5 +1,5 @@
 
-/Users/max/projects/dts_restore_plus/re/webos25-audio-policy/bin/usr/lib/gstreamer-1.0/libgstlgaudiodec.so:	file format elf32-littlearm
+orig/usr/lib/gstreamer-1.0/libgstlgaudiodec.so:	file format elf32-littlearm
 
 Disassembly of section .text:
 

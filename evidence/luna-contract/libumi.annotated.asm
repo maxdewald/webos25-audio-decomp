@@ -1,5 +1,5 @@
 
-/Users/max/projects/dts_restore_plus/re/webos25-audio-policy/bin/usr/lib/libumi.so.1.0.0:	file format elf32-littlearm
+orig/usr/lib/libumi.so.1.0.0:	file format elf32-littlearm
 
 Disassembly of section .init:
 

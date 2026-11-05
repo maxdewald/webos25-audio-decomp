@@ -4,7 +4,7 @@
  *
  * RECONSTRUCTION from orig/usr/lib/libaudcommon.so.1.0.0
  *   sha256 a4df15e082096e6c60c7091b81f90f4fe0a6c5ae07173867ca4a0b05bfd5087f
- * Evidence: decomp/libaudcommon.so.1.0.0.c (_INIT_2 @0x11a2c, 0x14440..0x14820);
+ * Evidence: build/decomp/libaudcommon.so.1.0.0.c (_INIT_2 @0x11a2c, 0x14440..0x14820);
  * cache table = 17 x 0x34-byte entries in .data at VA 0x1640c; "aud_meta_bufdata" logs.
  */
 #include <pthread.h>

@@ -2,7 +2,7 @@
 name = "webos25-audio-decomp"
 version = "0.1.0"
 requires-python = ">=3.11"
-# Only the Xtensa evidence scripts need these; tools/progress.py is stdlib-only.
+# Only the Xtensa tools need these; tools/progress.py is stdlib-only.
 dependencies = ["capstone>=6.0.0a1", "numpy"]
 
 [tool.uv]

@@ -13,7 +13,7 @@
  * Observed: no data-type test at all, so PCM, ES and metadata are forwarded
  * unchanged. The only possible drops are the core ones in aud_module_push_data
  * (drop-output-data / drop-output-meta / no output port, see module_core.c).
- * Idle snapshot (evidence/runtime/idle-state.txt, bypass_04160001): drop-output-data
+ * Idle snapshot (build/scratch/evidence/runtime/idle-state.txt, bypass_04160001): drop-output-data
  * false, block-module false; only in0 is connected (from gain_041b0001).
  */
 struct aud_module;

@@ -6,13 +6,13 @@
  *   sha256 c32c0f65f8a4238075530417dfdda012c64317a1a9270a4e7bf80d5ce7db134d
  * Main segment linked at 0x60000000. Every op0=0xE/0xF FLIX bundle is 8 bytes and
  * OPAQUE. Branch-shaped bundles were read with the hypothesis decoder in
- * evidence/dsp2-gain/flix_branch.py ("kind=B cond=N" reads like beqi aX,N). Conditions
+ * tools/flix_annot.py ("kind=B cond=N" reads like beqi aX,N). Conditions
  * that depend only on that hypothesis are marked [FLIX?]; fully unreadable ones [FLIX].
  * Log guard bundles (l32i aN,<mask 0x4ff90098>) are dropped: they only gate logmm_printl.
- * Evidence: ../../decomp/audio_a0_dsp2.main_60000000.bin.c (gain_chain and its
+ * Evidence: build/decomp/audio_a0_dsp2.main_60000000.bin.c (gain_chain and its
  *           __blk_ fragments, FUN_60088930/FUN_60088aa9 = mid-function blocks of
- *           gain_chain), ../../evidence/dsp2-gain/gain-properties.json (property table
- *           @0x601023b0), ../../evidence/dsp2-gain/gain.asm.
+ *           gain_chain), build/scratch/evidence/dsp2-gain/gain-properties.json (property table
+ *           @0x601023b0), build/scratch/evidence/dsp2-gain/gain.asm.
  *
  * gain_handle_nonpcm has NO function of its own: its __func__ slot 0x6005f3e0 is
  * loaded once, at 0x6008889b inside gain_chain, right where the data-type switch

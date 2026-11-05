@@ -1,7 +1,7 @@
 /*
  * libaa aipc: small RPC over AF_UNIX SOCK_SEQPACKET sockets between Linux audio
  * processes. Every process listens on "<base>.<proc_id>" (base = option
- * "aipc_socket_base", default "/tmp/aipc"); the controller (acont, proc 0) listens on
+ * "aipc_socket_base", default "/build/scratch/aipc"); the controller (acont, proc 0) listens on
  * "<base>.0" and hands out proc ids via "acont_register_proc".
  *
  * Wire format (one request):
@@ -14,7 +14,7 @@
  *
  * RECONSTRUCTION from orig/usr/lib/libaa.so.2.0.0
  *   sha256 301d682fa52c1f072f1b7b0d8863a545df69b235d5454ae0f23b89de83eebdd2
- * Evidence: decomp/libaa.so.2.0.0.c @0x1e6e8..@0x205b4, logmm "aipc" strings.
+ * Evidence: build/decomp/libaa.so.2.0.0.c @0x1e6e8..@0x205b4, logmm "aipc" strings.
  */
 #include <errno.h>
 #include <stdarg.h>
@@ -74,7 +74,7 @@ static const char *socket_base(void)
     if (!aipc_socket_base) {
         aipc_socket_base = autil_option_str("aipc_socket_base");
         if (!aipc_socket_base)
-            aipc_socket_base = strdup("/tmp/aipc");
+            aipc_socket_base = strdup("/build/scratch/aipc");
     }
     return aipc_socket_base;
 }
@@ -839,16 +839,18 @@ static int write_additional(struct aipc *ipc, int fd, unsigned int total, int co
     return 0;
 }
 
-/* ipc_process (inlined): run the registered command and send the reply */
-static void ipc_process(struct aipc *ipc, int cfd)
+/* ipc_process (inlined): run the registered command and send the reply.
+ * cfd points at the client's slot in ipc->client_fds. */
+static void ipc_process(struct aipc *ipc, int *cfd)
 {
     struct ipc_reply reply = { 0, 0, 0 };
     struct ipc_desc *d;
+    struct aipc_command *cmd = NULL;
     struct link *l;
     int count = 0;
 
     LOGF(aipc, log_level_trace, "ipc_process", 0x495, "read ipc..\n");
-    d = ipc_read(cfd);
+    d = ipc_read(*cfd);
     if (!d)
         return;
     LOGF(aipc, log_level_debug, "ipc_process", 0x49a, "got ipc %s(), %d args\n", d->name,
@@ -856,10 +858,19 @@ static void ipc_process(struct aipc *ipc, int cfd)
 
     for_each_link(l, &ipc->command_list) {
         struct aipc_command *c = link_container(struct aipc_command, list, l);
-        if (strcmp(c->name, d->name) != 0)
-            continue;
+        if (!strcmp(c->name, d->name)) {
+            cmd = c;
+            break;
+        }
+    }
+
+    if (!cmd) {
+        LOGF(aipc, log_level_error, "ipc_process", 0x4a8,
+             "no command register for %s(), from client fd %d\n", d->name, *cfd);
+        reply.error = -1;
+    } else {
         free_additional(ipc);
-        reply.ret = c->func(c->arg, cfd, d->name, d->argc, d->args);
+        reply.ret = cmd->func(cmd->arg, *cfd, d->name, d->argc, d->args);
         if (!(d->flags & AIPC_FLAG_NO_ADDITIONAL)) {
             for_each_link(l, &ipc->additional_list) {
                 count++;
@@ -870,18 +881,13 @@ static void ipc_process(struct aipc *ipc, int cfd)
         LOGF(aipc, log_level_debug, "ipc_process", 0x4b4,
              "return value of %s(), %d, additional %d\n", d->name, reply.ret,
              reply.additional_size);
-        goto respond;
     }
-    LOGF(aipc, log_level_error, "ipc_process", 0x4a8,
-         "no command register for %s(), from client fd %d\n", d->name, cfd);
-    reply.error = -1;
 
-respond:
     if (d->flags & AIPC_FLAG_NEED_RESPONSE) {
-        if (write(cfd, &reply, sizeof(reply)) != sizeof(reply))
+        if (write(*cfd, &reply, sizeof(reply)) != sizeof(reply))
             LOGF(aipc, log_level_error, "ipc_process", 0x4be, "write(response) failed. %s\n",
                  strerror(errno));
-        else if (count && write_additional(ipc, cfd, reply.additional_size, count) != 0)
+        else if (count && write_additional(ipc, *cfd, reply.additional_size, count) < 0)
             LOGF(aipc, log_level_error, "ipc_process", 0x4c7, "write(additional) failed. %d\n",
                  reply.additional_size);
     }
@@ -892,74 +898,80 @@ respond:
 /* @0x1f9c4: handle poll() results for the set built by aipc_get_pollfd */
 int aipc_handle_pollfd(struct aipc *ipc, struct pollfd *fds)
 {
-    int nservers = ipc->npoll_servers;
     int nclients = ipc->nclients;
-    int i;
+    int i, j;
 
-    for (i = 1; i <= nservers; i++)
+    i = 1;
+    for (j = 0; j < ipc->npoll_servers; j++, i++)
         LOGT(aipc, 0x4d9, "servers fds[%d].fd %d, events 0x%x, revents 0x%x\n",
              i, fds[i].fd, fds[i].events, fds[i].revents);
-    for (i = 0; i < nclients; i++)
+    i = 1 + ipc->npoll_servers;
+    for (j = 0; j < nclients; j++, i++)
         LOGT(aipc, 0x4e0, "clients fds[%d].fd %d, events 0x%x, revents 0x%x\n",
-             nservers + 1 + i, fds[nservers + 1 + i].fd, fds[nservers + 1 + i].events,
-             fds[nservers + 1 + i].revents);
+             i, fds[i].fd, fds[i].events, fds[i].revents);
 
     /* outgoing connections that hung up */
-    for (i = 0; i < ipc->npoll_servers; i++) {
-        int left;
-
-        if (!(fds[1 + i].revents & POLLHUP))
+    i = 1;
+    for (j = 0; j < ipc->npoll_servers; j++, i++) {
+        if (!(fds[i].revents & POLLHUP))
             continue;
-        if (i == 0) {
+        if (j == 0) {
             LOGE(aipc, 0x4ed, "lost controller connection. stop.\n");
             exit(1);
         }
-        LOGI(aipc, 0x4f1, "disconnect to server, %d\n", ipc->servers[i].proc_id);
-        close(ipc->servers[i].fd);
-        left = --ipc->nservers - i;
-        if (left > 0)
-            memmove(&ipc->servers[i], &ipc->servers[i + 1], left * sizeof(ipc->servers[0]));
+        LOGI(aipc, 0x4f1, "disconnect to server, %d\n", ipc->servers[j].proc_id);
+        close(ipc->servers[j].fd);
+        ipc->nservers--;
+        if (ipc->nservers - j > 0)
+            memmove(&ipc->servers[j], &ipc->servers[j + 1],
+                    (ipc->nservers - j) * sizeof(ipc->servers[0]));
     }
 
     /* new client */
     if (fds[0].revents & POLLIN) {
-        int cfd, *c;
+        int cfd;
 
         LOGI(aipc, 0x503, "get listening client. accept from fd%d.\n", ipc->listen_fd);
         cfd = accept(ipc->listen_fd, NULL, NULL);
         if (cfd < 0) {
             LOGE(aipc, 0x507, "accept() failed. %s\n", strerror(errno));
-        } else if (!(c = realloc(ipc->client_fds, (ipc->nclients + 1) * sizeof(int)))) {
-            LOGE(aipc, 0x510, "no mem for cinfo. %d\n", ipc->nclients);
-            close(cfd);
         } else {
-            c[ipc->nclients++] = cfd;
-            ipc->client_fds = c;
-            LOGI(aipc, 0x518, "client added. %d, fd %d\n", ipc->nclients, cfd);
+            int *c = realloc(ipc->client_fds, (ipc->nclients + 1) * sizeof(int));
+
+            if (!c) {
+                LOGE(aipc, 0x510, "no mem for cinfo. %d\n", ipc->nclients);
+                close(cfd);
+            } else {
+                c[ipc->nclients] = cfd;
+                ipc->nclients++;
+                ipc->client_fds = c;
+                LOGI(aipc, 0x518, "client added. %d, fd %d\n", ipc->nclients, cfd);
+            }
         }
     }
 
     /* requests (only from clients known when poll() was set up) */
-    for (i = 0; i < nclients; i++) {
-        if ((fds[ipc->npoll_servers + 1 + i].revents & (POLLIN | POLLHUP)) != POLLIN)
-            continue;
-        LOGT(aipc, 0x523, "read client %d\n", i);
-        ipc_process(ipc, ipc->client_fds[i]);
+    i = 1 + ipc->npoll_servers;
+    for (j = 0; j < nclients; j++, i++) {
+        if ((fds[i].revents & POLLIN) && !(fds[i].revents & POLLHUP)) {
+            LOGT(aipc, 0x523, "read client %d\n", j);
+            ipc_process(ipc, &ipc->client_fds[j]);
+        }
     }
 
     /* hung-up clients, last to first */
-    for (i = nclients - 1; i >= 0; i--) {
-        int left;
-
-        if (!(fds[ipc->npoll_servers + 1 + i].revents & POLLHUP))
+    i = ipc->npoll_servers + nclients;
+    for (j = nclients - 1; j >= 0; j--, i--) {
+        if (!(fds[i].revents & POLLHUP))
             continue;
-        LOGI(aipc, 0x530, "client %d, fd %d disconnected.\n", i, ipc->client_fds[i]);
+        LOGI(aipc, 0x530, "client %d, fd %d disconnected.\n", j, ipc->client_fds[j]);
         if (ipc->cb_client_disconnect)
-            ipc->cb_client_disconnect(ipc->cb_priv, ipc->client_fds[i]);
-        close(ipc->client_fds[i]);
-        left = --ipc->nclients - i;
-        if (left > 0)
-            memmove(&ipc->client_fds[i], &ipc->client_fds[i + 1], left * sizeof(int));
+            ipc->cb_client_disconnect(ipc->cb_priv, ipc->client_fds[j]);
+        close(ipc->client_fds[j]);
+        ipc->nclients--;
+        if (ipc->nclients - j > 0)
+            memmove(&ipc->client_fds[j], &ipc->client_fds[j + 1],
+                    (ipc->nclients - j) * sizeof(int));
     }
     return 0;
 }

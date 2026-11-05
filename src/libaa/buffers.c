@@ -5,8 +5,8 @@
  * RECONSTRUCTION from orig/usr/lib/libaa.so.2.0.0
  *   sha256 301d682fa52c1f072f1b7b0d8863a545df69b235d5454ae0f23b89de83eebdd2
  *
- * Evidence: Ghidra decomp/libaa.so.2.0.0.c @0x25104..@0x26e40, __func__ strings in
- * decomp/libaa.so.2.0.0.strings.tsv (0x35564..0x3623c), disassembly of the
+ * Evidence: Ghidra build/decomp/libaa.so.2.0.0.c @0x25104..@0x26e40, __func__ strings in
+ * build/decomp/libaa.so.2.0.0.strings.tsv (0x35564..0x3623c), disassembly of the
  * divide helper (@0x317c4 = __aeabi_uidivmod, so index arithmetic is unsigned).
  *
  * Model (see buffers.h for the layouts):

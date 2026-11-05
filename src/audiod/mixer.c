@@ -2,7 +2,7 @@
  * audiod: luna://com.webos.service.audio/tv/mixDigitalSoundOutput
  * RECONSTRUCTION from usr/sbin/audiod
  *   sha256 170d468085255d381245693260840771b00d39c718473ec024566fb1df1ca3af
- * Addresses: Ghidra (= raw ELF VA + 0x10000). Evidence: ../../evidence/audiod-mixer/
+ * Addresses: Ghidra (= raw ELF VA + 0x10000). Evidence: build/scratch/evidence/audiod-mixer/
  *
  * mix is NOT derived from codec, output mode, source, game, BT or system sounds
  * in audiod. It is a caller-supplied boolean, arbitrated per caller ID.

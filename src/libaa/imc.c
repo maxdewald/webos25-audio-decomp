@@ -7,7 +7,7 @@
  *
  * RECONSTRUCTION from orig/usr/lib/libaa.so.2.0.0
  *   sha256 301d682fa52c1f072f1b7b0d8863a545df69b235d5454ae0f23b89de83eebdd2
- * Evidence: decomp/libaa.so.2.0.0.c @0x20d80..@0x22d84, logmm "com_imc"/"aud" strings,
+ * Evidence: build/decomp/libaa.so.2.0.0.c @0x20d80..@0x22d84, logmm "com_imc"/"aud" strings,
  * command name tables at VA 0x3c0f4 / 0x3c1a4 (IMC_CommandToString).
  */
 #include <stdarg.h>

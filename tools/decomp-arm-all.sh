@@ -17,6 +17,7 @@ print -l \
   $b/usr/lib/libav-connector.so.1.0.0 \
   $b/usr/lib/libavacontroller.so.1.0.0 \
   $b/usr/lib/libdile_audio_direct.so.1.0.0 \
+  $b/usr/lib/libpf-1.0.so.1.0.0 \
   $b/usr/lib/gstreamer-1.0/libgstlgaudiosink.so \
   $b/usr/lib/gstreamer-1.0/libgstlgaudiodec.so \
   $b/usr/sbin/umediaserver \

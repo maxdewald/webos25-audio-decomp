@@ -3,7 +3,7 @@
  *
  * RECONSTRUCTION from orig/usr/lib/libaa.so.2.0.0
  *   sha256 301d682fa52c1f072f1b7b0d8863a545df69b235d5454ae0f23b89de83eebdd2
- * Evidence: decomp/libaa.so.2.0.0.c @0x1bd34..0x1c7fa, logmm module "aud_pipeline",
+ * Evidence: build/decomp/libaa.so.2.0.0.c @0x1bd34..0x1c7fa, logmm module "aud_pipeline",
  * __func__ strings "get_instance", "assign_name", "assign_event", "event_handler",
  * "_exception"; assignment table @0x4c068 = { "name", assign_name, "event", assign_event }.
  *

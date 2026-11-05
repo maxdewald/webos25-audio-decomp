@@ -4,7 +4,7 @@
  * RECONSTRUCTION from orig/usr/lib/libaa.so.2.0.0
  *   sha256 301d682fa52c1f072f1b7b0d8863a545df69b235d5454ae0f23b89de83eebdd2
  *
- * Evidence: Ghidra decomp/libaa.so.2.0.0.c @0x22d80..@0x233ea, strings at 0x34f78..0x34fe0
+ * Evidence: Ghidra build/decomp/libaa.so.2.0.0.c @0x22d80..@0x233ea, strings at 0x34f78..0x34fe0
  * ("assert failed. (%s)\n" + condition). Return codes are positive ADEC_RESULT values.
  * Layouts (from the binary):
  *   tree 0xc bytes { root, nil sentinel, terminator(info) }, root == NULL when empty

@@ -3,7 +3,7 @@
  * RECONSTRUCTION from lib/firmware/audio_a0_dsp0.bin
  *   sha256 337a6330397f0891a4cf9b9bccc06b36d902b1dce18e110507bc98f2a5f25b58
  * Main segment linked at 0x60000000 (file offset 0x630). Evidence:
- *   ../../symbols/dsp0.syms.tsv, ../../decomp/audio_a0_dsp0.main_60000000.bin.c,
+ *   ../../symbols/dsp0.syms.tsv, build/decomp/audio_a0_dsp0.main_60000000.bin.c,
  *   live /proc/aaudio/processors/dsp0 listing (2026-11-04).
  *
  * Answer to "does a DTS decoder survive in dsp0?": NO.

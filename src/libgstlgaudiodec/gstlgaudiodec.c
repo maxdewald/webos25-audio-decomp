@@ -8,12 +8,12 @@
  *   sha256 84db367e1ea3eeb4b589bf63910140cfd43ea77f2db124ae6882fbee8ebb6bb7
  * Names/prototypes/layouts: DWARF (CU gstlgaudiodec.c). Line numbers in log calls are the
  * originals (gst_debug_log/logmm_printl arguments). Tags are Ghidra addresses.
- * Evidence: decomp/libgstlgaudiodec.so.c (Ghidra), decomp/libgstlgaudiodec.so.strings.tsv.
+ * Evidence: build/decomp/libgstlgaudiodec.so.c (Ghidra), build/decomp/libgstlgaudiodec.so.strings.tsv.
  *
  * Also here: the host-side PCM path for codecs without a DSP decoder (lgadec no_dec:
  * LPCM/DVD/BD/Wi-Fi LPCM, G.711, ADPCM, helpers in lgadec_codec.c), the
  * GstAudioClippingMeta front/back trimming, and the optional input dump
- * (/tmp/gst_dump_audio_input -> /tmp/audiodec_ES_ALL_Original-*.dump).
+ * (/build/scratch/gst_dump_audio_input -> /build/scratch/audiodec_ES_ALL_Original-*.dump).
  */
 #include <math.h>
 #include <stdlib.h>
@@ -1053,13 +1053,13 @@ static inline GstFlowReturn _gst_lg_adec_push_result(GstFlowReturn ret)
 }
 
 /* _gst_lg_adec_init_dump_file (inlined into _gst_lg_adec_set_caps): only with
- * /tmp/gst_dump_audio_input present at READY->PAUSED */
+ * /build/scratch/gst_dump_audio_input present at READY->PAUSED */
 static inline void _gst_lg_adec_init_dump_file(GstLgAudioDec *pAudioDec)
 {
     char filename[64];
 
     memset(filename, 0, sizeof(filename));
-    snprintf(filename, sizeof(filename), "/tmp/audiodec_ES_ALL_Original-%u:%02u:%02u.%09u.dump",
+    snprintf(filename, sizeof(filename), "/build/scratch/audiodec_ES_ALL_Original-%u:%02u:%02u.%09u.dump",
              GST_TIME_ARGS(gst_util_get_timestamp()));
     GST_DEBUG("Audio ES filename: %s", filename);
     if (pAudioDec->pDumpAudioFd)
@@ -2601,7 +2601,7 @@ void gst_lg_adec_change_state_up(GstLgAudioDec *pAudioDec, GstStateChange transi
         pthread_mutex_init(&pAudioDec->cb_mutex, NULL);
         pthread_mutex_init(&pAudioDec->adec_mutex, NULL);
         _gst_lg_adec_init_variables(pAudioDec);
-        pAudioDec->isEnableDumpInput = access("/tmp/gst_dump_audio_input", F_OK) == 0;
+        pAudioDec->isEnableDumpInput = access("/build/scratch/gst_dump_audio_input", F_OK) == 0;
         MEDIA_LOG(0xb07, "start");
         goto done_log;          /* skips the DEBUG "DONE" */
     case GST_STATE_CHANGE_PAUSED_TO_PLAYING:

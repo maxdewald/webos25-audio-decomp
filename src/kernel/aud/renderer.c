@@ -19,7 +19,7 @@
  * orig/boot/Image-5.4.268-329.decompressed, 5.4.268-329.ptl4tv.5, aarch64).
  *
  * Base: lg-opensource/kdriver/core/aud/renderer.c (GPL-2.0, k25lp-5.4.268-292).
- * Addresses: kallsyms of the shipped image (tmp/a4/kallsyms.txt), loaded at
+ * Addresses: kallsyms of the shipped image (build/scratch/a4/kallsyms.txt), loaded at
  * 0xffffffc010088000 (_stext = 0xffffffc010089000).
  * Each function tagged @0x... was compared against the shipped disassembly
  * (call sequence, string literals, constants, struct offsets). Struct offsets of

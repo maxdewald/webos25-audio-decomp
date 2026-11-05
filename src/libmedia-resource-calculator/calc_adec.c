@@ -2,7 +2,7 @@
  * ADEC cost calculation.
  * RECONSTRUCTION from usr/lib/libmedia-resource-calculator.so.1
  *   sha256 9cf65c00a778d9b408b1dd701349642be55338394f4720f6008b5187aeed2d06
- * Addresses: Ghidra (= raw ELF VA + 0x10000). Evidence: ../../evidence/resource-booking/
+ * Addresses: Ghidra (= raw ELF VA + 0x10000). Evidence: build/scratch/evidence/resource-booking/
  */
 #include <stdbool.h>
 

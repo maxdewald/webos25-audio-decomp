@@ -6,7 +6,7 @@
  * The dsp1 code at 0x6010d690..0x60110290 is the same source as dsp2's fader
  * (0x60084b90..0x60087770, reconstructed in ../dsp2/fader_queue.c). Of 43 functions, 9 are
  * byte-identical and 30 have the same length; the differences are only call forms
- * (call8 vs l32r+callx8) and relocations (tmp/a17/cmpfn.py, insdiff.py). The other 4
+ * (call8 vs l32r+callx8) and relocations (build/scratch/a17/cmpfn.py, insdiff.py). The other 4
  * are 8 bytes longer on dsp1 because strncmp/logmm are reached through l32r+callx8:
  *   _fader_push_data 0x6010d81c, underflow 0x6010e118, set_block_queue 0x6010ee18,
  *   _fader_add_pe_and_signal 0x6010f6e0.

@@ -7,7 +7,7 @@
  * RECONSTRUCTION from usr/lib/gstreamer-1.0/libgstlgaudiosink.so
  *   sha256 90dba3ef32704ce4096bf1e6045d2879d0c2192d507bc04d1e8e98437f420a43
  * Original source: gst-plugins-bsp/gstlgaudio/gstlgaudiosink.c (DWARF CU).
- * Evidence: decomp/libgstlgaudiosink.so.c, decomp/libgstlgaudiosink.so.strings.tsv.
+ * Evidence: build/decomp/libgstlgaudiosink.so.c, build/decomp/libgstlgaudiosink.so.strings.tsv.
  * The line argument of SINK_LOG*() is the __LINE__ of the original file.
  * Tags are raw ELF VAs (decomp.toml src_addr_bias = 0x10000).
  */
@@ -103,7 +103,7 @@ void gst_lg_audio_render_init (GstLgAudioRender *pAudioRen)
     pAudioRen->pcm_bypass = FALSE;
     pAudioRen->render_buf_thres = 0;
 
-    if (access ("/tmp/gstlgaudiosink_dump_enable", F_OK) == 0)
+    if (access ("/build/scratch/gstlgaudiosink_dump_enable", F_OK) == 0)
         pAudioRen->enable_dump = TRUE;
 
     g_cond_init (&pAudioRen->eos_cond);

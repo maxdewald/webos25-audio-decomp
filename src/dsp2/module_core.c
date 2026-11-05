@@ -15,7 +15,7 @@
  * FLIX: each op0=0xE/0xF bundle is 8 bytes. For branch-shaped bundles the target is
  *   A + 4 + ((sext12((w1 >> 8) & 0xfff) << 4) | ((w0 >> 24) & 0xf))
  * (checked on all 263 bundles in lipsync/delay/core: every target is an instruction
- * start; tmp/a13/flixtgt.py). The branch CONDITION stays opaque, so conditions only
+ * start; tools/flix_annot.py). The branch CONDITION stays opaque, so conditions only
  * known from the target block are marked [FLIX?]. Bundles whose target is a
  * logmm_printl call right after a log-mask load are log guards and are dropped.
  *
@@ -24,8 +24,8 @@
  * module's "log-mask" prop (+0x08). Runtime values of those words are unknown;
  * levels 0/1 are error/warning, 3..5 info/debug/trace (logm convention).
  *
- * Evidence: ../../decomp/audio_a0_dsp2.main_60000000.bin.c, ../../evidence/dsp2-connect/,
- *           ../../evidence/runtime/idle-state.txt (instance props), tmp/a13/ listings.
+ * Evidence: build/decomp/audio_a0_dsp2.main_60000000.bin.c, build/scratch/evidence/dsp2-connect/,
+ *           build/scratch/evidence/runtime/idle-state.txt (instance props), build/scratch/a13/ listings.
  */
 #include <stdbool.h>
 #include <stddef.h>

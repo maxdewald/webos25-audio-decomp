@@ -11,7 +11,7 @@
  *
  * RECONSTRUCTION from orig/usr/lib/libaa.so.2.0.0
  *   sha256 301d682fa52c1f072f1b7b0d8863a545df69b235d5454ae0f23b89de83eebdd2
- * Evidence: decomp/libaa.so.2.0.0.c plus headless-Ghidra decompilation of entry points
+ * Evidence: build/decomp/libaa.so.2.0.0.c plus headless-Ghidra decompilation of entry points
  * Ghidra did not discover (module callbacks, starter thread), litpool string resolution.
  * Names come from __func__ strings in the binary and the kdriver tree (names only).
  */

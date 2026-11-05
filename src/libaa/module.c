@@ -4,8 +4,8 @@
  *
  * RECONSTRUCTION from orig/usr/lib/libaa.so.2.0.0
  *   sha256 301d682fa52c1f072f1b7b0d8863a545df69b235d5454ae0f23b89de83eebdd2
- * Evidence: decomp/libaa.so.2.0.0.c @0x2af18..0x2f138, logmm module "commod",
- * static names from the logm __func__ strings (decomp/libaa.so.2.0.0.funcstrings.tsv),
+ * Evidence: build/decomp/libaa.so.2.0.0.c @0x2af18..0x2f138, logmm module "commod",
+ * static names from the logm __func__ strings (build/decomp/libaa.so.2.0.0.funcstrings.tsv),
  * common property table @0x4b7ec, debug switch table @0x5102c.
  *
  * Data path summary (see aud_module_push_data):
@@ -2241,12 +2241,10 @@ int bin_initialize(struct aud_module *m)
     return bin_init_lists((struct aud_module_bin *)m);
 }
 
-/*
- * @0x2f2b4: bin hook "cmd" (impl + 0x6c). Every command is forwarded to the instances on
+/* @0x2f2b4: bin hook "cmd" (impl + 0x6c). Every command is forwarded to the instances on
  * the propagate list; while that list is empty it is queued (with a private copy of the
  * payload) for aud_module_bin_propagate_pending. The bin itself then runs the default
- * command handler either way.
- */
+ * command handler either way. */
 int bin_cmd(void *arg, unsigned int cmd, void *param, unsigned int len)
 {
     struct aud_module_bin *bin = arg;

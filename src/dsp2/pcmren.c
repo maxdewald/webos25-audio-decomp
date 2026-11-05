@@ -4,7 +4,7 @@
  * It is not a renderer-block head: the kernel's renderer block on dsp2 is
  * "renderer" = srcbin -> sola -> lipsync -> gain (PCM) and "renderer_bypass" =
  * queue -> lipsync (ES) / rts -> srcbin -> lipsync (rtsPCM), see
- * src/kernel/aud/renderer.c and evidence/runtime/idle-state.txt.
+ * src/kernel/aud/renderer.c and build/scratch/evidence/runtime/idle-state.txt.
  * RECONSTRUCTION from lib/firmware/audio_a0_dsp2.bin
  *   sha256 c32c0f65f8a4238075530417dfdda012c64317a1a9270a4e7bf80d5ce7db134d
  *   main segment build/fw/audio_a0_dsp2.main_60000000.bin
@@ -13,7 +13,7 @@
  * chain 0x60096354, event 0x60097278, cmd 0x600968f8, prop_updated 0x60097598,
  * size 0x270, props @0x60102dd0: gapless-mode +0x214, drc-mode +0x224,
  * dmx-mode +0x228, metadata-type +0x260}.
- * Evidence: ../../decomp/audio_a0_dsp2.main_60000000.bin.c, tmp/a18/asm/pcmren_*.asm.
+ * Evidence: build/decomp/audio_a0_dsp2.main_60000000.bin.c, build/scratch/a18/asm/pcmren_*.asm.
  *
  * ES (observed): pcmren_chain only distinguishes META (type 2) from everything
  * else; anything else goes into pcm_ren_main_process_run as PCM. No "es" key,

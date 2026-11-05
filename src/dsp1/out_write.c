@@ -6,7 +6,7 @@
  * test/harness table).
  * RECONSTRUCTION from lib/firmware/audio_a0_dsp1.bin
  *   sha256 8f4e6d88a21b8486f3e15a866a989281f5f9cea564b5767cee24ca01277ae2f4
- * Evidence: ../../decomp/audio_a0_dsp1.main_60000000.bin.c, tmp/a17/outw.c.asm.
+ * Evidence: build/decomp/audio_a0_dsp1.main_60000000.bin.c, build/scratch/a17/outw.c.asm.
  * Strings: "IEC61937-9 frame generator: MAT frame size incorrect! (%u vs. %u byte)",
  * "Error writing IEC61937 header!", "...length!", "...padding!", "...burst spacing!",
  * "Error writing MAT Sync word!", "MAT: Invalid state of MAT Frame/Chunk parser!".

@@ -6,7 +6,7 @@
  *
  * RECONSTRUCTION from orig/usr/lib/libaa.so.2.0.0
  *   sha256 301d682fa52c1f072f1b7b0d8863a545df69b235d5454ae0f23b89de83eebdd2
- * Evidence: decomp/libaa.so.2.0.0.c @0x1cc08..@0x1e654, logmm "aimc" strings,
+ * Evidence: build/decomp/libaa.so.2.0.0.c @0x1cc08..@0x1e654, logmm "aimc" strings,
  * handler thread strings resolved from its literal pool (VA 0xd71c..0xd74c).
  */
 #include <errno.h>

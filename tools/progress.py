@@ -5,6 +5,7 @@
   progress.py diff <target> <function|0xaddr> instruction diff, original vs src
   progress.py todo <target> [-n N]           largest functions not yet in src/
   progress.py symbols                        write symbols/<target>.elf.tsv for ARM targets without one
+  progress.py svg                            write progress.svg: original files with a reconstruction
 """
 import argparse
 import difflib
@@ -134,13 +135,15 @@ def obj_path(t, c_file):
     return ROOT / 'build/obj' / t.name / (c_file.stem + '.o')
 
 
-def compile_targets(targets):
+def compile_targets(targets, only=None):
     cc = CFG['compiler']
     jobs = []
     if not targets:
         return True
     for t in targets:
         for c in sorted(p for ext in SRC_EXT for p in t.src.rglob(ext)):
+            if only and c != only:
+                continue
             o = obj_path(t, c)
             o.parent.mkdir(parents=True, exist_ok=True)
             cpp = c.suffix == '.cpp'
@@ -265,14 +268,17 @@ def bar(pct, width=20):
     return '#' * n + '.' * (width - n)
 
 
+def score_all(targets):
+    ok = compile_targets([t for t in targets if t.arch == 'arm' and t.src])
+    for t in targets:
+        if t.arch == 'arm' and t.src and t.has_binary:
+            score(t)
+    return ok
+
+
 def cmd_status(args):
     targets = load_targets()
-    ok = True
-    if not args.no_match:
-        ok = compile_targets([t for t in targets if t.arch == 'arm' and t.src])
-        for t in targets:
-            if t.arch == 'arm' and t.src and t.has_binary:
-                score(t)
+    ok = args.no_match or score_all(targets)
     rows = [summary(t) for t in targets]
     if args.json:
         print(json.dumps(rows, indent=2))
@@ -313,7 +319,7 @@ def cmd_diff(args):
     if not f.src:
         print('\n'.join(orig))
         sys.exit(f'{f.name} @0x{f.addr:x} has no reconstruction yet')
-    compile_targets([t])
+    compile_targets([t], only=ROOT / f.src.split(':')[0])
     mine = disasm_src(t, f) or []
     ratio = 100.0 * difflib.SequenceMatcher(None, orig, mine).ratio()
     print(f'{f.name} @0x{f.addr:x} <-> {f.src_name} ({f.src}): {ratio:.2f}%')
@@ -328,6 +334,81 @@ def cmd_symbols(args):
         rows = sorted(elf_funcs(t), key=lambda f: f.addr)
         t.symbols.write_text(''.join(f'{f.addr:08x}\t{f.size}\t{f.name}\n' for f in rows))
         print(f'{t.symbols.relative_to(ROOT)}: {len(rows)} functions')
+
+
+SVG_STYLE = '''
+  text { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; fill: #1f2328; }
+  .title { font-size: 18px; font-weight: 600; }
+  .sub, .path, .legend { font-size: 12px; fill: #656d76; }
+  .name { font-size: 14px; font-weight: 600; }
+  .pct { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .card { fill: #ffffff; stroke: #d0d7de; }
+  .track { fill: #eaeef2; }
+  .cov { fill: #9fd5ad; }
+  .match { fill: #1f883d; }
+  .dsp { fill: #b6c8f5; }
+  @media (prefers-color-scheme: dark) {
+    text { fill: #e6edf3; }
+    .sub, .path, .legend { fill: #8d96a0; }
+    .card { fill: #0d1117; stroke: #30363d; }
+    .track { fill: #21262d; }
+    .cov { fill: #2e6b3d; }
+    .match { fill: #3fb950; }
+    .dsp { fill: #3b5bab; }
+  }
+'''
+
+
+def progress_svg(rows):
+    """Bar chart: one row per original file with a reconstruction."""
+    from html import escape
+    W, PAD, ROW, HEAD = 820, 24, 46, 92
+    BX, BW = 330, 340
+    h = HEAD + ROW * len(rows) + 52
+    cov = sum(r['reconstructed_bytes'] for r in rows)
+    tot = sum(r['bytes'] for r in rows)
+    out = [f'<svg xmlns="http://www.w3.org/2000/svg" width="{W}" height="{h}" viewBox="0 0 {W} {h}" '
+           f'role="img" aria-label="Decompilation progress">',
+           f'<style>{SVG_STYLE}</style>',
+           f'<rect class="card" x="0.5" y="0.5" width="{W - 1}" height="{h - 1}" rx="10"/>',
+           f'<text class="title" x="{PAD}" y="38">Decompilation progress</text>',
+           f'<text class="sub" x="{PAD}" y="60">{len(rows)} original files · '
+           f'{cov / 1024:,.0f} of {tot / 1024:,.0f} KiB of their code reconstructed '
+           f'({100 * cov / tot:.1f}%)</text>']
+    for i, r in enumerate(rows):
+        y = HEAD + i * ROW
+        c, m = r['coverage_pct'], r['match_pct']
+        arm = r['arch'] == 'arm' and m is not None
+        out += [f'<text class="name" x="{PAD}" y="{y + 16}">{escape(r["target"])}</text>',
+                f'<text class="path" x="{PAD}" y="{y + 33}">{escape(r["path"])}</text>',
+                f'<rect class="track" x="{BX}" y="{y + 10}" width="{BW}" height="14" rx="7"/>']
+        if c:
+            out.append(f'<rect class="{"cov" if arm else "dsp"}" x="{BX}" y="{y + 10}" '
+                       f'width="{max(BW * c / 100, 3):.1f}" height="14" rx="7"/>')
+        if arm and m:
+            out.append(f'<rect class="match" x="{BX}" y="{y + 10}" '
+                       f'width="{max(BW * m / 100, 3):.1f}" height="14" rx="7"/>')
+        out.append(f'<text class="pct" x="{BX + BW + 16}" y="{y + 22}">{c:.1f}%</text>')
+        out.append(f'<text class="path" x="{BX + BW + 16}" y="{y + 38}">'
+                   f'{f"{m:.1f}% match" if arm else r["arch"]}</text>')
+    y = h - 26
+    for x, cls, label in ((PAD, 'match', 'matches original instructions'),
+                          (PAD + 230, 'cov', 'reconstructed (ARM)'),
+                          (PAD + 400, 'dsp', 'reconstructed (Xtensa / aarch64, no matching compiler)')):
+        out += [f'<rect class="{cls}" x="{x}" y="{y - 10}" width="12" height="12" rx="3"/>',
+                f'<text class="legend" x="{x + 18}" y="{y}">{label}</text>']
+    out.append('</svg>\n')
+    return '\n'.join(out)
+
+
+def cmd_svg(args):
+    targets = [t for t in load_targets() if t.src and any(f.src for f in t.funcs.values())]
+    score_all(targets)
+    rows = [summary(t) | {'path': '/' + str(t.binary.relative_to(ROOT / 'orig'))} for t in targets]
+    rows.sort(key=lambda r: (-r['coverage_pct'], -(r['match_pct'] or 0)))
+    out = ROOT / 'progress.svg'
+    out.write_text(progress_svg(rows))
+    print(f'{out.relative_to(ROOT)}: {len(rows)} files')
 
 
 def cmd_todo(args):
@@ -353,6 +434,7 @@ def main():
     t.add_argument('-n', type=int, default=25)
     t.set_defaults(fn=cmd_todo)
     sub.add_parser('symbols').set_defaults(fn=cmd_symbols)
+    sub.add_parser('svg').set_defaults(fn=cmd_svg)
     args = p.parse_args()
     args.fn(args)
 

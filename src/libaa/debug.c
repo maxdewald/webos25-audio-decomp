@@ -8,7 +8,7 @@
  * RECONSTRUCTION from orig/usr/lib/libaa.so.2.0.0
  *   sha256 301d682fa52c1f072f1b7b0d8863a545df69b235d5454ae0f23b89de83eebdd2
  *
- * Evidence: Ghidra decomp/libaa.so.2.0.0.c @0x1c7fc..@0x1cbec, @0x26ea0..@0x2813a,
+ * Evidence: Ghidra build/decomp/libaa.so.2.0.0.c @0x1c7fc..@0x1cbec, @0x26ea0..@0x2813a,
  * @0x2cf44, @0x30a74; thumb disassembly of the unnamed statics @0x1c7fc (cmd_set_prop),
  * @0x1cb00 (log hook), @0x272c0/@0x272e4 (debug_bin callbacks); strings 0x32fc8..0x330a8
  * and 0x36248..0x366cc. The debug_registry option table (.rodata 0x3685c) is empty.

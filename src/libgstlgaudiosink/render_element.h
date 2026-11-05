@@ -195,10 +195,13 @@ extern unsigned int logmm_dummy_mask;
 extern int logmm_printl (struct logmm_module *m, int lvl, const char *func, int line,
                          const char *fmt, ...);
 
-extern struct logmm_module logmm_module_media_event;
 extern GstDebugCategory   *gst_lg_audio_render_debug;
+/* Local symbols of the original single-file plugin (PC-relative access, no GOT). */
+#pragma GCC visibility push(hidden)
+extern struct logmm_module logmm_module_media_event;
 extern gpointer            parent_class;
 extern guint               gst_lg_audio_render_signals[LAST_SIGNAL];
+#pragma GCC visibility pop
 
 #define LG_SINK_FILE "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiosink.c"
 

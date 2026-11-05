@@ -6,8 +6,8 @@
  *   sha256 c32c0f65f8a4238075530417dfdda012c64317a1a9270a4e7bf80d5ce7db134d
  *   main segment build/fw/audio_a0_dsp2.main_60000000.bin
  *   sha256 d1735e7ad803d5da3f4dfd778a5936d3f962a91e1d26f896ec1dba8423b7d3cd
- * Evidence: ../../decomp/audio_a0_dsp2.main_60000000.bin.c (0x6006c7a0..0x6006e5a8,
- * 0x60079878..0x6007a7c8), tmp/a18/asm/aimc_dispatch.asm, aimc_set_property.asm.
+ * Evidence: build/decomp/audio_a0_dsp2.main_60000000.bin.c (0x6006c7a0..0x6006e5a8,
+ * 0x60079878..0x6007a7c8), build/scratch/a18/asm/aimc_dispatch.asm, aimc_set_property.asm.
  *
  * Command path (observed):
  *   IPC irq -> aimc_process -> IMC_ProcessHeader(hdr)

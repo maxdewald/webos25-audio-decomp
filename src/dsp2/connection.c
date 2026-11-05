@@ -12,8 +12,8 @@
  *   sha256 c32c0f65f8a4238075530417dfdda012c64317a1a9270a4e7bf80d5ce7db134d
  *   main segment build/fw/audio_a0_dsp2.main_60000000.bin
  *   sha256 d1735e7ad803d5da3f4dfd778a5936d3f962a91e1d26f896ec1dba8423b7d3cd
- * Evidence: ../../decomp/audio_a0_dsp2.main_60000000.bin.c (0x6007f9d8..0x600840d4),
- * tmp/a18/asm/cm_connection.asm, cm_disconnect.asm, process_cmd_noirq.asm.
+ * Evidence: build/decomp/audio_a0_dsp2.main_60000000.bin.c (0x6007f9d8..0x600840d4),
+ * build/scratch/a18/asm/cm_connection.asm, cm_disconnect.asm, process_cmd_noirq.asm.
  *
  * ConnectionMng_Connection refuses (observed return codes, ADEC_ERR_*):
  *   2    output module id out of 1..200

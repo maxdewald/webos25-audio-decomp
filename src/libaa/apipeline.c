@@ -5,7 +5,7 @@
  *
  * RECONSTRUCTION from orig/usr/lib/libaa.so.2.0.0
  *   sha256 301d682fa52c1f072f1b7b0d8863a545df69b235d5454ae0f23b89de83eebdd2
- * Evidence: decomp/libaa.so.2.0.0.c @0x1b6bc..0x1bd2c, logmm module "aud_pipeline",
+ * Evidence: build/decomp/libaa.so.2.0.0.c @0x1b6bc..0x1bd2c, logmm module "aud_pipeline",
  * strings "addfv", "_apipeline_add", "add \"%s\" at %s, pipe \"%s\"\n".
  *
  * Processor placement (apipeline_appendfv_port / prependfv_port / addfv):

@@ -3,7 +3,7 @@
  *
  * RECONSTRUCTION from orig/usr/lib/libaabase.so.1.0.0
  *   sha256 0d150201c8fb1dbda6c6769ed5d9254c21c98098fca31e2db33eb0b861f88806
- * Evidence: decomp/libaabase.so.1.0.0.c, strings "%s/%s" @0x10e44,
+ * Evidence: build/decomp/libaabase.so.1.0.0.c, strings "%s/%s" @0x10e44,
  * "%s.%d: cannot load \"%s\". %s\n" @0x10e4c, "load_dl" @0x10e6c (used as __func__,
  * line 25: an inlined helper of that name).
  */

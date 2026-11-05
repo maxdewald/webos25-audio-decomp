@@ -5,7 +5,7 @@
  *
  * RECONSTRUCTION from orig/usr/lib/libaudcommon.so.1.0.0
  *   sha256 a4df15e082096e6c60c7091b81f90f4fe0a6c5ae07173867ca4a0b05bfd5087f
- * Evidence: decomp/libaudcommon.so.1.0.0.c (0x11b24..0x11d44, 0x14820..0x14a0c);
+ * Evidence: build/decomp/libaudcommon.so.1.0.0.c (0x11b24..0x11d44, 0x14820..0x14a0c);
  * module objects in .data (VA 0x16004.., 20 bytes each, mask -> logmm_dummy_mask,
  * initial _mask 0x3f for "ainst", 7 for the rest).
  */

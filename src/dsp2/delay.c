@@ -8,7 +8,7 @@
  * Linked at 0x60000000. Property table @0x60102950: delay (int +0x100, setter),
  * packet-count (ro +0x140), queued-length (getter), delayed (bool +0x15c),
  * number-packet (+0x150), au-length (+0x144). FLIX: see module_core.c.
- * Evidence: tmp/a13/delay.asm, ../../decomp/audio_a0_dsp2.main_60000000.bin.c ~122932.
+ * Evidence: build/scratch/a13/delay.asm, build/decomp/audio_a0_dsp2.main_60000000.bin.c ~122932.
  *
  * ES handling (observed):
  *  - delay == 0: every buffer (PCM, ES, meta) goes straight to out0.

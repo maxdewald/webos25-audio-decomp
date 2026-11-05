@@ -3,7 +3,7 @@
  * RECONSTRUCTION from usr/lib/libumi.so.1.0.0
  *   sha256 f1ac7b61ac389af0329f36112e3b316c1f8575b1fecf79aed07986d1a873a764
  * audiooutputd sha256 026331391098d078a1941a95ec78fe8a23c05c5d944555c7bab431d8410d15f4
- * Addresses: Ghidra (= raw ELF VA + 0x10000). Evidence: ../../evidence/luna-contract/
+ * Addresses: Ghidra (= raw ELF VA + 0x10000). Evidence: build/scratch/evidence/luna-contract/
  *
  * Luna entry: luna://com.webos.service.audiooutput/quality/setSettings
  *   {"category":"setMixer","value":{"mix":<bool>}}              -> mix_enabled

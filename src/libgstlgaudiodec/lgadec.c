@@ -9,8 +9,8 @@
  * RECONSTRUCTION from orig/usr/lib/gstreamer-1.0/libgstlgaudiodec.so
  *   sha256 84db367e1ea3eeb4b589bf63910140cfd43ea77f2db124ae6882fbee8ebb6bb7
  * Names, prototypes, struct layouts: DWARF (CU lgadec.c). Tags are Ghidra addresses
- * (raw VA + 0x10000). Evidence: decomp/libgstlgaudiodec.so.c, .strings.tsv, .funcstrings.tsv,
- * evidence/renderer-abi/decoder-set_es_bypass.asm.
+ * (raw VA + 0x10000). Evidence: build/decomp/libgstlgaudiodec.so.c, .strings.tsv, .funcstrings.tsv,
+ * build/scratch/evidence/renderer-abi/decoder-set_es_bypass.asm.
  * lgadec_decoder_set_codec_param (@0x2a414) was recovered from the disassembly (Ghidra
  * failed). The codec feeders are in lgadec_codec.c.
  *
@@ -474,7 +474,7 @@ void *lgadec_open(void)
     adec->is_dump_enable = false;
     adec->play_speed = 1000;
 
-    if (access("/tmp/lgadec_dump_enable", F_OK) == 0) {   /* _lgadec_dump_init, inlined */
+    if (access("/build/scratch/lgadec_dump_enable", F_OK) == 0) {   /* _lgadec_dump_init, inlined */
         time_t timer;
         struct tm *t;
         char dumpFilename[64];
@@ -487,7 +487,7 @@ void *lgadec_open(void)
         } else {
             memset(dumpFilename, 0, sizeof(dumpFilename));
             snprintf(dumpFilename, sizeof(dumpFilename),
-                     "/tmp/lgadec_ES_%04d%02d%02d_%02d%02d%02d.dump", t->tm_year + 1900,
+                     "/build/scratch/lgadec_ES_%04d%02d%02d_%02d%02d%02d.dump", t->tm_year + 1900,
                      t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec);
             if (adec->dump_fd)
                 fclose(adec->dump_fd);

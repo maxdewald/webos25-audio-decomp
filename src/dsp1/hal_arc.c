@@ -5,11 +5,11 @@
  * RECONSTRUCTION from lib/firmware/audio_a0_dsp1.bin
  *   sha256 8f4e6d88a21b8486f3e15a866a989281f5f9cea564b5767cee24ca01277ae2f4
  * Main segment linked at 0x60000000. Rate ladders were decoded with the 18-bit FLIX
- * branch decoder (tmp/a17/annot.py, after evidence/dsp2-gain/flix_branch.py): every
+ * branch decoder (tools/flix_annot.py): every
  * threshold literal (0x5621/0x5622, 0x7cff/0x7d00, 0xac43/0xac44, 0x15887/0x15888,
  * 0x17700, 0x2b10f/0x2b110, 0x2edff/0x2ee00, 0xbb800 and kHz 0x16/0x18/0x20/0x2c/0x58/
  * 0x60/0xb0/0xc0/0x300) reaches exactly one code, see iec_rate_code() in out_module.h.
- * Evidence: ../../decomp/audio_a0_dsp1.main_60000000.bin.c (0x60101b60..0x60102180,
+ * Evidence: build/decomp/audio_a0_dsp1.main_60000000.bin.c (0x60101b60..0x60102180,
  *           0x601212a0..0x60121754).
  */
 #include "out_module.h"

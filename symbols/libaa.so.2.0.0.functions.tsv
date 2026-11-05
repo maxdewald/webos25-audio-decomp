@@ -407,7 +407,7 @@
 0002b970	392	aud_module_set_block_module
 0002baf8	284	FUN_0002baf8
 0002bc3c	1020	aud_module_set_prop_locked
-0002c038	982	FUN_0002c038
+0002c038	88	FUN_0002c038
 0002c090	186	FUN_0002c090
 0002c184	412	FUN_0002c184
 0002c34c	72	FUN_0002c34c
@@ -418,7 +418,7 @@
 0002c9c8	680	FUN_0002c9c8
 0002ccb4	350	FUN_0002ccb4
 0002ce44	102	FUN_0002ce44
-0002cebc	204	aud_port_push_data
+0002cebc	136	aud_port_push_data
 0002cf44	86	debug_module
 0002cfb4	88	aud_port_sync
 0002d01c	32	aud_port_check_legacy
@@ -460,7 +460,7 @@
 0002e8bc	38	aud_module_impl_add_prop
 0002e8e4	338	aud_module_default_dot_wo_proc
 0002ea6c	32	aud_module_default_dot
-0002ea94	14	aud_module_dot
+0002ea94	12	aud_module_dot
 0002eaa0	568	aud_module_default_command
 0002ed0c	108	aud_module_cmd
 0002ed88	326	aud_module_default_event

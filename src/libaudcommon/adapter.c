@@ -4,7 +4,7 @@
  *
  * RECONSTRUCTION from orig/usr/lib/libaudcommon.so.1.0.0
  *   sha256 a4df15e082096e6c60c7091b81f90f4fe0a6c5ae07173867ca4a0b05bfd5087f
- * Evidence: decomp/libaudcommon.so.1.0.0.c (new_holder @0x11db4, push_at @0x11e40,
+ * Evidence: build/decomp/libaudcommon.so.1.0.0.c (new_holder @0x11db4, push_at @0x11e40,
  * 0x138e4..0x14440). Logs go to "aud_bufadp" except the holder allocation failures and
  * the get_data split errors, which use "aud_bufdata" (as in the binary).
  */

@@ -6,9 +6,9 @@
  *   sha256 c32c0f65f8a4238075530417dfdda012c64317a1a9270a4e7bf80d5ce7db134d
  * Main segment linked at 0x60000000. Every op0=0xE/0xF FLIX bundle is 8 bytes and
  * OPAQUE. Branch-shaped bundles were read with the hypothesis decoder in
- * evidence/dsp2-gain/flix_branch.py; conditions that depend on it are marked [FLIX?].
+ * tools/flix_annot.py; conditions that depend on it are marked [FLIX?].
  * Log-guard bundles (l32i aN,<mask 0x4ff90090> or module debug word +0x8) are dropped.
- * Evidence: ../../decomp/audio_a0_dsp2.main_60000000.bin.c (0x60084b90..0x60087770),
+ * Evidence: build/decomp/audio_a0_dsp2.main_60000000.bin.c (0x60084b90..0x60087770),
  *           property table @0x60101ec0, class @0x60101e10, variant descriptors
  *           @0x60101e70 ("fader"), @0x60101e88 ("queue"), @0x60101ea0 ("input_queue").
  * Names: firmware symbol table at 0x6011e780 (func,name) pairs. It names 0x600855e8

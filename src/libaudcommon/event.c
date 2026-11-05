@@ -4,8 +4,8 @@
  *
  * RECONSTRUCTION from orig/usr/lib/libaudcommon.so.1.0.0
  *   sha256 a4df15e082096e6c60c7091b81f90f4fe0a6c5ae07173867ca4a0b05bfd5087f
- * Evidence: decomp/libaudcommon.so.1.0.0.c (functions 0x11cfc..0x13244), log strings and
- * __LINE__ constants from decomp/libaudcommon.so.1.0.0.strings.tsv. All logs use the
+ * Evidence: build/decomp/libaudcommon.so.1.0.0.c (functions 0x11cfc..0x13244), log strings and
+ * __LINE__ constants from build/decomp/libaudcommon.so.1.0.0.strings.tsv. All logs use the
  * "aud_bufdata" logmm module.
  */
 #include <pthread.h>

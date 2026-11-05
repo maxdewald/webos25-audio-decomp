@@ -7,7 +7,7 @@
  * RECONSTRUCTION from orig/usr/lib/libaa.so.2.0.0
  *   sha256 301d682fa52c1f072f1b7b0d8863a545df69b235d5454ae0f23b89de83eebdd2
  *
- * Evidence: Ghidra decomp/libaa.so.2.0.0.c @0x28624..@0x28874; gModuleInfo = .data
+ * Evidence: Ghidra build/decomp/libaa.so.2.0.0.c @0x28624..@0x28874; gModuleInfo = .data
  * 0x3e390 (9648 bytes = 201 x 0x30, symbol table); platform word .data 0x3c424 (= 1);
  * module memory info .data 0x3c428 (201 x 0x28); type-name table .data.rel.ro 0x3b734.
  */

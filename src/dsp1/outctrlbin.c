@@ -8,7 +8,7 @@
  * Main segment linked at 0x60000000. Class @0x602810b0 ("outctrlbin", instance size
  * 0x140), property table @0x602810e0 (gain int +0x12c, fade-gain int +0x130,
  * mute-output bool +0x134, delay int +0x138; each 0x14-byte entry has a setter).
- * Evidence: ../../decomp/audio_a0_dsp1.main_60000000.bin.c (0x60125208..0x60125948).
+ * Evidence: build/decomp/audio_a0_dsp1.main_60000000.bin.c (0x60125208..0x60125948).
  * The child modules are the same code as dsp2's: gain 0x60110c54.. (gain_control,
  * gcd, gain_set_fade_gain, ... LEN-EQ/BYTES-EQ with dsp2 0x6008810c..; ../dsp2/gain.c)
  * and delay 0x601186f8..0x60119810 (first 10 functions LEN-EQ with dsp2 0x6008fb20..;

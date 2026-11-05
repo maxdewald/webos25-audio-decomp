@@ -8,7 +8,7 @@
  *   sha256 90dba3ef32704ce4096bf1e6045d2879d0c2192d507bc04d1e8e98437f420a43
  * Names, prototypes and struct layouts come from the binary's DWARF (lgao.c CU).
  * Tags are raw ELF VAs (decomp.toml src_addr_bias = 0x10000).
- * Evidence: ../../evidence/renderer-abi/, decomp/libgstlgaudiosink.so.c.
+ * Evidence: build/scratch/evidence/renderer-abi/, build/decomp/libgstlgaudiosink.so.c.
  *
  * Not tagged here because renderer.c already tags their addresses:
  *   _lgao_connect_renderer (0x1441c), _lgao_open_renderer (0x14924),
@@ -265,7 +265,7 @@ struct module_appsink_callback lgao_appsink_cb = {
 };
 
 /* inlined into _lgao_connect_renderer. The shipped kernel has no nr 43 (-ENOTTY),
- * so in practice no SIGUSR1/UNDERFLOW is ever raised (see evidence/renderer-abi). */
+ * so in practice no SIGUSR1/UNDERFLOW is ever raised (see build/scratch/evidence/renderer-abi). */
 static inline void _lgao_set_msgpid_to_signal(lgao *ao)
 {
     struct aren_msgpid_to_signal value;
@@ -477,7 +477,7 @@ static inline void _lgao_init_dump(lgao *ao)
     ao->pDumpAudioFD = NULL;
     if (!ao->isEnableDump)
         return;
-    sprintf(dumpFilename, "/tmp/audiosink-#%03u.dump", dumpIndex);
+    sprintf(dumpFilename, "/build/scratch/audiosink-#%03u.dump", dumpIndex);
     ao->pDumpAudioFD = fopen(dumpFilename, "wb");
     if (!ao->pDumpAudioFD)
         LOGE(0x186, "FOpen error !! <%s>", dumpFilename);
@@ -521,7 +521,7 @@ void *lgao_open(void)
 
     _lgao_init_rts(&ao->rts_params);
 
-    ao->isEnableDump = access("/tmp/gst_dump_audio_pcm", F_OK) == 0;
+    ao->isEnableDump = access("/build/scratch/gst_dump_audio_pcm", F_OK) == 0;
     _lgao_init_dump(ao);
 
     ao->pFnCallbackFn = NULL;

@@ -10,8 +10,8 @@
  *   sha256 c32c0f65f8a4238075530417dfdda012c64317a1a9270a4e7bf80d5ce7db134d
  *   main segment build/fw/audio_a0_dsp2.main_60000000.bin
  *   sha256 d1735e7ad803d5da3f4dfd778a5936d3f962a91e1d26f896ec1dba8423b7d3cd
- * Evidence: ../../decomp/audio_a0_dsp2.main_60000000.bin.c,
- * ../../evidence/dsp2-connect/6006f600_aud_connector_connect.asm.
+ * Evidence: build/decomp/audio_a0_dsp2.main_60000000.bin.c,
+ * build/scratch/evidence/dsp2-connect/6006f600_aud_connector_connect.asm.
  *
  * When is a connection refused (observed, aud_connector_connect):
  *   - the input port <in_port> of <in_mod> already exists (it is connected):

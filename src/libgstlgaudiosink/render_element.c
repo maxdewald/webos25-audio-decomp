@@ -5,7 +5,7 @@
  * RECONSTRUCTION from usr/lib/gstreamer-1.0/libgstlgaudiosink.so
  *   sha256 90dba3ef32704ce4096bf1e6045d2879d0c2192d507bc04d1e8e98437f420a43
  * Tags are raw ELF VAs (Ghidra address - 0x10000, see decomp.toml src_addr_bias).
- * Evidence: decomp/libgstlgaudiosink.so.c, .strings.tsv, DWARF (gstlgaudiosink.c CU).
+ * Evidence: build/decomp/libgstlgaudiosink.so.c, .strings.tsv, DWARF (gstlgaudiosink.c CU).
  * Log line numbers in SINK_LOG(...) are the original __LINE__ values.
  */
 #include <string.h>
@@ -130,7 +130,7 @@ gboolean gst_lg_audio_render_prepared_instant_rate_change (GstBaseSink *sink, gd
     return TRUE;
 }
 
-/* @0x6f1c gst_lg_audio_render_dump_open: (re)open /tmp/gstlgaudiosink_<self>_<n>.dump */
+/* @0x6f1c gst_lg_audio_render_dump_open: (re)open /build/scratch/gstlgaudiosink_<self>_<n>.dump */
 void gst_lg_audio_render_dump_open (GstLgAudioRender *pAudioRen)
 {
     GString *filename;
@@ -138,7 +138,7 @@ void gst_lg_audio_render_dump_open (GstLgAudioRender *pAudioRen)
     if (pAudioRen->dump_file != NULL)
         fclose (pAudioRen->dump_file);
 
-    filename = g_string_new ("/tmp/gstlgaudiosink_");
+    filename = g_string_new ("/build/scratch/gstlgaudiosink_");
     if (filename == NULL) {
         SINK_GST (GST_LEVEL_ERROR, 284, pAudioRen, "can't alloc str");
         return;

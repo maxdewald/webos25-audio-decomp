@@ -5,7 +5,7 @@
  * Kernel side: Image.lz4-5.4.268-329.ptl4tv.5
  *   sha256 2b835f62a57891f72f715cfa0293f51113aeaa8c90838ba5b5d400525a8b68cd
  * Sink addresses are raw ELF VAs; kernel addresses are decompressed Image offsets.
- * Evidence: ../../evidence/renderer-abi/
+ * Evidence: build/scratch/evidence/renderer-abi/
  */
 #include <fcntl.h>
 #include <stdbool.h>

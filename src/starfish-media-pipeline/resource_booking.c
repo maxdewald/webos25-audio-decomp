@@ -5,7 +5,7 @@
  *   usr/lib/libresource_mgr.so.1.0.0       13b7efc096ca4544eb251606ea858f5ef1c0501094a5784cfce6dd6bff44b034
  * ADEC cost per stream: ../libmedia-resource-calculator/calc_adec.c
  *   etc/umediaserver/umediaserver_resource_config.txt (ADEC qty 2, ADEC_BANDWIDTH 6, PCMMC 5)
- * Addresses: Ghidra (= raw ELF VA + 0x10000). Evidence: ../../evidence/resource-booking/
+ * Addresses: Ghidra (= raw ELF VA + 0x10000). Evidence: build/scratch/evidence/resource-booking/
  *
  * The ADEC index booked here becomes the kernel's main_audio (decproxy only receives
  * the "acquired-resource" event with core-type/active/audio-port/mixer-port).
@@ -49,7 +49,12 @@ void acquireResources(const char *soc, bool use_sw_audio, bool use_pcmmc,
 struct acquired { const char *resource; int index; };
 
 /* @0x992dc: from the uMediaServer acquire response, the lowest "index" of all entries
- * whose "resource" equals the wanted type (e.g. "ADEC"); -1 if none. */
+ * whose "resource" equals the wanted type (e.g. "ADEC"); -1 if none.
+ * acquireResources stores the lowest ADEC as adecPort (+0x16c) and the lowest PCMMC as
+ * mixerPort (+0x170). allocateResource @0x51410 and every libpf setResource (e.g.
+ * AirPlayer @0xa3ee8) pass them unchanged as acquired-resource audio-port/mixer-port.
+ * The sink's lgao_set_port then uses audio-port as renderer index, or the mixer path
+ * only when it is -1; a second booked ADEC is never forwarded. */
 int lowest_resource_index(const struct acquired *res, int n, const char *wanted)
 {
     int best = -1;

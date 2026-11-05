@@ -7,11 +7,11 @@
  * Cadence HiFi (RG-2018.9), main segment linked at 0x60000000 (file offset 0x5b0).
  * Symbol table pairs are (func_ptr, name_ptr) at 0x602bfb08. Each was checked against
  * the function's own logmm "__func__" string. Every op0=0xE/0xF FLIX bundle is 8 bytes.
- * Branch bundles were decoded with tmp/a17/annot.py (18-bit target form, after
- * evidence/dsp2-gain/flix_branch.py; 226/227 targets land on instruction starts).
+ * Branch bundles were decoded with tools/flix_annot.py (18-bit target form; 226/227
+ * targets land on instruction starts).
  * Conditions that depend on it are tagged [FLIX] with the bundle address.
- * Evidence: ../../decomp/audio_a0_dsp1.main_60000000.bin.c,
- *           ../../evidence/dsp1-out-event/out_event.lin.asm
+ * Evidence: build/decomp/audio_a0_dsp1.main_60000000.bin.c,
+ *           build/scratch/evidence/dsp1-out-event/out_event.lin.asm
  * Corrections to the earlier version of this file: the ES writer test is
  * channels == 2 -> cpy_es (not channels > 2). Channels, rate and bps are stored before
  * the change test, which compares against the values from before the event. Codec

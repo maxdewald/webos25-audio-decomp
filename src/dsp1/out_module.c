@@ -6,13 +6,12 @@
  * RECONSTRUCTION from lib/firmware/audio_a0_dsp1.bin
  *   sha256 8f4e6d88a21b8486f3e15a866a989281f5f9cea564b5767cee24ca01277ae2f4
  * Main segment linked at 0x60000000. FLIX bundles are 8 bytes. Branch bundles were
- * decoded with tmp/a17/annot.py (18-bit target form, after
- * evidence/dsp2-gain/flix_branch.py). A few kind-B bundles (t=0xa/0xc, e.g. 0x6012416e,
- * 0x601241ee, 0x6012429a) decode to targets outside the function. Their conditions are
- * inferred from the surrounding code and marked [FLIX]. Log-guard bundles (mask word 0x4ff900cc, or module +0x8) are dropped. Log strings are
+ * decoded with tools/flix_annot.py (18-bit target form). A few kind-B bundles
+ * (t=0xa/0xc, e.g. 0x6012416e, 0x601241ee, 0x6012429a) decode to targets outside the
+ * function. Their conditions are inferred from the surrounding code and marked [FLIX]. Log-guard bundles (mask word 0x4ff900cc, or module +0x8) are dropped. Log strings are
  * quoted in comments.
- * Evidence: ../../decomp/audio_a0_dsp1.main_60000000.bin.c (0x60121754..0x60125208),
- *           ../../evidence/dsp1-out-event/, ../../evidence/earc-dsp1/.
+ * Evidence: build/decomp/audio_a0_dsp1.main_60000000.bin.c (0x60121754..0x60125208),
+ *           build/scratch/evidence/dsp1-out-event/, build/scratch/evidence/earc-dsp1/.
  * Names: firmware symbol table at 0x602bfb08. functions.tsv calls 0x60121a0c "out_stop"
  * (it is write_8ch), 0x601229ac "output_status" (cpy_es) and 0x60122a38 "output_spdif"
  * (cpy_es8). 0x60123634 is listed as "out_chai" (out_chain).

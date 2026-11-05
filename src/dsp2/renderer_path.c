@@ -4,8 +4,8 @@
  * RECONSTRUCTION from lib/firmware/audio_a0_dsp2.bin
  *   sha256 c32c0f65f8a4238075530417dfdda012c64317a1a9270a4e7bf80d5ce7db134d
  * Main segment linked at 0x60000000. Plumbing matches the paluma-5 GPL module.c /
- * module_connector.c logic. Evidence: ../../evidence/dsp2-connect/,
- * ../../evidence/dsp2-lipsync/, ../../decomp/audio_a0_dsp2.main_60000000.bin.c
+ * module_connector.c logic. Evidence: build/scratch/evidence/dsp2-connect/,
+ * build/scratch/evidence/dsp2-lipsync/, build/decomp/audio_a0_dsp2.main_60000000.bin.c
  */
 #include <stdbool.h>
 #include <stddef.h>

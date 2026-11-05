@@ -4,7 +4,7 @@
  *
  * RECONSTRUCTION from orig/usr/lib/libaa.so.2.0.0
  *   sha256 301d682fa52c1f072f1b7b0d8863a545df69b235d5454ae0f23b89de83eebdd2
- * Evidence: decomp/libaa.so.2.0.0.c @0x20634..0x20b4c, logmm module "aabase",
+ * Evidence: build/decomp/libaa.so.2.0.0.c @0x20634..0x20b4c, logmm module "aabase",
  * __func__ strings "search_quotationmark", "append_string".
  */
 #define _GNU_SOURCE
@@ -20,7 +20,7 @@
 
 LOGMM_MODULE_DEFINE(aabase);
 
-/* @0x20634: first line of /tmp/<name>, else /var/<name> (malloc'd) */
+/* @0x20634: first line of /build/scratch/<name>, else /var/<name> (malloc'd) */
 char *autil_option_str_from_file(const char *basename)
 {
     char path[strlen(basename) + 6];
@@ -29,7 +29,7 @@ char *autil_option_str_from_file(const char *basename)
     off_t size;
     int fd;
 
-    sprintf(path, "/tmp/%s", basename);
+    sprintf(path, "/build/scratch/%s", basename);
     fd = open(path, O_RDONLY);
     if (fd < 0) {
         sprintf(path, "/var/%s", basename);

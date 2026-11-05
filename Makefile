@@ -1,6 +1,6 @@
 PY ?= python3
 
-.PHONY: status diff todo toolchain verify validate symbols decomp-arm decomp-dsp
+.PHONY: status diff todo progress toolchain verify symbols opensource decomp-arm decomp-dsp
 
 status:            ## coverage + instruction match per target
 	$(PY) tools/progress.py status
@@ -11,21 +11,20 @@ diff:              ## make diff T=libumi F=setOutputType
 todo:              ## make todo T=libumi
 	$(PY) tools/progress.py todo $(T)
 
+progress:          ## progress.svg for the README
+	$(PY) tools/progress.py svg
+
 toolchain:         ## GCC 11.4 armel cross compiler image
 	docker build -t webos25-decomp-gcc tools/toolchain
 
 verify:            ## original binaries are the expected ones
 	cd orig && shasum -a 256 -c --quiet SHA256SUMS
 
-validate: verify   ## re-check every evidence report against orig/
-	$(PY) evidence/audiod-mixer/index_audiod.py > /dev/null
-	$(PY) evidence/audiod-mixer/validate_findings.py
-	node evidence/luna-contract/verify-evidence.mjs > /dev/null
-	$(PY) evidence/renderer-abi/validate.py
-	node evidence/resource-booking/verify-evidence.mjs --check
-
 symbols:           ## ELF symbol tables for targets without a Ghidra export
 	$(PY) tools/progress.py symbols
+
+opensource:        ## LG's GPL/LGPL source for this firmware into lg-opensource/
+	tools/fetch-opensource.sh lg-opensource
 
 decomp-arm:        ## full Ghidra export of every ARM target (slow)
 	tools/decomp-arm-all.sh

@@ -6,9 +6,9 @@
  *   sha256 c32c0f65f8a4238075530417dfdda012c64317a1a9270a4e7bf80d5ce7db134d
  *   main segment build/fw/audio_a0_dsp2.main_60000000.bin
  *   sha256 d1735e7ad803d5da3f4dfd778a5936d3f962a91e1d26f896ec1dba8423b7d3cd
- * Linked at 0x60000000. Evidence: ../../decomp/audio_a0_dsp2.main_60000000.bin.c
+ * Linked at 0x60000000. Evidence: build/decomp/audio_a0_dsp2.main_60000000.bin.c
  * (0x60093c88..0x60096270), command table @0x60006370, listing
- * tmp/a18/asm/msmixer_do_mix.asm, tmp/a18/asm/msmixer_can_mix.asm.
+ * build/scratch/a18/asm/msmixer_do_mix.asm, build/scratch/a18/asm/msmixer_can_mix.asm.
  *
  * ES (observed): no msmixer function reads the "es" key or tests aud_data.type
  * other than msmixer_input_metadata's "type != META(2) -> 'not metadata', -1".

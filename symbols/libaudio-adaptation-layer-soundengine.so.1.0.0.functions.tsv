@@ -29,9 +29,9 @@
 0004fd84	84	FUN_0004fd84
 0004fddc	84	FUN_0004fddc
 0004fe44	42778	FUN_0004fe44
-0005b1a8	40	FUN_0005b1a8
-0005b1cc	26	FUN_0005b1cc
-0005b1f8	34	FUN_0005b1f8
+0005b1a8	40	call_weak_fn
+0005b1cc	26	deregister_tm_clones
+0005b1f8	34	register_tm_clones
 0005b22c	44	_FINI_0
 0005b270	4	aal_se::AAL_SE_AlsaControl::getLGSEVersion
 0005b274	86	aal_se::AAL_SE_AlsaControl::~AAL_SE_AlsaControl

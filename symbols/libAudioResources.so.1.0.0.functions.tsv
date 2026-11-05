@@ -1,8 +1,8 @@
 000131b4	12	_DT_INIT
 000132a8	112	_INIT_1
-00013328	40	FUN_00013328
-0001334c	26	FUN_0001334c
-00013378	34	FUN_00013378
+00013328	40	call_weak_fn
+0001334c	26	deregister_tm_clones
+00013378	34	register_tm_clones
 000133ac	44	_FINI_0
 000133f0	26	FUN_000133f0
 00013418	16	alexaClientSDK::applicationUtilities::resources::audio::AlertsAudioFactory::alarmDefault

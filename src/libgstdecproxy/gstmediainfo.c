@@ -88,6 +88,9 @@ static GstFlowReturn gst_media_info_chain (GstPad * pad, GstObject * parent,
     GstBuffer * buffer);
 
 #define gst_media_info_parent_class parent_class
+/* @0x1a1e0 = gst_media_info_get_type_once */
+/* @0x1a370 = gst_media_info_class_intern_init */
+/* @0x1a434 = gst_media_info_get_type */
 G_DEFINE_TYPE (GstMediaInfo, gst_media_info, GST_TYPE_ELEMENT);
 
 

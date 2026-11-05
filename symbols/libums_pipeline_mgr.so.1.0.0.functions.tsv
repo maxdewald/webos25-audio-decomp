@@ -3,9 +3,9 @@
 00022edc	64	FUN_00022edc
 0002306c	80	boost::throw_exception<boost::bad_function_call>
 000230d0	118	_INIT_1
-0002316c	40	FUN_0002316c
-00023190	26	FUN_00023190
-000231bc	34	FUN_000231bc
+0002316c	40	call_weak_fn
+00023190	26	deregister_tm_clones
+000231bc	34	register_tm_clones
 000231f0	44	_FINI_0
 000233a0	30	FUN_000233a0
 000233c0	90	FUN_000233c0

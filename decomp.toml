@@ -10,6 +10,9 @@
 # soft-float EABI5. Built from tools/toolchain/Dockerfile.
 image = "webos25-decomp-gcc"
 cc = "arm-linux-gnueabi-gcc"
+cxx = "arm-linux-gnueabi-g++"
+# C++ targets (libumi, starfish, ...): same flags plus the C++ dialect of LG's build.
+cxxflags = ["-std=gnu++14"]
 # Ubuntu's GCC enables -fstack-protector-strong and _FORTIFY_SOURCE by default; LG's
 # build does not (no __stack_chk_fail/__*_chk imports except libkadaptor/libAudioResources).
 cflags = ["-O2", "-mthumb", "-march=armv7-a", "-mfpu=neon", "-mfloat-abi=softfp",

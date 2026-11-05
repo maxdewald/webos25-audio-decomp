@@ -16,9 +16,9 @@
 0003c940	38	_INIT_5
 0003c97c	34	_INIT_6
 0003c9b0	44	_start
-0003c9e4	40	FUN_0003c9e4
-0003ca08	26	FUN_0003ca08
-0003ca34	34	FUN_0003ca34
+0003c9e4	40	call_weak_fn
+0003ca08	26	deregister_tm_clones
+0003ca34	34	register_tm_clones
 0003ca68	44	_FINI_0
 0003caac	240	FUN_0003caac
 0003cb9c	36	FUN_0003cb9c

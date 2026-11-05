@@ -20,8 +20,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 CFG = tomllib.loads((ROOT / 'decomp.toml').read_text())
 TAG = re.compile(r'^/\*\s*@0x([0-9a-fA-F]+)')
-DEF = re.compile(r'^(?:static\s+)?(?:inline\s+)?[\w\s\*]*?\b(\w+)\s*\([^;]*$')
+DEF = re.compile(r'^(?:static\s+)?(?:inline\s+)?[\w\s\*&:<>,]*?\b((?:\w+::)*~?\w+)\s*\([^;]*$')
+SRC_EXT = ('*.c', '*.cpp')
 INSN = re.compile(r'^\s+[0-9a-f]+:\s+(.+)$')
+# Compiler runtime linked into every binary (crtstuff, libgcc, PLT-veneer padding). LG
+# never wrote it, so it is left out of both coverage and match.
+IGNORE = re.compile(r'^(_init|_fini|_DT_INIT|_DT_FINI|_FINI_\d+|_INIT_\d+|call_weak_fn|'
+                    r'(de)?register_tm_clones|__do_global_dtors_aux|frame_dummy|'
+                    r'__aeabi_\w+|__(u)?divmod[sd]i4|__udivmoddi4|__(add|sub|mul|div)[sd]f3|'
+                    r'__float\w+|__fix\w+|__extend\w+|__trunc\w+|__(u)?(div|mod)si3|'
+                    r'__clz\w+|__ctz\w+|__gnu_\w+|__cmp[sd]f2|__(eq|ne|lt|le|gt|ge|un)[sd]f2)$')
 
 
 def tool(name):
@@ -71,12 +79,15 @@ def load_targets():
         if t.symbols.is_file():
             for line in t.symbols.read_text().splitlines():
                 a, size, name = line.split('\t', 2)
+                if IGNORE.match(name):
+                    continue
                 t.funcs[int(a, 16)] = Func(int(a, 16), int(size), name)
         if t.arch == 'arm' and t.has_binary:
             for f in elf_funcs(t):
-                t.funcs.setdefault(f.addr, f)
+                if not IGNORE.match(f.name):
+                    t.funcs.setdefault(f.addr, f)
         if t.src and t.src.is_dir():
-            for f in sorted(t.src.rglob('*.c')):
+            for f in sorted(p for ext in SRC_EXT for p in t.src.rglob(ext)):
                 scan_source(t, f)
     return out
 
@@ -100,16 +111,23 @@ def scan_source(t, path):
             i += 1
             continue
         start = i
+        # "/* @0xADDR = symbol */" names a function a macro expands to (G_DEFINE_TYPE,
+        # GST_PLUGIN_DEFINE, ...); no definition line follows it.
+        alias = re.match(r'^/\*\s*@0x[0-9a-fA-F]+\s*=\s*(\w+)\b', lines[i])
         while '*/' not in lines[i]:
             i += 1
         i += 1
-        d = DEF.match(lines[i]) if i < len(lines) else None
-        if not d:
-            continue
+        if alias:
+            name = alias[1]
+        else:
+            d = DEF.match(lines[i]) if i < len(lines) else None
+            if not d:
+                continue
+            name = d[1]
         addr = int(m[1], 16) + t.src_bias
         f = t.funcs.setdefault(addr, Func(addr, 0, f'?{addr:x}', note='not in symbol table'))
         f.src = f'{path.relative_to(ROOT)}:{start + 1}'
-        f.src_name = d[1]
+        f.src_name = name
 
 
 def obj_path(t, c_file):
@@ -122,10 +140,13 @@ def compile_targets(targets):
     if not targets:
         return True
     for t in targets:
-        for c in sorted(t.src.rglob('*.c')):
+        for c in sorted(p for ext in SRC_EXT for p in t.src.rglob(ext)):
             o = obj_path(t, c)
             o.parent.mkdir(parents=True, exist_ok=True)
-            jobs.append([cc['cc'], *cc['cflags'], *t.cflags_extra, '-c', str(c.relative_to(ROOT)),
+            cpp = c.suffix == '.cpp'
+            jobs.append([cc['cxx'] if cpp else cc['cc'], *cc['cflags'],
+                         *(cc.get('cxxflags', []) if cpp else []), *t.cflags_extra, '-c',
+                         str(c.relative_to(ROOT)),
                          '-o', str(o.relative_to(ROOT))])
     script = ' ; '.join(' '.join(j) for j in jobs)
     native = shutil.which(cc['cc'])
@@ -177,6 +198,14 @@ def _obj_listing(o):
                 syms[m[3]] = (int(m[1], 16), int(m[2], 16))
         full = subprocess.run([tool('llvm-objdump'), '-d', '--no-show-raw-insn', str(o)],
                               capture_output=True, text=True).stdout.splitlines()
+        # C++: also index by demangled name without the parameter list
+        # ("umiTVAudio::setOutputType"), which is what src tags name.
+        mangled = [n for n in syms if n.startswith('_Z')]
+        if mangled:
+            dem = subprocess.run([tool('llvm-cxxfilt')], input='\n'.join(mangled),
+                                 capture_output=True, text=True).stdout.splitlines()
+            for m_, d in zip(mangled, dem):
+                syms.setdefault(d.split('(')[0], syms[m_])
         _objcache[key] = (syms, full)
     return _objcache[key]
 
@@ -189,8 +218,9 @@ def disasm_src(t, f):
         return None
     syms, full = _obj_listing(o)
     # GCC may emit a clone (foo.constprop.0, foo.isra.0, foo.part.0) instead of foo.
-    names = sorted((n for n in syms if n == f.src_name or n.startswith(f.src_name + '.')),
-                   key=lambda n: (n != f.src_name, n))
+    want = (f.src_name, f.name, f.name.split('(')[0])
+    names = sorted((n for n in syms if n in want or n.startswith(f.src_name + '.')),
+                   key=lambda n: (n not in want, n))
     if not names:
         return None
     a, size = syms[names[0]]

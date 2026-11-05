@@ -9,9 +9,9 @@
 00014e18	98	FUN_00014e18
 00014e80	302	_INIT_4
 00014ff0	44	_start
-00015024	40	FUN_00015024
-00015048	26	FUN_00015048
-00015074	34	FUN_00015074
+00015024	40	call_weak_fn
+00015048	26	deregister_tm_clones
+00015074	34	register_tm_clones
 000150a8	44	_FINI_0
 000150ec	1136	ConnectionManager::_headphoneStatusUpdateCallBack
 00015604	498	ConnectionManager::connect

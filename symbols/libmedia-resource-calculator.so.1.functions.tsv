@@ -2,9 +2,9 @@
 000136e4	34	_INIT_1
 00013718	62	_INIT_2
 00013768	34	_INIT_3
-0001379c	40	FUN_0001379c
-000137c0	26	FUN_000137c0
-000137ec	34	FUN_000137ec
+0001379c	40	call_weak_fn
+000137c0	26	deregister_tm_clones
+000137ec	34	register_tm_clones
 00013820	44	_FINI_0
 00013864	40	mrc::Resource::~Resource
 00013894	20	mrc::Resource::~Resource

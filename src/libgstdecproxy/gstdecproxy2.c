@@ -67,7 +67,11 @@ static GstStaticPadTemplate decproxy_src_template =
     GST_STATIC_CAPS ("audio/x-raw;audio/x-media;video/x-raw;video/x-raw(ANY)"));
 
 #define gst_decproxy_parent_class parent_class
+/* @0x13af4 = gst_decproxy_get_type_once */
+/* @0x15e5c = gst_decproxy_class_intern_init */
+/* @0x1602c = gst_decproxy_get_type */
 G_DEFINE_TYPE (GstDecProxy, gst_decproxy, GST_TYPE_BIN);
+/* @0x14648 = gst_event_unref (out-of-line copy of the inline from gstevent.h) */
 
 static void gst_decproxy_dispose (GObject * object);
 static void gst_decproxy_finalize (GObject * object);

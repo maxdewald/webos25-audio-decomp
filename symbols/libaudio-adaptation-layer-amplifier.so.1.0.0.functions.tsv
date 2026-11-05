@@ -22,9 +22,9 @@
 0002a808	98	FUN_0002a808
 0002a870	4468	FUN_0002a870
 0002bbec	34	_INIT_20
-0002bc20	40	FUN_0002bc20
-0002bc44	26	FUN_0002bc44
-0002bc70	34	FUN_0002bc70
+0002bc20	40	call_weak_fn
+0002bc44	26	deregister_tm_clones
+0002bc70	34	register_tm_clones
 0002bca4	44	_FINI_0
 0002bce8	4	AALAmpEsmtDrv::_drvAmpPwmOut
 0002bcec	4	AALAmpEsmtDrv::drvAmpSuspend

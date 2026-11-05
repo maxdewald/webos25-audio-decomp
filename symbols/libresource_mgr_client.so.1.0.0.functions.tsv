@@ -1,9 +1,9 @@
 000151f4	12	_DT_INIT
 0001599c	104	FUN_0001599c
 00015a04	318	_INIT_1
-00015bb8	40	FUN_00015bb8
-00015bdc	26	FUN_00015bdc
-00015c08	34	FUN_00015c08
+00015bb8	40	call_weak_fn
+00015bdc	26	deregister_tm_clones
+00015c08	34	register_tm_clones
 00015c3c	44	_FINI_0
 00015c80	162	FUN_00015c80
 00015d2c	236	uMediaServer::ResourceManagerClient::~ResourceManagerClient

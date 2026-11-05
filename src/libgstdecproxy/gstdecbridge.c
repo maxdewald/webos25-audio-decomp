@@ -70,6 +70,9 @@ static gboolean gst_dec_bridge_query (GstPad * pad, GstObject * parent,
     GstQuery * query);
 
 #define gst_dec_bridge_parent_class parent_class
+/* @0x12da8 = gst_dec_bridge_get_type_once */
+/* @0x12f0c = gst_dec_bridge_class_intern_init */
+/* @0x13424 = gst_dec_bridge_get_type */
 G_DEFINE_TYPE (GstDecBridge, gst_dec_bridge, GST_TYPE_ELEMENT);
 
 

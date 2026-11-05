@@ -206,12 +206,12 @@ extern guint               gst_lg_audio_render_signals[LAST_SIGNAL];
  * and the GStreamer category; the two levels are chosen independently.
  * line = __LINE__ of the original gstlgaudiosink.c, kept as evidence. */
 #define SINK_LOGM(mlvl, line, fmt, ...) do { \
-        if (*logmm_module_media_event.mask & (1u << (mlvl))) \
+        if (G_UNLIKELY (*logmm_module_media_event.mask & (1u << (mlvl)))) \
             logmm_printl (&logmm_module_media_event, (mlvl), __func__, (line), \
                           "<audio_sink> " fmt, ##__VA_ARGS__); \
     } while (0)
 #define SINK_GST(glvl, line, obj, fmt, ...) do { \
-        if ((glvl) <= _gst_debug_min) \
+        if (G_UNLIKELY ((glvl) <= _gst_debug_min)) \
             gst_debug_log (gst_lg_audio_render_debug, (glvl), LG_SINK_FILE, __func__, (line), \
                            (GObject *) (obj), fmt, ##__VA_ARGS__); \
     } while (0)

@@ -41,6 +41,8 @@ static gboolean plugin_init (GstPlugin * plugin)
   return TRUE;
 }
 
+/* @0x1a934 = gst_plugin_decproxy_get_desc */
+/* @0x1a940 = gst_plugin_decproxy_register */
 GST_PLUGIN_DEFINE (GST_VERSION_MAJOR,
     GST_VERSION_MINOR,
     decproxy,

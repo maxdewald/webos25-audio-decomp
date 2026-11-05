@@ -20,9 +20,9 @@
 00026408	38	_INIT_15
 0002643c	100	FUN_0002643c
 000264a4	242	_INIT_16
-000265f4	40	FUN_000265f4
-00026618	26	FUN_00026618
-00026644	34	FUN_00026644
+000265f4	40	call_weak_fn
+00026618	26	deregister_tm_clones
+00026644	34	register_tm_clones
 00026678	44	_FINI_0
 000266bc	910	DeviceCapability::parseAudioDefaults
 00026ad8	126	DeviceCapability::~DeviceCapability

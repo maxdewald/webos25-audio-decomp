@@ -7,9 +7,9 @@
 000236b4	64	FUN_000236b4
 00023844	80	boost::throw_exception<boost::bad_function_call>
 000238a8	146	_INIT_1
-0002396c	40	FUN_0002396c
-00023990	26	FUN_00023990
-000239bc	34	FUN_000239bc
+0002396c	40	call_weak_fn
+00023990	26	deregister_tm_clones
+000239bc	34	register_tm_clones
 000239f0	44	_FINI_0
 00023a34	14	uMediaServer::Pipeline::pipelineCmdEvent
 00023a44	236	FUN_00023a44

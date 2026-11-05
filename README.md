@@ -16,7 +16,7 @@ Source device: LG OLED42C27LA (C2), Rockhopper 10.3.1-3006, kernel 5.4.268-329.p
 |---|---|---|
 | `orig/` | Original files pulled from the TV, mirroring `/` (`usr/lib`, `usr/sbin`, `lib/firmware`, `boot`, `etc`) | hashes only |
 | `lg-opensource/` | LG's published source for the same release, for reference: `kdriver/` (audio kernel driver), `gstreamer/` (git repo incl. `gst-plugins-cool`/decproxy), `pulseaudio/`, `kernel-k25lp-5.4.268-292/` (build tree with `.config`, `System.map`, `vmlinux`). Older than the shipped build | no |
-| `src/<target>/` | Reconstructed C, one directory per original binary. `src/include/` holds shared types | yes |
+| `src/<target>/` | Reconstructed C, one directory per original binary. `src/include/` holds shared types; `src/include/gst-gen/` an ILP32 `glibconfig.h` for the GStreamer targets. `src/libgstdecproxy/` (LGPL-2.0) and `src/kernel/aud/` (GPL-2.0) start from LG's published source, adapted to the shipped binaries | yes |
 | `symbols/` | Function tables per target (`addr<TAB>size<TAB>name`, Ghidra addresses) and recovered DSP symbol tables | yes |
 | `evidence/<topic>/` | Per-topic reports (`findings.json`/`.txt`) with address anchors, plus the scripts and validators that produced them | yes |
 | `FINDINGS.md` | What the decompilation has answered so far, and what is still unknown | yes |
@@ -57,7 +57,11 @@ make validate                        # re-check every evidence report against or
   100% means the function is byte-for-byte equivalent.
 - objdiff is not used: its ARM backend stops at ARMv6K, and these targets are ARMv7
   Thumb-2 and Xtensa.
-- DSP targets (Xtensa) report coverage only, as no compiler for them exists.
+- DSP targets (Xtensa) and `kernel` (aarch64, LG's `aud` driver functions only) report
+  coverage only, as no matching compiler is set up for them.
+- Matching compares by address range, so GCC clones (`foo.constprop.0`) and functions
+  with inline jump tables are scored correctly. All ARM targets are built without stack
+  protector or `_FORTIFY_SOURCE`, like LG's build.
 - CI (`.github/workflows/progress.yml`) compiles `src/` and reports coverage on every push.
 
 ## Adding a function

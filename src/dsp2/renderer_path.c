@@ -31,9 +31,9 @@ struct aud_module_impl {
 struct aud_module {
     const char *name;
     const struct aud_module_impl *impl;  /* +0x0c */
-    bool  drop_output_data;              /* +0x94 property "drop-output-data" (bool) */
+    bool  drop_output_data;              /* +0x94 property "drop-output-data" (bool); Ghidra
+                                          * shows it as word index param_1+0x25 */
     bool  drop_output_meta;              /* +0x95 property "drop-output-meta" (bool) */
-    bool  drop_all;                      /* +0x25 word flag, also logged as drop */
     struct aud_event *first_event_out;   /* +0xa8 */
 };
 
@@ -47,7 +47,7 @@ extern void add_pending_obj_locked(struct aud_port *, void *obj);
 /* @0x600724d8 aud_module_push_data: where "drop-output-data" is applied. */
 int aud_module_push_data(struct aud_module *m, int port, void *data)
 {
-    if (m->drop_all) {
+    if (m->drop_output_data) {
         aud_object_put(data);                        /* "%s: drop output data" */
         return 0;
     }

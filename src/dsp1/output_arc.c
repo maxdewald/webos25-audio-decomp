@@ -1,196 +1,326 @@
 /*
  * dsp1 "output" module (instances output_arc / output_spdif / output_hp / output_speaker):
- * first-event handling, ES/HBR lane writers and eARC channel-status setup.
+ * first-event handling (codec id, writer choice, IEC channel status, restart,
+ * "output_status") and the buffer-controller lane writers (ES/HBR and PCM up/down-mix).
  * RECONSTRUCTION from lib/firmware/audio_a0_dsp1.bin
  *   sha256 8f4e6d88a21b8486f3e15a866a989281f5f9cea564b5767cee24ca01277ae2f4
  * Cadence HiFi (RG-2018.9), main segment linked at 0x60000000 (file offset 0x5b0).
- * Symbol table pairs are (func_ptr, name_ptr) -- verified by each function's own
- * logmm "__func__" string. Every op0=0xE/0xF FLIX bundle is 8 bytes and OPAQUE, so
- * conditions hidden inside bundles are marked [FLIX].
+ * Symbol table pairs are (func_ptr, name_ptr) at 0x602bfb08. Each was checked against
+ * the function's own logmm "__func__" string. Every op0=0xE/0xF FLIX bundle is 8 bytes.
+ * Branch bundles were decoded with tmp/a17/annot.py (18-bit target form, after
+ * evidence/dsp2-gain/flix_branch.py; 226/227 targets land on instruction starts).
+ * Conditions that depend on it are tagged [FLIX] with the bundle address.
  * Evidence: ../../decomp/audio_a0_dsp1.main_60000000.bin.c,
  *           ../../evidence/dsp1-out-event/out_event.lin.asm
+ * Corrections to the earlier version of this file: the ES writer test is
+ * channels == 2 -> cpy_es (not channels > 2). Channels, rate and bps are stored before
+ * the change test, which compares against the values from before the event. Codec
+ * strings are tried in firmware order. ARC 2-channel PCM uses cpy_00. Non-arc PCM uses
+ * the 9-entry in/out table. A zero pre-fill is queued on FIFO outputs. FIRST/LAST still
+ * reach aud_module_default_event.
  */
-#include <stdbool.h>
-#include <stdint.h>
 #include <string.h>
 #include "../include/lg_audio_policy.h"
+#include "out_module.h"
 
-struct out_cfg {                 /* module +0xf0 */
-    const char *name;            /* "output_arc", ... */
-    uint32_t    lane_stride;     /* +0x44: byte distance between the 4 I2S lane buffers */
-};
+/* ---- buffer-controller lane writers (m->bc_writer, called by fill_bc) ---------------
+ * dst_bytes is the BC byte count for lane 0. Lane k is at dst + k * cfg->bc_size. The
+ * return value is the number of SOURCE bytes consumed.
+ * ES writers take 16-bit IEC 61937 words and put each one, byte-swapped, into bits
+ * 8..23 of a 32-bit slot: (w & 0xff) << 16 | (w & 0xff00). Nothing is added: no Pa/Pb
+ * preamble, no burst padding, no validity or channel-status bits. The input must already
+ * be complete IEC 61937 bursts in big-endian word order.
+ * ------------------------------------------------------------------------------------ */
 
-struct out_module {
-    const char *name;
-    struct out_cfg *cfg;
-    int  (*writer)(struct out_module *, uint32_t *dst, const void *src, unsigned bytes); /* +0x130 */
-    int   channels;              /* +0x100 */
-    int   bits_per_sample;       /* +0x104 */
-    int   data_rate;             /* +0x110 */
-    bool  ch_mapping_lfe_c;      /* +0x118 */
-    bool  es;                    /* +0x164 */
-    int   codec;                 /* enum dsp1_out_codec */
-    int   acmod;
-};
-
-extern int  aud_event_value_get_int(void *ev, const char *key, int def);
-extern bool aud_event_value_get_bool(void *ev, const char *key, bool def);
-extern const char *aud_event_value_get_str(void *ev, const char *key, const char *def);
-extern void aud_event_value_set_int(void *ev, const char *key, int v);
-extern void aimc_raise_named_event(const char *name, const void *payload, int len);
-extern void out_stop(struct out_module *m);
-extern void out_start(struct out_module *m);
-extern void HAL_SetIEC1958ValidBit(int valid, int port, int x);
-extern void HAL_SetArcPcmMode(void);
-extern void HAL_SetSpdifEsMode(int data_rate);
-extern volatile uint32_t *aud_regs;           /* DAT_600e924c */
-extern volatile uint32_t *arc_lane_regs;      /* DAT_600e9248 */
-
-/* ---- lane writers (selected into m->writer) ------------------------------ */
-
-/* @0x60122a38 cpy_es8: 8 x 16-bit words -> 4 lanes x 2 slots, each word byte-swapped
- * into bits 8..23 ((w & 0xff) << 16 | (w & 0xff00)). The 8-channel HBR/ES path, so the
- * input must be IEC 61937 in big-endian 16-bit words. */
-static int cpy_es8(struct out_module *m, uint32_t *lane0, const uint16_t *src, unsigned bytes)
+static inline uint32_t es_slot(uint16_t w)
 {
-    uint32_t *l1 = (uint32_t *)((char *)lane0 + m->cfg->lane_stride);
-    uint32_t *l2 = (uint32_t *)((char *)l1 + m->cfg->lane_stride);
-    uint32_t *l3 = (uint32_t *)((char *)l2 + m->cfg->lane_stride);
-    unsigned frames = bytes >> 3;
-#define SW(w) ((uint32_t)((w) & 0xff) << 16 | ((w) & 0xff00))
-    for (unsigned f = 0; f < frames; f++, src += 8) {
-        lane0[2 * f] = SW(src[0]); lane0[2 * f + 1] = SW(src[1]);
-        l1[2 * f]    = SW(src[2]); l1[2 * f + 1]    = SW(src[3]);
-        l2[2 * f]    = SW(src[4]); l2[2 * f + 1]    = SW(src[5]);
-        l3[2 * f]    = SW(src[6]); l3[2 * f + 1]    = SW(src[7]);
-    }
-#undef SW
-    return (int)(frames << 4);
+    return (uint32_t)(w & 0xff) << 16 | (w & 0xff00);
 }
 
-/* @0x601229ac cpy_es: 2-channel byte-swapping ES writer (single lane). */
-static int cpy_es(struct out_module *m, uint32_t *dst, const uint16_t *src, unsigned bytes)
+static inline uint32_t *lane(struct out_module *m, void *dst, int k)
+{
+    return (uint32_t *)((uint8_t *)dst + (size_t)k * m->cfg->bc_size);
+}
+
+/* @0x601229ac cpy_es (functions.tsv: "output_status"): 2-channel ES, one lane, one
+ * 16-bit word per 32-bit slot. */
+int cpy_es(struct out_module *m, void *dst, const void *src, unsigned dst_bytes)
 {
     (void)m;
-    unsigned n = bytes >> 2;
-    for (unsigned i = 0; i < n * 2; i++)
-        dst[i] = (uint32_t)(src[i] & 0xff) << 16 | (src[i] & 0xff00);
+    uint32_t *d = dst;
+    const uint16_t *s = src;
+    unsigned n = dst_bytes >> 2;
+    for (unsigned i = 0; i < n; i++)
+        d[i] = es_slot(s[i]);
     return (int)(n << 1);
 }
 
-/* @0x60122af8: 8 x 32-bit PCM -> 4 lanes x 2 slots, unchanged. */
-extern int cpy_8(struct out_module *, uint32_t *, const void *, unsigned);
-/* @0x60122bf8: same, swapping C and LFE; out_event then sets "cap-ch-remap"=1. */
-extern int cpy_8_swap_c_lfe(struct out_module *, uint32_t *, const void *, unsigned);
-/* @0x60122f90: debug sink (AuiLogger_AppendData). */
-extern int cpy_00(struct out_module *, uint32_t *, const void *, unsigned);
-
-/* ---- eARC channel-status / lane-rate programming ------------------------- */
-
-/* @0x60121588. Writes the same lane code into 4 per-lane registers
- * (+0x134/+0x154/+0x174/+0x194) and sets bit1 in +0x130/+0x150/+0x170/+0x190.
- * Thresholds are literal-pool constants. Some branches cross [FLIX] bundles, so other
- * codes may exist; these are the visible ones. */
-void HAL_SetArcEsMode(int data_rate)
+/* @0x60122a38 cpy_es8 (functions.tsv: "output_spdif"): 8-channel HBR ES. Each 8-word
+ * frame goes to 4 lanes x 2 slots (words 0-1 lane 0, 2-3 lane 1, 4-5 lane 2, 6-7 lane 3). */
+int cpy_es8(struct out_module *m, void *dst, const void *src, unsigned dst_bytes)
 {
-    uint32_t code;
-    if (data_rate > 22049) {
-        if (data_rate > 88199)
-            code = (data_rate == 768000) ? 9 : 2;      /* 768 kHz HBR -> lane code 9 */
-        else
-            code = (data_rate <= 44100) ? 0 : 2;
-    } else {
-        code = (data_rate == 768) ? 9 : 2;            /* kHz-scaled caller */
+    uint32_t *l0 = lane(m, dst, 0), *l1 = lane(m, dst, 1);
+    uint32_t *l2 = lane(m, dst, 2), *l3 = lane(m, dst, 3);
+    const uint16_t *s = src;
+    unsigned frames = dst_bytes >> 3;
+    for (unsigned f = 0; f < frames; f++, s += 8) {
+        l0[2 * f] = es_slot(s[0]); l0[2 * f + 1] = es_slot(s[1]);
+        l1[2 * f] = es_slot(s[2]); l1[2 * f + 1] = es_slot(s[3]);
+        l2[2 * f] = es_slot(s[4]); l2[2 * f + 1] = es_slot(s[5]);
+        l3[2 * f] = es_slot(s[6]); l3[2 * f + 1] = es_slot(s[7]);
     }
-    for (int lane = 0; lane < 4; lane++) {
-        arc_lane_regs[(0x130 + lane * 0x20) / 4] |= 2;
-        arc_lane_regs[(0x134 + lane * 0x20) / 4] =
-            (arc_lane_regs[(0x134 + lane * 0x20) / 4] & 0x0ffffff0) | code;
-    }
+    return (int)(frames << 4);
 }
 
-/* ---- first-event handler ------------------------------------------------- */
-
-/* Inlined into out_event's first-event blocks. */
-static int codec_from_str(const char *c)
+/* @0x60122af8: 8 x 32-bit PCM -> 4 lanes x 2 slots, unchanged. */
+int cpy_8(struct out_module *m, void *dst, const void *src, unsigned dst_bytes)
 {
-    static const struct { const char *s; int id; } t[] = {
-        { "pcm", OUT_CODEC_PCM },        { "ac3", OUT_CODEC_AC3 },
-        { "eac3", OUT_CODEC_EAC3 },      { "aac", OUT_CODEC_AAC },
-        { "mat", OUT_CODEC_MAT },        { "dts_hd_ma", OUT_CODEC_DTS_MA },
-        { "dtsx_p1", OUT_CODEC_DTSX_P1 },{ "dtsx_p2", OUT_CODEC_DTSX_P2 },
-        { "dts_ma", OUT_CODEC_DTS_MA },  { "dts_hd", OUT_CODEC_DTS_HD },
-        { "dts", OUT_CODEC_DTS },
-    };
-    for (unsigned i = 0; i < sizeof(t) / sizeof(t[0]); i++)
-        if (strncmp(c, t[i].s, strlen(t[i].s)) == 0)
-            return t[i].id;
+    const uint32_t *s = src;
+    unsigned frames = dst_bytes >> 3;
+    for (unsigned f = 0; f < frames; f++, s += 8)
+        for (int k = 0; k < 4; k++) {
+            lane(m, dst, k)[2 * f]     = s[2 * k];
+            lane(m, dst, k)[2 * f + 1] = s[2 * k + 1];
+        }
+    return (int)(frames << 5);
+}
+
+/* @0x60122bf8: like cpy_8 but lane 1 gets words 3,2 (C and LFE swapped). */
+int cpy_8_swap_c_lfe(struct out_module *m, void *dst, const void *src, unsigned dst_bytes)
+{
+    const uint32_t *s = src;
+    unsigned frames = dst_bytes >> 3;
+    for (unsigned f = 0; f < frames; f++, s += 8) {
+        lane(m, dst, 0)[2 * f] = s[0]; lane(m, dst, 0)[2 * f + 1] = s[1];
+        lane(m, dst, 1)[2 * f] = s[3]; lane(m, dst, 1)[2 * f + 1] = s[2];
+        lane(m, dst, 2)[2 * f] = s[4]; lane(m, dst, 2)[2 * f + 1] = s[5];
+        lane(m, dst, 3)[2 * f] = s[6]; lane(m, dst, 3)[2 * f + 1] = s[7];
+    }
+    return (int)(frames << 5);
+}
+
+/* Interleaved single-lane up/down-mix: copy `keep` of `in` input words into an `out`-word
+ * frame and zero-fill the rest. Inlined into each cpy_IO writer. */
+static inline int remix(void *dst, const void *src, unsigned dst_bytes, int in, int out, int keep)
+{
+    uint32_t *d = dst;
+    const uint32_t *s = src;
+    unsigned frames = dst_bytes / (unsigned)(out * 4);
+    for (unsigned f = 0; f < frames; f++, d += out, s += in)
+        for (int i = 0; i < out; i++)
+            d[i] = i < keep ? s[i] : 0;
+    return (int)(frames * (unsigned)in * 4);
+}
+
+/* @0x60122cf4: 2 -> 4 */
+int cpy_24(struct out_module *m, void *dst, const void *src, unsigned n)
+{ (void)m; return remix(dst, src, n, 2, 4, 2); }
+/* @0x60122d64: 2 -> 8 */
+int cpy_28(struct out_module *m, void *dst, const void *src, unsigned n)
+{ (void)m; return remix(dst, src, n, 2, 8, 2); }
+/* @0x60122dd0: 4 -> 2 (L/R only) */
+int cpy_42(struct out_module *m, void *dst, const void *src, unsigned n)
+{ (void)m; return remix(dst, src, n, 4, 2, 2); }
+/* @0x60122e2c: 4 -> 8 */
+int cpy_48(struct out_module *m, void *dst, const void *src, unsigned n)
+{ (void)m; return remix(dst, src, n, 4, 8, 4); }
+/* @0x60122ea4: 8 -> 2 (L/R only) */
+int cpy_82(struct out_module *m, void *dst, const void *src, unsigned n)
+{ (void)m; return remix(dst, src, n, 8, 2, 2); }
+/* @0x60122f30: 8 -> 4 (first 4) */
+int cpy_84(struct out_module *m, void *dst, const void *src, unsigned n)
+{ (void)m; return remix(dst, src, n, 8, 4, 4); }
+
+/* @0x60122f90: plain memcpy (same in/out layout). */
+int cpy_00(struct out_module *m, void *dst, const void *src, unsigned dst_bytes)
+{
+    (void)m;
+    memcpy(dst, src, dst_bytes);
+    return (int)dst_bytes;
+}
+
+/* ---- first-event handler ------------------------------------------------------------ */
+
+/* Inlined ceil(log2(x)) used for both stride shifts. */
+static inline int ceil_log2(int x)
+{
+    int n = 0;
+    if (x > 0)
+        x -= 1;
+    while (x) {
+        n++;
+        x >>= 1;
+    }
+    return n;
+}
+
+/* Inlined strncmp ladder (0x60123982..0x60123e36). Lengths are the literal lengths, so
+ * these are prefix matches. "dts_hd_ma" is tried before "dts_ma"/"dts_hd"/"dts", so
+ * the longest name wins. Anything else stays PCM (0). There is no DTS handling beyond
+ * this label: the payload goes through cpy_es/cpy_es8 like any other ES. */
+static inline int out_codec_from_str(const char *c)
+{
+    if (!strncmp(c, "pcm", 3))       return OUT_CODEC_PCM;
+    if (!strncmp(c, "ac3", 3))       return OUT_CODEC_AC3;
+    if (!strncmp(c, "eac3", 4))      return OUT_CODEC_EAC3;
+    if (!strncmp(c, "aac", 3))       return OUT_CODEC_AAC;
+    if (!strncmp(c, "mat", 3))       return OUT_CODEC_MAT;
+    if (!strncmp(c, "dts_hd_ma", 9)) return OUT_CODEC_DTS_MA;      /* 7 */
+    if (!strncmp(c, "dtsx_p1", 7))   return OUT_CODEC_DTSX_P1;     /* 8 */
+    if (!strncmp(c, "dtsx_p2", 7))   return OUT_CODEC_DTSX_P2;     /* 9 */
+    if (!strncmp(c, "dts_ma", 6))    return OUT_CODEC_DTS_MA;      /* 7 */
+    if (!strncmp(c, "dts_hd", 6))    return OUT_CODEC_DTS_HD;      /* 6 */
+    if (!strncmp(c, "dts", 3))       return OUT_CODEC_DTS;         /* 5 */
     return OUT_CODEC_PCM;
 }
 
-/* @0x60123814 out_event (+ synthetic blocks 0x601238f4 .. 0x60123de2).
- * Event type 1 = FIRST, 2 = LAST, 0xd = custom ("is_first_data"). */
-int out_event(struct out_module *m, void *port, void *ev, int type)
+struct out_pcm_map { out_bc_writer fn; int in_ch, out_ch; };
+
+/* @0x600067f0 (copied to the stack per event): writer per (input channels, output
+ * slots). Used for every output except output_arc. */
+static const struct out_pcm_map out_pcm_map[9] = {
+    { cpy_00, 2, 2 }, { cpy_24, 2, 4 }, { cpy_28, 2, 8 },
+    { cpy_42, 4, 2 }, { cpy_00, 4, 4 }, { cpy_48, 4, 8 },
+    { cpy_82, 8, 2 }, { cpy_84, 8, 4 }, { cpy_00, 8, 8 },
+};
+
+/* 16-byte "output_status" payload (sp+0x20 in out_event). Read by the kernel's
+ * _cb_output_status. */
+struct out_status_msg {
+    int32_t codec;      /* enum dsp1_out_codec 0..9 */
+    int32_t channels;
+    int32_t data_rate;
+    int32_t acmod;
+};
+
+/* @0x60123814 out_event. Event types: 1 = FIRST, 2 = LAST, 0xd = custom ("is_first_data").
+ * FIRST and LAST are also passed on to aud_module_default_event. Custom events are
+ * consumed. */
+int out_event(struct out_module *m, struct aud_port *port, struct aud_event *ev)
 {
-    (void)port;
-    if (type == 1) {
+    int old_codec = m->codec, old_rate = m->data_rate;
+    int old_ch = m->channels, old_acmod = m->acmod;
+    int type = ev->type;
+
+    if (type == AUD_EVENT_FIRST) {                    /* [FLIX] 0x60123830 beqi 1 */
+        struct out_status_msg st = { OUT_CODEC_PCM, 0, 0, 0 };
         const char *codec = aud_event_value_get_str(ev, "codec", "pcm");
-        int ch    = aud_event_value_get_int(ev, "channels", 2);
-        int rate  = aud_event_value_get_int(ev, "data-rate", 48000);
-        int acmod = aud_event_value_get_int(ev, "acmod", 2);
+        st.channels  = aud_event_value_get_int(ev, "channels", 2);
+        st.data_rate = aud_event_value_get_int(ev, "data-rate", 48000);
+        st.acmod     = aud_event_value_get_int(ev, "acmod", 2);
         m->es               = aud_event_value_get_bool(ev, "es", false);
         m->ch_mapping_lfe_c = aud_event_value_get_bool(ev, "ch-mapping-lfe-c", false);
+        m->channels         = st.channels;
         m->bits_per_sample  = aud_event_value_get_int(ev, "bits-per-sample", 32);
-        m->channels = ch;
-        m->data_rate = rate;
+        m->latency_us       = 0;
+        m->data_rate        = st.data_rate;
 
-        int new_codec = OUT_CODEC_PCM;
-        if (!m->es) {
-            if (strcmp(m->name, "output_spdif") == 0) {
-                aud_regs[0x324 / 4] &= ~1u;
-                aud_regs[0x330 / 4] &= ~2u;
-                aud_regs[0x334 / 4] = (aud_regs[0x334 / 4] & ~0xfu) | 2;
-            } else if (strcmp(m->name, "output_arc") == 0) {
-                HAL_SetIEC1958ValidBit(0, 5, 0);
+        if (m->es) {
+            /* Codec is only parsed for ES. */
+            st.codec = out_codec_from_str(codec);
+            /* [FLIX] 0x6012399b beqi channels, 2: 2 -> one lane, anything else -> 4 lanes. */
+            m->bc_writer = m->channels == 2 ? cpy_es : cpy_es8;
+            if (strncmp(m->name, "output_spdif", 12) == 0) {
+                REG(AUD_REGS, 0x324) |= 1;            /* S/PDIF validity = non-audio */
+                HAL_SetSpdifEsMode(st.data_rate);
+            } else if (strncmp(m->name, "output_arc", 10) == 0) {
+                HAL_SetIEC1958ValidBit(1, 5);         /* eARC validity = non-audio */
+                HAL_SetArcEsMode(st.data_rate);       /* 768000 -> fs code 9 (HBR) */
+            }
+            m->stride_shift = ceil_log2(m->channels * m->bits_per_sample / 8);
+            m->output_stride_shift = ceil_log2(m->stride_ch * 32 / 8);
+            /* "%8s: start %s, codec %d, %dch, %drate, %dbpp, stride_shift %d, output_stride_shift %d" */
+        } else {
+            bool is_arc = false;
+            if (strncmp(m->name, "output_spdif", 12) == 0) {
+                REG(AUD_REGS, 0x324) &= ~1u;
+                REG(AUD_REGS, 0x330) &= ~2u;
+                REG(AUD_REGS, 0x334) = (REG(AUD_REGS, 0x334) & ~0xfu) | 2;
+            } else if (strncmp(m->name, "output_arc", 10) == 0) {
+                HAL_SetIEC1958ValidBit(0, 5);
                 HAL_SetArcPcmMode();
-                /* ARC PCM keeps C/LFE order only if the producer already did. */
-                if (m->ch_mapping_lfe_c) {
-                    m->writer = cpy_8;
+            }
+            m->stride_shift = ceil_log2(m->channels * m->bits_per_sample / 8);
+            m->output_stride_shift = ceil_log2(m->stride_ch * 32 / 8);
+            is_arc = strncmp(m->name, "output_arc", 10) == 0;
+
+            if (is_arc) {
+                if (m->channels == 2) {               /* [FLIX] 0x60123c25 beqi 2 */
+                    m->bc_writer = cpy_00;
+                } else if (m->ch_mapping_lfe_c) {
+                    m->bc_writer = cpy_8;
                 } else {
-                    m->writer = cpy_8_swap_c_lfe;
+                    m->bc_writer = cpy_8_swap_c_lfe;
                     aud_event_value_set_int(ev, "cap-ch-remap", 1);
                 }
             } else {
-                m->writer = cpy_00;
+                m->bc_writer = NULL;
+                for (int i = 0; i < 9; i++) {
+                    if (out_pcm_map[i].in_ch == m->channels &&
+                        (out_pcm_map[i].out_ch & m->stride_ch)) {   /* [FLIX] 0x60123d23 bany */
+                        m->bc_writer = out_pcm_map[i].fn;
+                        break;
+                    }
+                }
+                if (!m->bc_writer) {
+                    /* "%8s: unknown in/out channel. %d/%d" */
+                    m->bc_writer = cpy_00;
+                }
             }
-        } else {
-            new_codec = codec_from_str(codec);
-            /* [FLIX] chooses between the 8-ch HBR writer and the 2-ch writer. */
-            m->writer = (ch > 2) ? (void *)cpy_es8 : (void *)cpy_es;
-            if (strcmp(m->name, "output_spdif") == 0) {
-                aud_regs[0x324 / 4] |= 1;
-                HAL_SetSpdifEsMode(rate);
-            } else if (strcmp(m->name, "output_arc") == 0) {
-                HAL_SetIEC1958ValidBit(1, 5, 0);       /* non-audio */
-                HAL_SetArcEsMode(rate);
+            /* "%8s: start %s, %dch, %dbpp, stride_shift %d, output_stride_shift %d" */
+        }
+
+        m->codec = st.codec;
+        m->acmod = st.acmod;
+
+        /* Restart on codec / rate / channel change, or an acmod change while PCM. */
+        bool changed = st.codec != old_codec || st.data_rate != old_rate ||
+                       st.channels != old_ch ||
+                       (st.acmod != old_acmod && st.codec == OUT_CODEC_PCM);
+        if (changed) {
+            out_stop(m);
+            out_start(m);
+        }
+
+        if (m->cfg->bc_size == 0) {
+            /* FIFO output: top the queue up with silence. */
+            uint32_t ps = irq_save();
+            int zero = m->max_len - m->queued;
+            irq_restore(ps);
+            /* "%8s: max %d, queued %d, zero %d" */
+            if (zero >= 1) {                          /* [FLIX] 0x60123d78 blti 1 */
+                struct aud_data *z = aud_data_new_zero((unsigned)zero << m->stride_shift);
+                /* "%8s: zero_data %p, stride_shift %d" */
+                if (z)
+                    out_chain(port, z);
             }
         }
 
-        /* Restart only if codec, data-rate, channels or acmod changed. */
-        if (new_codec != m->codec || rate != m->data_rate || ch != m->channels ||
-            (acmod != m->acmod && new_codec == OUT_CODEC_PCM)) {
-            out_stop(m);
-            out_start(m);
-            struct { int codec, channels, data_rate, acmod; } st = { new_codec, ch, rate, acmod };
-            if (!strcmp(m->name, "output_spdif") || !strcmp(m->name, "output_arc"))
-                aimc_raise_named_event("output_status", &st, sizeof(st));
-        }
-        m->codec = new_codec;
-        m->acmod = acmod;
-        /* No preamble is generated: ES input must already be complete IEC 61937 bursts. */
-    } else if (type == 2) {
-        out_stop(m);
-        aimc_raise_named_event("last", NULL, 0);
+        if (changed && (strncmp(m->name, "output_spdif", 12) == 0 ||
+                        strncmp(m->name, "output_arc", 10) == 0))
+            aimc_raise_named_event(m->aimc_ctx, m->aimc_id, "output_status", &st, sizeof(st));
+        type = ev->type;
     }
+
+    if (type == AUD_EVENT_LAST) {
+        /* "%8s: stop" */
+        m->latency_us = 0;
+        out_stop(m);
+        aimc_raise_named_event(m->aimc_ctx, m->aimc_id, "last", NULL, 0);
+        type = ev->type;
+    }
+
+    if (type != AUD_EVENT_CUSTOM)
+        return aud_module_default_event(m, port, ev);
+
+    /* "%8s: received custom event" */
+    if (aud_event_has_name(ev, "is_first_data")) {
+        /* "%8s: get is_first_data event" */
+        m->first_data = true;
+        m->irq_time = 0;
+        m->write_time = 0;
+        m->first_write_time = 0;
+    }
+    aud_object_put(ev);
     return 0;
 }

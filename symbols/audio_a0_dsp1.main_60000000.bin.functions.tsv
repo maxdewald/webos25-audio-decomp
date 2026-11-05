@@ -4691,7 +4691,7 @@
 60121935	4	write_es__blk_60121935
 6012193c	202	write_4ch
 60121a02	4	write_4ch__blk_60121a02
-60121a0c	166	out_stop
+60121a0c	166	write_8ch
 60121ab2	135	out_stop__blk_60121ab2
 60121b39	135	out_stop__blk_60121b39
 60121bc0	4	out_stop__blk_60121bc0
@@ -4752,8 +4752,8 @@
 6012292e	9	out_start__blk_6012292e
 60122937	9	out_start__blk_60122937
 60122940	104	out_stop
-601229ac	139	output_status
-60122a38	189	output_spdif
+601229ac	139	cpy_es
+60122a38	189	cpy_es8
 60122af8	253	cpy_8
 60122bf8	251	cpy_8_swap_c_lfe
 60122cf4	110	cpy_24

@@ -3,14 +3,17 @@
 #   src             reconstructed C; functions are tagged "/* @0x<addr> ... */"
 #   image_bias      Ghidra address minus raw file VA (ARM ELF: 0x10000)
 #   src_addr_bias   added to src tags that use raw VAs instead of Ghidra addresses
+#   cflags_extra    compiler flags appended for this target only
 
 [compiler]
 # Same GCC as the shipped userspace (.comment "GCC: (GNU) 11.4.0"), ARMv7-A Thumb-2,
 # soft-float EABI5. Built from tools/toolchain/Dockerfile.
 image = "webos25-decomp-gcc"
 cc = "arm-linux-gnueabi-gcc"
+# Ubuntu's GCC enables -fstack-protector-strong and _FORTIFY_SOURCE by default; LG's
+# build does not (no __stack_chk_fail/__*_chk imports except libkadaptor/libAudioResources).
 cflags = ["-O2", "-mthumb", "-march=armv7-a", "-mfpu=neon", "-mfloat-abi=softfp",
-          "-fPIC", "-Wall", "-Isrc/include"]
+          "-fPIC", "-Wall", "-fno-stack-protector", "-U_FORTIFY_SOURCE", "-Isrc/include"]
 
 [[target]]
 name = "libumi"
@@ -19,17 +22,13 @@ symbols = "symbols/libumi.so.1.0.0.functions.tsv"
 src = "src/libumi"
 
 [[target]]
-name = "audiod"
-binary = "orig/usr/sbin/audiod"
-symbols = "symbols/audiod.functions.tsv"
-src = "src/audiod"
-
-[[target]]
 name = "libgstlgaudiosink"
 binary = "orig/usr/lib/gstreamer-1.0/libgstlgaudiosink.so"
 symbols = "symbols/libgstlgaudiosink.so.functions.tsv"
 src = "src/libgstlgaudiosink"
 src_addr_bias = 0x10000
+cflags_extra = ["-Isrc/include/gst-gen", "-isystem", "/usr/include/glib-2.0",
+                "-isystem", "/usr/include/gstreamer-1.0"]
 
 [[target]]
 name = "starfish-media-pipeline"
@@ -57,10 +56,22 @@ symbols = "symbols/umediaserver.functions.tsv"
 name = "libgstlgaudiodec"
 binary = "orig/usr/lib/gstreamer-1.0/libgstlgaudiodec.so"
 symbols = "symbols/libgstlgaudiodec.so.functions.tsv"
+src = "src/libgstlgaudiodec"
+# Flags from this binary's DW_AT_producer (no -fvisibility=hidden / -fno-strict-aliasing,
+# unlike decproxy). glib/gst headers as for libgstdecproxy.
+cflags_extra = ["-mtune=cortex-a9", "-funwind-tables", "-Isrc/include/gst-gen",
+                "-isystem", "/usr/include/glib-2.0", "-isystem", "/usr/include/gstreamer-1.0"]
 
 [[target]]
 name = "libgstdecproxy"
 binary = "orig/usr/lib/gstreamer-1.0/libgstdecproxy.so"
+symbols = "symbols/libgstdecproxy.so.functions.tsv"
+src = "src/libgstdecproxy"
+# Flags from the binary's DW_AT_producer. glib/gst headers come from the toolchain's
+# Ubuntu dev packages; src/include/gst-gen/glibconfig.h makes them ILP32.
+cflags_extra = ["-mtune=cortex-a9", "-fvisibility=hidden", "-fno-strict-aliasing",
+                "-funwind-tables", "-Isrc/include/gst-gen", "-isystem", "/usr/include/glib-2.0",
+                "-isystem", "/usr/include/gstreamer-1.0"]
 
 [[target]]
 name = "libkadaptor"
@@ -68,8 +79,22 @@ binary = "orig/usr/lib/libkadaptor.so.2.0.1"
 symbols = "symbols/libkadaptor.so.2.0.1.functions.tsv"
 
 [[target]]
+name = "libaudcommon"
+binary = "orig/usr/lib/libaudcommon.so.1.0.0"
+symbols = "symbols/libaudcommon.so.1.0.0.functions.tsv"
+src = "src/libaudcommon"
+
+[[target]]
+name = "libaabase"
+binary = "orig/usr/lib/libaabase.so.1.0.0"
+symbols = "symbols/libaabase.so.1.0.0.functions.tsv"
+src = "src/libaabase"
+
+[[target]]
 name = "libaa"
 binary = "orig/usr/lib/libaa.so.2.0.0"
+symbols = "symbols/libaa.so.2.0.0.functions.tsv"
+src = "src/libaa"
 
 [[target]]
 name = "libpf"
@@ -189,12 +214,13 @@ binary = "orig/lib/firmware/audio_a0_dsp2.bin"
 symbols = "symbols/audio_a0_dsp2.main_60000000.bin.functions.tsv"
 src = "src/dsp2"
 
-[[target]]
-name = "dsp3"
-arch = "xtensa"
-binary = "orig/lib/firmware/audio_a0_dsp3.bin"
-
+# LG audio driver ("aud") inside the kernel Image: only functions whose names appear in
+# LG's GPL kdriver/core/aud renderer/block_manager/mixer/output/driver/aapi_media/
+# alsa_sndout.c and hal/o22 eARC (addresses and sizes from the shipped kallsyms).
+# Coverage only.
 [[target]]
 name = "kernel"
 arch = "aarch64"
 binary = "orig/boot/Image-5.4.268-329.decompressed"
+symbols = "symbols/kernel-aud.functions.tsv"
+src = "src/kernel/aud"

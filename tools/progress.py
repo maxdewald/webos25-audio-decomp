@@ -48,6 +48,7 @@ class Target:
     src: Path | None
     image_bias: int
     src_bias: int
+    cflags_extra: list = field(default_factory=list)
     funcs: dict = field(default_factory=dict)
 
     @property
@@ -64,7 +65,8 @@ def load_targets():
             symbols=ROOT / t.get('symbols', f'symbols/{t["name"]}.elf.tsv'),
             src=ROOT / t['src'] if 'src' in t else None,
             image_bias=t.get('image_bias', 0x10000 if arch == 'arm' else 0),
-            src_bias=t.get('src_addr_bias', 0)))
+            src_bias=t.get('src_addr_bias', 0),
+            cflags_extra=t.get('cflags_extra', [])))
     for t in out:
         if t.symbols.is_file():
             for line in t.symbols.read_text().splitlines():
@@ -123,7 +125,7 @@ def compile_targets(targets):
         for c in sorted(t.src.rglob('*.c')):
             o = obj_path(t, c)
             o.parent.mkdir(parents=True, exist_ok=True)
-            jobs.append([cc['cc'], *cc['cflags'], '-c', str(c.relative_to(ROOT)),
+            jobs.append([cc['cc'], *cc['cflags'], *t.cflags_extra, '-c', str(c.relative_to(ROOT)),
                          '-o', str(o.relative_to(ROOT))])
     script = ' ; '.join(' '.join(j) for j in jobs)
     native = shutil.which(cc['cc'])
@@ -142,6 +144,8 @@ def normalise(text):
         if not m or 'R_ARM_' in m[1]:
             continue
         s = m[1].split(' @ ')[0]
+        if re.search(r'(^|\s)\.(word|short|byte|long)\s', s + ' '):
+            continue    # literal pools / jump-table data, not instructions
         s = re.sub(r'0x[0-9a-f]+ <[^>]*>', '<target>', s)
         s = re.sub(r'\[pc, #-?0x[0-9a-f]+\]', '[pc, #lit]', s)
         s = re.sub(r'^blx\b', 'bl', s)
@@ -158,15 +162,44 @@ def disasm_orig(t, f):
     return normalise(r.stdout)
 
 
+_objcache = {}
+
+
+def _obj_listing(o):
+    """(symbol -> (addr, size), full disassembly lines) for one object, cached by mtime."""
+    key = (o, o.stat().st_mtime)
+    if key not in _objcache:
+        syms = {}
+        for l in subprocess.run([tool('llvm-objdump'), '-t', str(o)],
+                                capture_output=True, text=True).stdout.splitlines():
+            m = re.match(r'([0-9a-f]+) .*F \.text\S*\s+([0-9a-f]+) (\S+)', l)
+            if m:
+                syms[m[3]] = (int(m[1], 16), int(m[2], 16))
+        full = subprocess.run([tool('llvm-objdump'), '-d', '--no-show-raw-insn', str(o)],
+                              capture_output=True, text=True).stdout.splitlines()
+        _objcache[key] = (syms, full)
+    return _objcache[key]
+
+
 def disasm_src(t, f):
+    """Instructions of f in its object, by address range: --disassemble-symbols stops at
+    the first inline jump table, which under-scores functions with a switch."""
     o = obj_path(t, ROOT / f.src.split(':')[0])
     if not o.is_file():
         return None
-    r = subprocess.run([tool('llvm-objdump'), '-d', '--no-show-raw-insn',
-                        f'--disassemble-symbols={f.src_name}', str(o)],
-                       capture_output=True, text=True)
-    insns = normalise(r.stdout)
-    return insns or None
+    syms, full = _obj_listing(o)
+    # GCC may emit a clone (foo.constprop.0, foo.isra.0, foo.part.0) instead of foo.
+    names = sorted((n for n in syms if n == f.src_name or n.startswith(f.src_name + '.')),
+                   key=lambda n: (n != f.src_name, n))
+    if not names:
+        return None
+    a, size = syms[names[0]]
+    out = []
+    for l in full:
+        m = re.match(r'\s*([0-9a-f]+):', l)
+        if m and a <= int(m[1], 16) < a + size:
+            out.append(l)
+    return normalise('\n'.join(out)) or None
 
 
 def score(t):

@@ -60,6 +60,7 @@ class Target:
     src_bias: int
     cflags_extra: list = field(default_factory=list)
     funcs: dict = field(default_factory=dict)
+    match_status: str = 'not measured'
 
     @property
     def has_binary(self):
@@ -271,6 +272,7 @@ def summary(t):
         'matching_functions': sum(1 for f in scored if f.match == 100.0),
         'match_pct': round(weighted / total, 3) if total and scored else None,
         'symbols': bool(t.funcs),
+        'match_status': t.match_status,
     }
 
 
@@ -280,10 +282,18 @@ def bar(pct, width=20):
 
 
 def score_all(targets):
-    ok = compile_targets([t for t in targets if t.arch == 'arm' and t.src])
+    ok = True
     for t in targets:
-        if t.arch == 'arm' and t.src and t.has_binary:
-            score(t)
+        if t.arch != 'arm' or not t.src or not t.has_binary:
+            continue
+        for f in t.funcs.values():
+            f.match = None
+        if not compile_targets([t]):
+            t.match_status = 'build failed'
+            ok = False
+            continue
+        score(t)
+        t.match_status = 'measured'
     return ok
 
 
@@ -401,10 +411,15 @@ def progress_svg(rows):
             out.append(f'<rect class="match" x="{BX}" y="{y + 10}" '
                        f'width="{max(BW * m / 100, 3):.1f}" height="14" rx="7"/>')
         out.append(f'<text class="pct" x="{BX + BW + 16}" y="{y + 22}">{c:.1f}%</text>')
+        match_text = r['arch']
+        if arm:
+            match_text = f'{m:.1f}% match' if m is not None else r.get('match_status', 'not measured')
         out.append(f'<text class="path" x="{BX + BW + 16}" y="{y + 38}">'
-                   f'{f"{m:.1f}% match" if arm and m is not None else r["arch"]}</text>')
+                   f'{escape(match_text)}</text>')
     y = h - 26
-    for x, cls, label in ((PAD, 'match', 'matches original instructions'),
+    match_label = ('matches original instructions' if any(r['match_pct'] is not None for r in rows)
+                   else 'instruction match not measured')
+    for x, cls, label in ((PAD, 'match', match_label),
                           (PAD + 230, 'cov', 'reconstructed (ARM)'),
                           (PAD + 400, 'dsp', 'reconstructed (Xtensa / aarch64, no matching compiler)')):
         out += [f'<rect class="{cls}" x="{x}" y="{y - 10}" width="12" height="12" rx="3"/>',
@@ -415,8 +430,8 @@ def progress_svg(rows):
 
 def cmd_svg(args):
     targets = [t for t in load_targets() if t.src and any(f.src for f in t.funcs.values())]
-    if not args.no_match:
-        score_all(targets)
+    if not args.no_match and not score_all(targets):
+        print('Warning: instruction matching unavailable for failed targets; see chart labels.', file=sys.stderr)
     rows = [summary(t) | {'path': '/' + str(t.binary.relative_to(ROOT / 'orig'))} for t in targets]
     rows.sort(key=lambda r: (-r['coverage_pct'], -(r['match_pct'] or 0)))
     out = ROOT / 'progress.svg'

@@ -1,6 +1,6 @@
 PY ?= python3
 
-.PHONY: status diff todo progress toolchain verify symbols opensource decomp-arm decomp-dsp
+.PHONY: status diff todo progress toolchain verify symbols opensource public-sources test-libpf decomp-arm decomp-dsp
 
 status:            ## coverage + instruction match per target
 	$(PY) tools/progress.py status
@@ -25,6 +25,12 @@ symbols:           ## ELF symbol tables for targets without a Ghidra export
 
 opensource:        ## LG's GPL/LGPL source for this firmware into lg-opensource/
 	tools/fetch-opensource.sh lg-opensource
+
+public-sources:   ## pinned Boost/RapidJSON dependencies and LG reference source
+	$(PY) tools/fetch-public-sources.py
+
+test-libpf:        ## host sanitizer tests; requires public-sources and native GLib
+	$(PY) tools/test_libpf.py
 
 decomp-arm:        ## full Ghidra export of every ARM target (slow)
 	tools/decomp-arm-all.sh

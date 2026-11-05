@@ -7,9 +7,10 @@
 
 #include <stdint.h>
 #include <stddef.h>
-#include <string.h>
+#include <stdbool.h>
 
-typedef void code;
+/* Ghidra's "code" is the type of an unknown function: calls through code* work. */
+typedef uint32_t code();
 
 /* "x._A_B_": B bytes of x starting at byte A (little-endian), as an lvalue. */
 #define PIECE(x, a, b) (*(PIECE_T##b *)((char *)&(x) + (a)))
@@ -17,6 +18,9 @@ typedef uint8_t PIECE_T1;
 typedef uint16_t PIECE_T2;
 typedef uint32_t PIECE_T3;
 typedef uint32_t PIECE_T4;
+typedef uint64_t PIECE_T5;
+typedef uint64_t PIECE_T6;
+typedef uint64_t PIECE_T7;
 typedef uint64_t PIECE_T8;
 
 #define CONCAT11(h, l) ((uint16_t)(((uint16_t)(uint8_t)(h) << 8) | (uint8_t)(l)))
@@ -53,7 +57,10 @@ typedef uint64_t PIECE_T8;
 #define VectorSignedToFloat(x, rm) ((float)(int32_t)(x))
 #define VectorUnsignedToFloat(x, rm) ((float)(uint32_t)(x))
 
-#define builtin_strncpy(d, s, n) memcpy((d), (s), (n))
+/* reinterpret the bits of a 4-byte local as float */
+#define PUN_F(x) (__extension__({ __typeof__(x) _v = (x); float _f; __builtin_memcpy(&_f, &_v, 4); _f; }))
+
+#define builtin_strncpy(d, s, n) __builtin_memcpy((d), (s), (n))
 #define halt_baddata() __builtin_trap()
 #define halt_unimplemented() __builtin_trap()
 

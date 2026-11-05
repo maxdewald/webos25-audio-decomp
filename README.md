@@ -4,20 +4,19 @@ Clean-room decompilation of the LG webOS 25 audio output path, from the media pi
 down to the eARC output on the DSP. Firmware: LG OLED42C27LA (C2), Rockhopper
 10.3.1-3006, kernel 5.4.268-329.ptl4tv.5.
 
-> The original binaries are LG proprietary and are never committed. Git tracks only
-> their hashes ([orig/SHA256SUMS](orig/SHA256SUMS)). `src/` is reconstructed C, not LG
-> source.
+> Original proprietary binaries are never committed; only their hashes are tracked
+> ([orig/SHA256SUMS](orig/SHA256SUMS)). `src/` contains reconstructions; public reference
+> sources and their license notices stay under `lg-opensource/`.
 
 ![Decompilation progress per original file](progress.svg)
-
-Folder layout and commit rules: [AGENTS.md](AGENTS.md).
 
 ## Setup
 
 ```sh
 make verify        # orig/ holds the expected files (pull them from a rooted TV)
 make toolchain     # GCC 11.4.0 ARMv7-A Thumb-2 image, the compiler LG used
-make opensource    # optional: LG's GPL/LGPL source into lg-opensource/ (~4.4 GB download)
+make public-sources # pinned public C++ dependencies and LG reference source
+make opensource     # optional: LG's firmware GPL/LGPL source (~4.4 GB)
 ```
 
 To regenerate `build/decomp/`: Ghidra 12.2 with

@@ -24,17 +24,6 @@
 
 #pragma GCC diagnostic ignored "-Wformat-zero-length"
 
-/* Same as libpf.h PF_LOG_ERROR. Local copy because PF_LOG_LEVEL's `level` parameter
- * also substitutes into `ctx->level`. */
-#define DP_LOG_ERROR(log, file, func, line, ...)                                       \
-    do {                                                                               \
-        char cp_[0x200], kv_[0x200];                                                   \
-        PF_CODE_POINT(cp_, (log).name, file, func, line);                              \
-        snprintf(kv_, 0x200, "{\"%s\":\"%s\"}", "CODE_POINT", cp_);                    \
-        snprintf(cp_, 0x200, __VA_ARGS__);                                             \
-        if ((log).ctx == NULL || (log).ctx->level > 2)                                 \
-            PmLogString_((log).ctx, 3, "SFPIPELINE", kv_, cp_);                        \
-    } while (0)
 #include <memory>
 #include <utility>
 #include <typeinfo>
@@ -44,84 +33,7 @@
     ("/usr/src/debug/lib32-player-factory-libs/1.0.0-637.ptl4tv.30-r41/git/player-factory/" \
      "internal/dvr/dvrplayer.cpp" + 0x61)
 
-/* Minimal boost 1.78 shared_ptr (sp_counted_base_gcc_atomic): same layout and ABI. */
-namespace boost {
-namespace detail {
-class sp_counted_base {
-    int use_count_;
-    int weak_count_;
-
-public:
-    sp_counted_base() : use_count_(1), weak_count_(1) {}
-    virtual ~sp_counted_base() {}
-    virtual void dispose() = 0;
-    virtual void destroy() { delete this; }
-    virtual void *get_deleter(const std::type_info &) = 0;
-    virtual void *get_local_deleter(const std::type_info &) = 0;
-    virtual void *get_untyped_deleter() = 0;
-    void add_ref_copy() { __atomic_fetch_add(&use_count_, 1, __ATOMIC_RELAXED); }
-    void release()
-    {
-        if (__atomic_fetch_sub(&use_count_, 1, __ATOMIC_ACQ_REL) == 1) {
-            dispose();
-            weak_release();
-        }
-    }
-    void weak_release()
-    {
-        if (__atomic_fetch_sub(&weak_count_, 1, __ATOMIC_ACQ_REL) == 1)
-            destroy();
-    }
-};
-
-template <class X> class sp_counted_impl_p : public sp_counted_base {
-    X *px_;
-
-public:
-    explicit sp_counted_impl_p(X *px) : px_(px) {}
-    void dispose() { delete px_; }
-    void *get_deleter(const std::type_info &) { return 0; }
-    void *get_local_deleter(const std::type_info &) { return 0; }
-    void *get_untyped_deleter() { return 0; }
-};
-} // namespace detail
-
-template <class T> class shared_ptr {
-    T *px;
-    detail::sp_counted_base *pn;
-
-public:
-    shared_ptr() : px(0), pn(0) {}
-    template <class Y> explicit shared_ptr(Y *p) : px(p), pn(0)
-    {
-        try {
-            pn = new detail::sp_counted_impl_p<Y>(p);
-        } catch (...) {
-            delete p;
-            throw;
-        }
-    }
-    shared_ptr(const shared_ptr &r) : px(r.px), pn(r.pn)
-    {
-        if (pn)
-            pn->add_ref_copy();
-    }
-    ~shared_ptr()
-    {
-        if (pn)
-            pn->release();
-    }
-    template <class Y> void reset(Y *p) { shared_ptr(p).swap(*this); }
-    void swap(shared_ptr &o)
-    {
-        std::swap(px, o.px);
-        std::swap(pn, o.pn);
-    }
-    T *operator->() const { return px; }
-    T *get() const { return px; }
-    explicit operator bool() const { return px != 0; }
-};
-} // namespace boost
+#include "shared_ptr.h"
 
 enum MEDIA_CUSTOM_SRC_TYPE_T {};
 enum MEDIA_DATA_CHANNEL_T {};
@@ -370,7 +282,7 @@ bool DvrPlayer::preload(const std::string &options)
 {
     PF_LOG_DEBUG(DP_LOG, DVR_FILE, "preload", 0x70, "");
     if (options.empty()) {
-        DP_LOG_ERROR(DP_LOG, DVR_FILE, "preload", 0x73, "ERROR!!!!! option string empty!!!!!");
+        PF_LOG_ERROR(DP_LOG, DVR_FILE, "preload", 0x73, "ERROR!!!!! option string empty!!!!!");
         return false;
     }
     boost::shared_ptr<Pipeline> p = getPipeline();
@@ -387,12 +299,12 @@ bool DvrPlayer::seekSpi(unsigned long long position)
     boost::shared_ptr<Pipeline> p = getPipeline();
     if (!PIPE_ELEMENT(p.get()) ||
         vfunc<int (*)(const Pipeline *)>(p.get(), 0x114)(p.get()) == 4) {
-        DP_LOG_ERROR(DP_LOG, DVR_FILE, "seekSpi", 0xd0, "not paused or playing state");
+        PF_LOG_ERROR(DP_LOG, DVR_FILE, "seekSpi", 0xd0, "not paused or playing state");
         return false;
     }
     DP_READY(this) = 0;
     if (!vfunc<bool (*)(Pipeline *, unsigned long long)>(p.get(), 0x38)(p.get(), position)) {
-        DP_LOG_ERROR(DP_LOG, DVR_FILE, "seekSpi", 0xd5, "fail gstreamer seek");
+        PF_LOG_ERROR(DP_LOG, DVR_FILE, "seekSpi", 0xd5, "fail gstreamer seek");
         return false;
     }
     DP_READY(this) = 1;
@@ -406,12 +318,12 @@ bool DvrPlayer::flushSpi()
     boost::shared_ptr<Pipeline> p = getPipeline();
     if (!PIPE_ELEMENT(p.get()) ||
         vfunc<int (*)(const Pipeline *)>(p.get(), 0x114)(p.get()) == 4) {
-        DP_LOG_ERROR(DP_LOG, DVR_FILE, "flushSpi", 0xe4, "not paused or playing state");
+        PF_LOG_ERROR(DP_LOG, DVR_FILE, "flushSpi", 0xe4, "not paused or playing state");
         return false;
     }
     DP_READY(this) = 0;
     if (!vfunc<bool (*)(Pipeline *)>(p.get(), 0x40)(p.get())) {
-        DP_LOG_ERROR(DP_LOG, DVR_FILE, "flushSpi", 0xe9, "fail gstreamer flush");
+        PF_LOG_ERROR(DP_LOG, DVR_FILE, "flushSpi", 0xe9, "fail gstreamer flush");
         return false;
     }
     DP_READY(this) = 1;
@@ -426,13 +338,13 @@ bool DvrPlayer::flushSpi(int type, long long time)
     boost::shared_ptr<Pipeline> p = getPipeline();
     if (!PIPE_ELEMENT(p.get()) ||
         vfunc<int (*)(const Pipeline *)>(p.get(), 0x114)(p.get()) == 4) {
-        DP_LOG_ERROR(DP_LOG, DVR_FILE, "flushSpi", 0xf8, "not paused or playing state");
+        PF_LOG_ERROR(DP_LOG, DVR_FILE, "flushSpi", 0xf8, "not paused or playing state");
         return false;
     }
     if (type == 0)
         DP_READY(this) = 0;
     if (!vfunc<bool (*)(Pipeline *, int, long long)>(p.get(), 0x44)(p.get(), type, time)) {
-        DP_LOG_ERROR(DP_LOG, DVR_FILE, "flushSpi", 0xff, "fail gstreamer flush");
+        PF_LOG_ERROR(DP_LOG, DVR_FILE, "flushSpi", 0xff, "fail gstreamer flush");
         return false;
     }
     DP_READY(this) = 1;
@@ -470,7 +382,7 @@ bool DvrPlayer::setPlaybackRateSpi(float rate, int audioOn, unsigned long long p
     DP_READY(this) = 0;
     if (!vfunc<bool (*)(Pipeline *, float, int, unsigned long long)>(p.get(), 0x6c)(
             p.get(), rate, audioOn, pts)) {
-        DP_LOG_ERROR(DP_LOG, DVR_FILE, "setPlaybackRateSpi", 0x11f, "fail gst_element_seek");
+        PF_LOG_ERROR(DP_LOG, DVR_FILE, "setPlaybackRateSpi", 0x11f, "fail gst_element_seek");
         ret = false;
     } else {
         ret = true;
@@ -493,7 +405,7 @@ MEDIA_STATUS_T DvrPlayer::feedSpi(unsigned char *data, unsigned int size, unsign
 {
     boost::shared_ptr<Pipeline> p = getPipeline();
     if (!DP_READY(this)) {
-        DP_LOG_ERROR(DP_LOG, DVR_FILE, "feedSpi", 0x147, "not ready to feed stream");
+        PF_LOG_ERROR(DP_LOG, DVR_FILE, "feedSpi", 0x147, "not ready to feed stream");
         return -1;
     }
     return vfunc<MEDIA_STATUS_T (*)(Pipeline *, unsigned char *, unsigned int,
@@ -628,7 +540,7 @@ int DvrPlayer::loadSpi(std::string options)
         ret = vfunc<int (*)(Pipeline *, unsigned int)>(p.get(), 0xfc)(p.get(), 200);
         DP_READY(this) = 1;
     } else {
-        DP_LOG_ERROR(DP_LOG, DVR_FILE, "loadSpi", 0x8d,
+        PF_LOG_ERROR(DP_LOG, DVR_FILE, "loadSpi", 0x8d,
                      "pipeline load return false. skip start information timer.");
     }
     return ret;

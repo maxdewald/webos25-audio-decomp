@@ -22,7 +22,7 @@
 </style>
 <rect class="card" x="0.5" y="0.5" width="819" height="787" rx="10"/>
 <text class="title" x="24" y="38">Decompilation progress</text>
-<text class="sub" x="24" y="60">14 original files · 529 of 7,600 KiB of their code reconstructed (7.0%)</text>
+<text class="sub" x="24" y="60">14 original files · 540 of 7,600 KiB of their code reconstructed (7.1%)</text>
 <text class="name" x="24" y="108">libgstdecproxy</text>
 <text class="path" x="24" y="125">/usr/lib/gstreamer-1.0/libgstdecproxy.so</text>
 <rect class="track" x="330" y="102" width="340" height="14" rx="7"/>
@@ -58,46 +58,46 @@
 <rect class="match" x="330" y="286" width="93.7" height="14" rx="7"/>
 <text class="pct" x="686" y="298">100.0%</text>
 <text class="path" x="686" y="314">27.6% match</text>
-<text class="name" x="24" y="338">kernel</text>
-<text class="path" x="24" y="355">/boot/Image-5.4.268-329.decompressed</text>
+<text class="name" x="24" y="338">libaa</text>
+<text class="path" x="24" y="355">/usr/lib/libaa.so.2.0.0</text>
 <rect class="track" x="330" y="332" width="340" height="14" rx="7"/>
-<rect class="dsp" x="330" y="332" width="340.0" height="14" rx="7"/>
-<text class="pct" x="686" y="344">100.0%</text>
-<text class="path" x="686" y="360">aarch64</text>
-<text class="name" x="24" y="384">libaa</text>
-<text class="path" x="24" y="401">/usr/lib/libaa.so.2.0.0</text>
+<rect class="cov" x="330" y="332" width="339.5" height="14" rx="7"/>
+<rect class="match" x="330" y="332" width="184.8" height="14" rx="7"/>
+<text class="pct" x="686" y="344">99.8%</text>
+<text class="path" x="686" y="360">54.3% match</text>
+<text class="name" x="24" y="384">kernel</text>
+<text class="path" x="24" y="401">/boot/Image-5.4.268-329.decompressed</text>
 <rect class="track" x="330" y="378" width="340" height="14" rx="7"/>
-<rect class="cov" x="330" y="378" width="339.5" height="14" rx="7"/>
-<rect class="match" x="330" y="378" width="184.8" height="14" rx="7"/>
-<text class="pct" x="686" y="390">99.8%</text>
-<text class="path" x="686" y="406">54.3% match</text>
-<text class="name" x="24" y="430">dsp2</text>
-<text class="path" x="24" y="447">/lib/firmware/audio_a0_dsp2.bin</text>
+<rect class="dsp" x="330" y="378" width="335.5" height="14" rx="7"/>
+<text class="pct" x="686" y="390">98.7%</text>
+<text class="path" x="686" y="406">aarch64</text>
+<text class="name" x="24" y="430">libmedia-resource-calculator</text>
+<text class="path" x="24" y="447">/usr/lib/libmedia-resource-calculator.so.1</text>
 <rect class="track" x="330" y="424" width="340" height="14" rx="7"/>
-<rect class="dsp" x="330" y="424" width="22.0" height="14" rx="7"/>
-<text class="pct" x="686" y="436">6.5%</text>
-<text class="path" x="686" y="452">xtensa</text>
-<text class="name" x="24" y="476">libmedia-resource-calculator</text>
-<text class="path" x="24" y="493">/usr/lib/libmedia-resource-calculator.so.1</text>
+<rect class="cov" x="330" y="424" width="51.5" height="14" rx="7"/>
+<rect class="match" x="330" y="424" width="20.7" height="14" rx="7"/>
+<text class="pct" x="686" y="436">15.2%</text>
+<text class="path" x="686" y="452">6.1% match</text>
+<text class="name" x="24" y="476">dsp2</text>
+<text class="path" x="24" y="493">/lib/firmware/audio_a0_dsp2.bin</text>
 <rect class="track" x="330" y="470" width="340" height="14" rx="7"/>
-<rect class="cov" x="330" y="470" width="20.9" height="14" rx="7"/>
-<rect class="match" x="330" y="470" width="3.0" height="14" rx="7"/>
-<text class="pct" x="686" y="482">6.1%</text>
-<text class="path" x="686" y="498">0.2% match</text>
-<text class="name" x="24" y="522">libumi</text>
-<text class="path" x="24" y="539">/usr/lib/libumi.so.1.0.0</text>
+<rect class="dsp" x="330" y="470" width="22.4" height="14" rx="7"/>
+<text class="pct" x="686" y="482">6.6%</text>
+<text class="path" x="686" y="498">xtensa</text>
+<text class="name" x="24" y="522">libpf</text>
+<text class="path" x="24" y="539">/usr/lib/libpf-1.0.so.1.0.0</text>
 <rect class="track" x="330" y="516" width="340" height="14" rx="7"/>
-<rect class="cov" x="330" y="516" width="8.9" height="14" rx="7"/>
-<rect class="match" x="330" y="516" width="3.0" height="14" rx="7"/>
-<text class="pct" x="686" y="528">2.6%</text>
-<text class="path" x="686" y="544">0.1% match</text>
-<text class="name" x="24" y="568">libpf</text>
-<text class="path" x="24" y="585">/usr/lib/libpf-1.0.so.1.0.0</text>
+<rect class="cov" x="330" y="516" width="9.8" height="14" rx="7"/>
+<rect class="match" x="330" y="516" width="4.0" height="14" rx="7"/>
+<text class="pct" x="686" y="528">2.9%</text>
+<text class="path" x="686" y="544">1.2% match</text>
+<text class="name" x="24" y="568">libumi</text>
+<text class="path" x="24" y="585">/usr/lib/libumi.so.1.0.0</text>
 <rect class="track" x="330" y="562" width="340" height="14" rx="7"/>
-<rect class="cov" x="330" y="562" width="5.2" height="14" rx="7"/>
+<rect class="cov" x="330" y="562" width="8.9" height="14" rx="7"/>
 <rect class="match" x="330" y="562" width="3.0" height="14" rx="7"/>
-<text class="pct" x="686" y="574">1.5%</text>
-<text class="path" x="686" y="590">0.6% match</text>
+<text class="pct" x="686" y="574">2.6%</text>
+<text class="path" x="686" y="590">0.1% match</text>
 <text class="name" x="24" y="614">starfish-media-pipeline</text>
 <text class="path" x="24" y="631">/usr/sbin/starfish-media-pipeline</text>
 <rect class="track" x="330" y="608" width="340" height="14" rx="7"/>

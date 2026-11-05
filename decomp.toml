@@ -44,6 +44,7 @@ name = "libmedia-resource-calculator"
 binary = "orig/usr/lib/libmedia-resource-calculator.so.1"
 symbols = "symbols/libmedia-resource-calculator.so.1.functions.tsv"
 src = "src/libmedia-resource-calculator"
+cflags_extra = ["-Ilg-opensource/public/media-resource-calculator/calculator", "-DNDEBUG"]
 
 [[target]]
 name = "audiod"
@@ -112,8 +113,10 @@ symbols = "symbols/libpf-1.0.so.1.0.0.functions.tsv"
 src = "src/libpf"
 # C++ (libstdc++ cxx11 ABI, boost 1.78). Classes are reconstructed as namespaces of
 # functions taking an explicit `self`, so tags demangle to the original names.
-cflags_extra = ["-Isrc/libpf", "-Isrc/include/gst-gen", "-isystem", "/usr/include/glib-2.0",
-                "-isystem", "/usr/include/gstreamer-1.0"]
+cflags_extra = ["-Isrc/libpf", "-Isrc/include/gst-gen", "-DNDEBUG",
+                "-isystem", "lg-opensource/public/boost",
+                "-isystem", "lg-opensource/public/rapidjson/include",
+                "-isystem", "/usr/include/glib-2.0", "-isystem", "/usr/include/gstreamer-1.0"]
 
 [[target]]
 name = "libresource_mgr"

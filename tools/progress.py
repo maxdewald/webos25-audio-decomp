@@ -11,6 +11,7 @@ import argparse
 import difflib
 import json
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -125,6 +126,12 @@ def scan_source(t, path):
             if not d:
                 continue
             name = d[1]
+            # An explicit asm label binds ABI wrappers to the original symbol.
+            lab = re.search(r'__asm__\("([^"]+)"\)', lines[start - 1]) if start else None
+            if lab:
+                name = lab[1]
+            elif name.endswith('__def'):
+                name = name[:-5]
         addr = int(m[1], 16) + t.src_bias
         f = t.funcs.setdefault(addr, Func(addr, 0, f'?{addr:x}', note='not in symbol table'))
         f.src = f'{path.relative_to(ROOT)}:{start + 1}'
@@ -151,14 +158,16 @@ def compile_targets(targets, only=None):
                          *(cc.get('cxxflags', []) if cpp else []), *t.cflags_extra, '-c',
                          str(c.relative_to(ROOT)),
                          '-o', str(o.relative_to(ROOT))])
-    script = ' ; '.join(' '.join(j) for j in jobs)
+    if not jobs:
+        return True
+    script = ' && '.join(shlex.join(j) for j in jobs)
     native = shutil.which(cc['cc'])
     cmd = ['sh', '-c', script] if native else [
         'docker', 'run', '--rm', '-v', f'{ROOT}:/w', '-w', '/w', cc['image'], 'sh', '-c', script]
     r = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
     if r.stderr.strip():
         print(r.stderr.strip(), file=sys.stderr)
-    return ' error: ' not in r.stderr
+    return r.returncode == 0
 
 
 def normalise(text):
@@ -222,6 +231,8 @@ def disasm_src(t, f):
     syms, full = _obj_listing(o)
     # GCC may emit a clone (foo.constprop.0, foo.isra.0, foo.part.0) instead of foo.
     want = (f.src_name, f.name, f.name.split('(')[0])
+    if f.src_name in syms:
+        want = (f.src_name,)
     names = sorted((n for n in syms if n in want or n.startswith(f.src_name + '.')),
                    key=lambda n: (n not in want, n))
     if not names:
@@ -319,7 +330,8 @@ def cmd_diff(args):
     if not f.src:
         print('\n'.join(orig))
         sys.exit(f'{f.name} @0x{f.addr:x} has no reconstruction yet')
-    compile_targets([t], only=ROOT / f.src.split(':')[0])
+    if not compile_targets([t], only=ROOT / f.src.split(':')[0]):
+        sys.exit('compile failed; refusing to compare a stale object')
     mine = disasm_src(t, f) or []
     ratio = 100.0 * difflib.SequenceMatcher(None, orig, mine).ratio()
     print(f'{f.name} @0x{f.addr:x} <-> {f.src_name} ({f.src}): {ratio:.2f}%')

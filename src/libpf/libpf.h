@@ -71,12 +71,12 @@ struct PfLog {
 /* Info/warning/error: always formatted; kv = "{\"CODE_POINT\":\"...\"}". */
 #define PF_LOG_LEVEL(log, lvl, msgid, file, func, line, ...)                         \
     do {                                                                               \
-        char cp_[0x200], kv_[0x200];                                                   \
+        char cp_[0x100], kv_[0x200], msg_[0x200];                                    \
         PF_CODE_POINT(cp_, (log).name, file, func, line);                              \
         snprintf(kv_, 0x200, "{\"%s\":\"%s\"}", "CODE_POINT", cp_);                    \
-        snprintf(cp_, 0x200, __VA_ARGS__);                                             \
+        snprintf(msg_, 0x200, __VA_ARGS__);                                            \
         if ((log).ctx == NULL || (log).ctx->level > (lvl) - 1)                         \
-            PmLogString_((log).ctx, (lvl), (msgid), kv_, cp_);                       \
+            PmLogString_((log).ctx, (lvl), (msgid), kv_, msg_);                       \
     } while (0)
 
 #define PF_LOG_INFO(log, file, func, line, ...) \

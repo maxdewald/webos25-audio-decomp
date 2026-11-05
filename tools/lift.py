@@ -4,15 +4,14 @@
 usage: lift.py <target>        (needs build/lift/<binary>.tokens.jsonl + .types.json,
                                  written by tools/ExportTokens.java via tools/lift.sh)
 
-Writes <src>/lifted/<module>.c (one file per original source file, from the __FILE__
-strings in the code) plus <src>/lifted/decls.h. Every function is tagged with its Ghidra
-address and gets the original symbol name through an asm label, so progress.py scores it
-like any hand-written reconstruction. Functions already tagged in hand-written files of
-<src>/ are skipped: move a function out of lifted/ by rewriting it by hand, then re-lift.
+Writes build/lift/<target>/<module>.c plus decls.h. Ghidra addresses and original
+symbol labels are retained for comparison, but generated files are excluded from
+source coverage. Functions tagged in hand-written src/<target>/ files are skipped.
 
 The output is mechanical: byte offsets instead of fields, Ghidra's variable names, no
 C++ classes. It is a compilable baseline, not a clean reconstruction.
 """
+import hashlib
 import json
 import re
 import subprocess
@@ -110,9 +109,13 @@ class Types:
             fields, cur = [], 0
             for i, f in enumerate(d['fields']):
                 ft = self.get(f['t'])
+                while ft is not None and ft['k'] == 'td':
+                    f = dict(f, t=ft['t'])
+                    ft = self.get(f['t'])
                 if f['bits'] or ft is None or ft['size'] <= 0 or f['off'] < cur:
                     continue
                 if ft['k'] in ('struct', 'union') and ft.get('fields') and ft['size'] > 1:
+                    self.struct_name(f['t'])
                     emit(f['t'])
                 if d['k'] == 'struct' and f['off'] > cur:
                     fields.append(f'uint8_t _pad{cur:x}[{f["off"] - cur}];')
@@ -184,7 +187,7 @@ def main():
     t = target(tname)
     binary = ROOT / t['binary']
     src = ROOT / t['src']
-    out_dir = src / 'lifted'
+    out_dir = ROOT / 'build/lift' / tname
     stem = binary.name
     toks_path = ROOT / 'build/lift' / f'{stem}.tokens.jsonl'
     meta = json.loads((ROOT / 'build/lift' / f'{stem}.types.json').read_text())
@@ -220,16 +223,42 @@ def main():
         used[base] += 1
     for k, base in fn_ident.items():
         if used[base] > 1 or base in ('main',):
-            fn_ident[k] = f'{base}_{k[1]:x}' if k[0] == 'addr' else f'{base}_{abs(hash(k[1])) % 0xfffff:x}'
+            fn_ident[k] = f'{base}_{k[1]:x}' if k[0] == 'addr' else f'{base}_{hashlib.sha256(k[1].encode()).hexdigest()[:8]}'
     for k, lab in list(fn_label.items()):
         if lab == fn_ident[k]:
             fn_label[k] = None
+
+    # typeinfo / vtable symbols by demangled class name
+    statics, static_decls = {}, []
+    allsyms = subprocess.run([LLVM + 'llvm-nm', '-D', str(binary)], capture_output=True, text=True).stdout.split()
+    tv = sorted({x.split('@')[0] for x in allsyms if x.startswith(('_ZTI', '_ZTV'))})
+    dem = subprocess.run([LLVM + 'llvm-cxxfilt'], input='\n'.join(tv), capture_output=True, text=True).stdout.splitlines()
+    for sym, dn in zip(tv, dem):
+        kind = 'typeinfo' if sym.startswith('_ZTI') else 'vtable'
+        cls = re.sub(r'^(typeinfo|vtable) for ', '', dn).replace(' ', '')
+        sym = sym.split('@')[0]
+        cname = 'g_' + re.sub(r'\W', '_', sym)
+        statics[(cls, kind)] = cname
+        static_decls.append(f'extern uint8_t {cname}[] __asm__("{sym}");')
+
+    # most common use type of each global across all functions
+    use_types = defaultdict(Counter)
+    for line in open(toks_path):
+        for x in json.loads(line).get('toks') or ():
+            if x[0] == 'Variable' and len(x) > 2 and 'g' in x[2] and x[2].get('t'):
+                use_types[x[2]['g']][x[2]['t']] += 1
+    for g in meta['globals']:
+        ut = use_types.get(g['addr'])
+        if ut and not g['t']:
+            ptrs = [t for t, _ in ut.most_common() if (types.get(t) or {}).get('k') == 'ptr']
+            g['t'] = ptrs[0] if ptrs else ut.most_common(1)[0][0]
 
     # globals: one C name per address
     gnames, gtext = {}, defaultdict(set)
     for g in meta['globals']:
         gtext[re.sub(r'.*::', '', g['text'])].add(g['addr'])
     gdecl = {}
+    scalar_ok = set()
     for g in meta['globals']:
         text = re.sub(r'.*::', '', g['text'])
         name = text if len(gtext[text]) == 1 and IDENT.match(text) else f'{re.sub(r"\W", "_", text)}_{g["addr"]:x}'
@@ -244,6 +273,11 @@ def main():
             decl = f'extern {types.c(g["t"])} {name}'
         elif dt is not None and dt['k'] not in ('base',) and dt['size'] > 0:
             decl = f'extern {types.c(g["data"])} {name}'
+        elif dt is not None and dt['k'] in ('base', 'int') and 0 < dt['size'] <= 8:
+            decl = f'extern {types.c(g["data"])} {name}'
+            scalar_ok.add(name)
+        elif dt is not None and dt['k'] == 'arr':
+            decl = f'extern {types.c(dt["t"])} {name}[{dt["n"]}]'
         else:
             decl = f'extern uint8_t {name}[]'
         if label and label != name:
@@ -275,15 +309,25 @@ def main():
                 module = mod
         if IGNORE.match(name) or addr in skip or toks is None:
             continue
-        r = lift_function(d, types, fn_ident, fn_label, fn_ref, gnames, elf_funcs)
+        r = lift_function(d, types, fn_ident, fn_label, fn_ref, gnames, elf_funcs, scalar_ok, statics, set(fn_ident.values()))
         if r is None:
             continue
         header, body, sigcomment = r
         k = ('addr', addr)
         label = fn_label.get(k)
-        protos[k] = header + (f' __asm__("{label}")' if label else '') + ';'
+        # Unprototyped: Ghidra disagrees with itself about arity between call sites.
+        proto = re.sub(r'\(.*\)$', '()', header)
+        proto = re.sub(r'^void\s+(?!\*)', 'uint32_t ', proto)
+        protos[k] = proto + (f' __asm__("{label}")' if label else '') + ';'
+        header = re.sub(r'^void\s+(?!\*)', 'uint32_t ', header)
         note = sigcomment or name
-        modules[module].append(f'/* @0x{addr:x}: {note} */\n{header}\n{body}\n')
+        fid = fn_ident[k]
+        sym = label or fid
+        # Callers see an unprototyped "fid()" (Ghidra's arity differs between call
+        # sites); the definition is a separate C name bound to the same symbol.
+        protos[k] = re.sub(r'__asm__\("[^"]*"\);$', '', protos[k]).rstrip(';').rstrip() + f' __asm__("{sym}");'
+        header = re.sub(rf'\b{re.escape(fid)}\s*\(', f'{fid}__def(', header, count=1)
+        modules[module].append(f'{header} __asm__("{sym}");\n/* @0x{addr:x}: {note} */\n{header}\n{body}\n')
         n_lifted += 1
 
     for k, f in sigs.items():
@@ -291,7 +335,7 @@ def main():
             continue
         ret = 'uint32_t' if types.get(f['ret']) is None or types.get(f['ret'])['name'] == 'undefined' \
             else types.c(f['ret'])
-        if f['src'] == 'DEFAULT' and not f['params']:
+        if not f['ext'] or (f['src'] != 'IMPORTED'):
             params = ''
         else:
             ps = [f'{types.c(p["t"])} {safe_param(p["name"], i)}' for i, p in enumerate(f['params'])]
@@ -305,14 +349,17 @@ def main():
     for old in out_dir.glob('*.c'):
         old.unlink()
     hdr = [f'/* Generated by tools/lift.py from {t["binary"]}: declarations for lifted/*.c. */',
-           '#pragma once', '#include "ghidra.h"', '']
+           '#pragma once', '#include "ghidra.h"',
+           '']
     hdr += types.struct_defs() + ['']
-    hdr += sorted(set(gdecl.values())) + ['']
-    hdr += [protos[k] for k in sorted(protos, key=lambda k: (k[0], str(k[1])))]
+    hdr += sorted(set(gdecl.values())) + static_decls + ['']
+    for k in sorted(protos, key=lambda k: (k[0], str(k[1]))):
+        hdr.append(protos[k])
     (out_dir / 'decls.h').write_text('\n'.join(hdr) + '\n')
     for mod, funcs in sorted(modules.items()):
         text = (f'/* Lifted mechanically from {t["binary"]} ({mod}) by tools/lift.py.\n'
                 f' * Ghidra pseudocode made compilable; not yet hand-reconstructed. */\n'
+                +
                 f'#include "decls.h"\n\n' + '\n'.join(funcs))
         (out_dir / f'{mod}.c').write_text(text)
     print(f'lifted {n_lifted} functions into {len(modules)} files, skipped {len(skip)} hand-written')
@@ -322,8 +369,12 @@ def safe_param(n, i):
     return n if n and IDENT.match(n) else f'param_{i + 1}'
 
 
-def lift_function(d, types, fn_ident, fn_label, fn_ref, gnames, elf_funcs):
+def lift_function(d, types, fn_ident, fn_label, fn_ref, gnames, elf_funcs, scalars=frozenset(), statics={}, fn_names=frozenset()):
     toks = d['toks']
+    rt = next((x for x in toks if x[0] == 'Type'), None)
+    ret_c = types.c(rt[2].get('t'), rt[1]) if rt and len(rt) > 2 else 'uint32_t'
+    if ret_c == 'void':
+        ret_c = 'int'
     # signature comment (demangled prototype) before the definition
     first_fn = next((i for i, x in enumerate(toks) if x[0] == 'FuncName' and not
                      (len(x) > 2 and x[2].get('call'))), None)
@@ -339,26 +390,46 @@ def lift_function(d, types, fn_ident, fn_label, fn_ref, gnames, elf_funcs):
     sig = [j for j, x in enumerate(toks) if not (x[0] == 'Break' or (x[0] == 'Syntax' and not x[1].strip()))]
     nxt = {sig[a]: sig[a + 1] for a in range(len(sig) - 1)}
     drop = set()
-    for j in sig:
+    for a, j in enumerate(sig):
         x = toks[j]
-        if x[0] == 'Syntax' and x[1].strip() and x[1] != '::' and j in nxt and toks[nxt[j]][1] == '::':
+        if x[0] == 'Syntax' and x[1] in ('__thiscall', '__stdcall', '__cdecl'):
             drop.add(j)
-            drop.add(nxt[j])
-        elif x[0] == 'Syntax' and x[1] in ('__thiscall', '__stdcall', '__cdecl'):
+        elif x[1] == '::':
             drop.add(j)
+            if a > 0 and toks[sig[a - 1]][0] in ('Syntax', 'Op') and toks[sig[a - 1]][1] not in \
+                    (';', '{', '}', '(', ')', ',', '=', '::') and re.match(r'^[\w~(]', toks[sig[a - 1]][1]):
+                drop.add(sig[a - 1])
+    # Qualified statics ("Cls::typeinfo", "Cls::vtable"): remember the qualifier so the
+    # reference can be resolved to its ELF symbol.
+    qual = {}
+    for a, j in enumerate(sig):
+        if toks[j][0] == 'Variable' and toks[j][1] in ('typeinfo', 'vtable') and a >= 2 \
+                and toks[sig[a - 1]][1] == '::':
+            q, b = [], a - 1
+            while b >= 1 and toks[sig[b]][1] == '::':
+                q.insert(0, toks[sig[b - 1]][1])
+                b -= 2
+            qual[j] = '::'.join(q)
 
     declared = set()
     undeclared = {}
     instack = {}
     out = []
     prev_sig = None
+    decl_ctx = False
     for j, x in enumerate(toks):
         if j in drop or (j < first_fn and x[0] == 'Comment'):
             continue
         kind, text = x[0], x[1]
         info = x[2] if len(x) > 2 else {}
         if kind == 'Break':
+            if out and out[-1] in ('.', '->', 'goto'):
+                continue
             out.append(('\n' + ' ' * info.get('indent', 0)) if j > body_start else ' ')
+            continue
+        if kind == 'Label':
+            text = re.sub(r'\W', '_', text)
+        if kind == 'Syntax' and text == '':
             continue
         if kind == 'Type':
             out.append(types.c(info.get('t'), text))
@@ -373,6 +444,10 @@ def lift_function(d, types, fn_ident, fn_label, fn_ref, gnames, elf_funcs):
                         and re.match(r'^-?\d+\.\d*(e[-+]?\d+)?$', text):
                     text += 'f'
                 out.append(text)
+            elif j in qual and (qual[j], text) in statics:
+                out.append(f'(*(uint8_t (*)[])&{statics[(qual[j], text)]})')
+                prev_sig = (kind, text)
+                continue
             elif 'fn' in info and fn_ref(info['fn']):
                 out.append(fn_ident[fn_ref(info['fn'])])
             elif 'g' in info and info['g'] in gnames:
@@ -381,9 +456,7 @@ def lift_function(d, types, fn_ident, fn_label, fn_ref, gnames, elf_funcs):
                 v = text.split('::')[-1]
                 if not IDENT.match(v):
                     v = re.sub(r'\W', '_', v)
-                ps = prev_sig
-                if ps is not None and ps[0] in ('Type',) or (ps is not None and ps[1] == '*' and
-                                                           out and out[-1] == '*' and _after_type(out)):
+                if decl_ctx:
                     declared.add(v)
                 else:
                     undeclared.setdefault(v, info.get('t'))
@@ -391,11 +464,14 @@ def lift_function(d, types, fn_ident, fn_label, fn_ref, gnames, elf_funcs):
                 if m:
                     instack[v] = (int(m[1], 16), info.get('t'))
                 out.append(v)
-        elif kind == 'Syntax' and PIECE.match(text) and out and out[-1] == '.':
+        elif kind == 'Syntax' and PIECE.match(text) and out and out[-1] in ('.', '->'):
+            arrow = out[-1] == '->'
             m = PIECE.match(text)
             out.pop()
             # rewrite "<lvalue>._A_B_" as PIECE(lvalue, A, B)
             expr = []
+            while out and not out[-1].strip():
+                out.pop()
             while out and (IDENT.match(out[-1]) or out[-1] in (')', ']')):
                 if out[-1] in (')', ']'):
                     depth, buf = 0, []
@@ -411,17 +487,50 @@ def lift_function(d, types, fn_ident, fn_label, fn_ref, gnames, elf_funcs):
                     break
                 expr = [out.pop()] + expr
                 break
-            out.append(f'PIECE({"".join(expr)},{m[1]},{m[2]})')
-        elif kind == 'Label' and text and out and out[-1].startswith('\n'):
-            out.append(text)
+            e = ''.join(expr)
+            out.append(f'PIECE({"(*" + e + ")" if arrow else e},{m[1]},{m[2]})')
+        elif kind == 'Syntax' and text == ':' and prev_sig is not None and prev_sig[0] == 'Label':
             out.append(':;')
-            toks[j + 1:j + 2] = [['Syntax', '']] if j + 1 < len(toks) and toks[j + 1][1] == ':' else toks[j + 1:j + 2]
         else:
             out.append(text)
         if kind != 'Break' and text.strip():
             prev_sig = (kind, text)
+            if kind == 'Type':
+                decl_ctx = True
+            elif text in (';', '{', '}', '=', ')') or kind in ('Op',) and text not in ('*',):
+                decl_ctx = False
+            elif kind == 'Syntax' and text in ('(', ','):
+                decl_ctx = False
 
     code = ''.join(out)
+    code = re.sub(r'\(&(DAT_[0-9a-f]+|\w+_[0-9a-f]{5,6})\)\[', lambda m: m[0] if m[1] in scalars else f'{m[1]}[', code)
+    # byte offsets into untyped data: &DAT_x + n  ->  (uint8_t *)DAT_x + n
+    code = re.sub(r'\(&(DAT_[0-9a-f]+) \+', r'((uint8_t *)\1 +', code)
+    code = re.sub(r'&(DAT_[0-9a-f]+) \+', r'(uint8_t *)\1 +', code)
+    code = re.sub(r'\(&(__digits)\)\[', r'(\1)[', code)
+    # Ghidra names GOT slots after an import even when they hold a vtable (iostream
+    # virtual-base offsets: "x + vtbl[-3]"); index the slot as a pointer array.
+    code = re.sub(r'(?<![\w.])(\w+)\[-3\]', r'((int32_t *)*(void **)&\1)[-3]', code)
+    # stores of 0 through a code* ("*(code *)p = (code)0x0")
+    code = re.sub(r'\*\(code \*\)(\([^;]*\) = \(code\)0x0)', r'*(uint8_t *)\1', code).replace('(code)0x0', '0')
+    code = re.sub(r'\(&__digits\)\[', '(__digits)[', code)
+    code = re.sub(r'\(\s*&\s*__digits\s*\)', '(__digits)', code)
+    # duplicate join labels (Ghidra duplicates the block): rename later copies
+    labs = re.findall(r'^\s*(\w+):;', code, re.M)
+    for lab, n in Counter(labs).items():
+        if n > 1:
+            parts = re.split(rf'(^\s*{lab}:;)', code, flags=re.M)
+            k = 0
+            for i in range(1, len(parts), 2):
+                k += 1
+                if k > 1:
+                    parts[i] = parts[i].replace(f'{lab}:;', f'{lab}_dup{k}:;')
+                    # gotos after this copy until the next copy jump here
+                    parts[i + 1] = re.sub(rf'goto {lab};', f'goto {lab}_dup{k};', parts[i + 1])
+            code = ''.join(parts)
+    labels = set(re.findall(r'^\s*(\w+):;', code, re.M))
+    code = re.sub(r'goto\s+(\w+);', lambda m: m[0] if m[1] in labels else
+                  f'/* tail call */ return (__typeof__(({ret_c})0)){m[1]}();', code)
     head, sep, body = code.partition('{')
     head = re.sub(r'\s+', ' ', head).strip()
     head = re.sub(r'\(\s*', '(', head)
@@ -436,7 +545,7 @@ def lift_function(d, types, fn_ident, fn_label, fn_ref, gnames, elf_funcs):
         slot = max(nparams - 4, 0) * 4
         for v, (off, tid) in sorted(instack.items(), key=lambda kv: kv[1][0]):
             size = types.get(tid)['size'] if types.get(tid) else 4
-            if off % 4 or off < slot:
+            if off % 4 or off < slot or off > 0x100:
                 continue
             while slot < off:
                 extra.append(f'uint32_t _stack_{slot:x}')
@@ -453,7 +562,35 @@ def lift_function(d, types, fn_ident, fn_label, fn_ref, gnames, elf_funcs):
     for e in extra:
         v = e.split()[-1]
         body = re.sub(rf'\n\s*[\w ]+\**\s*{re.escape(v)};', '', body, count=1)
+    # Ghidra reuses one stack slot as integer and object pointer ("local_220[0x6ec] = 1").
+    # Retype only stack locals declared as 4-byte ints that are subscripted directly.
+    # AbstractPlayer::getPipeline() returns boost::shared_ptr<Pipeline> through a hidden
+    # pointer (r0) with this in r1; Ghidra drops both. The result is the first local read
+    # after the call.
+    def _sret(m):
+        after = body[m.end():m.end() + 400]
+        loc = re.search(r'\b((?:local|[a-z]Stack)_[0-9a-f]+)\b', after)
+        if not loc:
+            return m[0]
+        return f'{m[1]}AbstractPlayer_getPipeline(&{loc[1]}, this);'
+    if re.search(r'\bthis\b', head):
+        body = re.sub(r'^(\s*)AbstractPlayer_getPipeline\(\);', _sret, body, flags=re.M)
+    cand = set(re.findall(r'(?<![&\w])((?:local|[a-z]Stack)_\w+)\[(?:0x|\d)', body))
+    cand |= set(re.findall(r'(?:^|[(=,;!&|?:]|return)\s*\*\s*((?:local|[a-z]Stack)_\w+)\s*(?:[+=;,)]|\s)', body, re.M))
+    for v in cand:
+        body = re.sub(rf'^(\s*)u?int32_t {v};', rf'\1uint8_t *{v};', body, count=1, flags=re.M)
+        body = re.sub(rf'\(\*\*\(code \*\*\)\(\*{v} \+', f'(**(code **)(*(uint8_t **){v} +', body)
+        body = re.sub(rf'\*\(code \*\*\)\(\*{v} \+', f'*(code **)(*(uint8_t **){v} +', body)
+    body = re.sub(r'(\w+) = \*\(char \(\*\) \[(\d+)\]\)\(([^;]+)\);', r'__builtin_memcpy(\1, (void *)(\3), \2);', body)
+    # float casts of locals that were retyped as pointers / ints: reinterpret bits
+    body = re.sub(r'\(float\)(local_\w+)\b(?!\s*[\[(])', r'PUN_F(\1)', body) if re.search(r'uint8_t \*local_', body) else body
     missing = [v for v in undeclared if v not in declared and v not in params]
+    # Remaining names Ghidra could not bind: an import name used as a value (a GOT slot
+    # it mislabelled), or a static whose class was lost. Bind to a placeholder symbol.
+    for v in [v for v in missing if v in ('typeinfo', 'vtable') or v in fn_names]:
+        missing.remove(v)
+        body = '{\n  extern uint8_t ' + v + '__ref[] __asm__("' + v + '__unresolved");' + \
+            re.sub(rf'\b{v}\b', f'(*(uint32_t *){v}__ref)', body[1:])
     if missing:
         decl = ''.join(f'\n  {types.c(undeclared[v])} {v};' for v in missing)
         body = '{' + decl + body[1:]

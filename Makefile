@@ -1,6 +1,6 @@
 PY ?= python3
 
-.PHONY: status diff todo progress toolchain verify symbols opensource public-sources test-libpf decomp-arm decomp-dsp
+.PHONY: status diff todo progress toolchain verify symbols opensource public-sources public-source-map test-public-sources test-public-reuse test-libpf decomp-arm decomp-dsp
 
 status:            ## coverage + instruction match per target
 	$(PY) tools/progress.py status
@@ -12,7 +12,7 @@ todo:              ## make todo T=libumi
 	$(PY) tools/progress.py todo $(T)
 
 progress:          ## progress.svg for the README
-	$(PY) tools/progress.py svg
+	$(PY) tools/progress.py svg $(if $(NO_MATCH),--no-match)
 
 toolchain:         ## GCC 11.4 armel cross compiler image
 	docker build -t webos25-decomp-gcc tools/toolchain
@@ -26,8 +26,19 @@ symbols:           ## ELF symbol tables for targets without a Ghidra export
 opensource:        ## LG's GPL/LGPL source for this firmware into lg-opensource/
 	tools/fetch-opensource.sh lg-opensource
 
-public-sources:   ## pinned Boost/RapidJSON dependencies and LG reference source
+public-sources:    ## pinned public dependencies and webOS reference implementations
 	$(PY) tools/fetch-public-sources.py
+
+public-source-map: ## upstream paths per target (not verified binary coverage)
+	$(PY) tools/fetch-public-sources.py --list
+
+test-public-sources: ## offline fetch/cache and target-map tests
+	$(PY) tools/tests/test_public_sources.py
+
+test-public-reuse: test-public-sources test-libpf ## source-assisted regression tests
+	$(PY) tools/tests/test_source_assisted_wrappers.py
+	$(PY) tools/tests/test_resource_client.py
+	$(PY) tools/tests/test_progress.py
 
 test-libpf:        ## host sanitizer tests; requires public-sources and native GLib
 	$(PY) tools/test_libpf.py

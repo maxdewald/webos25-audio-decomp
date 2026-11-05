@@ -18,13 +18,77 @@
     "url": "https://codeload.github.com/webosose/media-resource-calculator/tar.gz/6e7b1658516208bf01719bb1b968dadb4c43c5b3",
     "prefix": "media-resource-calculator-6e7b1658516208bf01719bb1b968dadb4c43c5b3/",
     "license": "Apache-2.0",
-    "sha256": "c39e2ac4fd53a8cc31b24ddf7daadb6a004ab4ede60bb8dc5e1bd65adaed4deb"
+    "sha256": "c39e2ac4fd53a8cc31b24ddf7daadb6a004ab4ede60bb8dc5e1bd65adaed4deb",
+    "scope": "Shared calculator logic restored with TV MAT/MAX/IAMF codecs, SVP_CPB quantity 1 and two-table ABI; JSON parsing and TV platform-table initialization remain unresolved.",
+    "targets": {
+      "libmedia-resource-calculator": ["calculator/resource.cpp", "calculator/resource_table.cpp", "calculator/resource_calculator.cpp", "calculator/resource_calculator_c.cpp"]
+    }
   },
   "umediaserver": {
     "revision": "af89f8ac3355027a90d7b299a78fb6fab9b6ffca",
     "url": "https://codeload.github.com/webosose/umediaserver/tar.gz/af89f8ac3355027a90d7b299a78fb6fab9b6ffca",
     "prefix": "umediaserver-af89f8ac3355027a90d7b299a78fb6fab9b6ffca/",
     "license": "Apache-2.0",
-    "sha256": "c85434f15b41132d8d96c4f7ab046e9969942cde8952df41c8f2ee3ca58f986d"
+    "sha256": "c85434f15b41132d8d96c4f7ab046e9969942cde8952df41c8f2ee3ca58f986d",
+    "scope": "Selected resource-client and C-wrapper bodies restored after ARM review; other mappings are references only. TV constructors, subscribe return type, custom mutex and policy/wait behavior differ from OSE.",
+    "targets": {
+      "umediaserver": ["src/server"],
+      "libresource_mgr": ["src/resource_manager/ResourceManager.cpp", "src/resource_manager/AcquireQueue.cpp"],
+      "libresource_mgr_client": ["src/resource_manager/ResourceManagerClient.cpp"],
+      "libresource_mgr_client_c": ["src/resource_manager/ResourceManagerClient_c.cpp"],
+      "libumedia_api": ["src/media_client/uMediaClient.cpp"],
+      "libums_connector": ["src/ums_connector/UMSConnector.cpp", "src/ums_connector/CallbackManager.cpp"],
+      "libums_connector_impl": ["src/ums_connector/UMSConnector_impl.cpp"],
+      "libums_connector_wrapper": ["src/ums_connector/UMSConnector_wrapper.cpp"],
+      "libums_dbi": ["src/dbi"],
+      "libums_pipeline": ["src/pipeline/Pipeline.cpp"],
+      "libums_pipeline_mgr": ["src/pipeline/PipelineManager.cpp"],
+      "libums_registry": ["src/registry"]
+    }
+  },
+  "umi": {
+    "revision": "6685cc2753883d8691432b4a97e9a6ec0c404438",
+    "url": "https://codeload.github.com/webosose/umi/tar.gz/6685cc2753883d8691432b4a97e9a6ec0c404438",
+    "prefix": "umi-6685cc2753883d8691432b4a97e9a6ec0c404438/",
+    "sha256": "3a00db4344350b3a9e7cd6b0ab1f2c4524d52311edcd851e79e4402d20027f79",
+    "license": "Apache-2.0",
+    "scope": "OSE interface and ALSA backend reference; not the TV umiTVAudio implementation or verified enum/layout compatibility.",
+    "targets": {
+      "libumi": ["include/public/umiaudio.h", "src/umi/umialsaaudio.cpp"]
+    }
+  },
+  "audiooutput-ose": {
+    "revision": "dc04b8790d63695e412f410a19752cafd78426fd",
+    "url": "https://codeload.github.com/webosose/com.webos.service.audiooutput/tar.gz/dc04b8790d63695e412f410a19752cafd78426fd",
+    "prefix": "com.webos.service.audiooutput-dc04b8790d63695e412f410a19752cafd78426fd/",
+    "sha256": "27ac2cb5520ed24b71fab3108d7eda37f58c647917fe361a2bd7fda5a34af0b4",
+    "license": "Apache-2.0",
+    "scope": "OSE audiooutputd and UMI caller reference; TV quality APIs and hardware routing remain unverified.",
+    "targets": {
+      "audiooutputd": ["CMakeLists.txt", "src/audio/amixercontroller.cpp", "src/main.cpp"]
+    }
+  },
+  "audiod-ose": {
+    "revision": "eea5b7e5cc1ebc249a0070e6ce418a919d021e50",
+    "url": "https://codeload.github.com/webosose/audiod-pro/tar.gz/eea5b7e5cc1ebc249a0070e6ce418a919d021e50",
+    "prefix": "audiod-pro-eea5b7e5cc1ebc249a0070e6ce418a919d021e50/",
+    "sha256": "088740eec2b0bd9b467dbc131fff643bc0a056067e2b4ce8d446e4de9d638213",
+    "license": "Apache-2.0",
+    "scope": "OSE PulseAudio policy/mixing reference; not a verified implementation of TVManager or TV adaptation libraries.",
+    "targets": {
+      "audiod": ["CMakeLists.txt", "include/umiaudiomixer.h", "src/umiaudiomixer.cpp"]
+    }
+  },
+  "g-media-pipeline": {
+    "revision": "df8470b2e0709f9a1f39bbe5e9fceb260bc20957",
+    "url": "https://codeload.github.com/webosose/g-media-pipeline/tar.gz/df8470b2e0709f9a1f39bbe5e9fceb260bc20957",
+    "prefix": "g-media-pipeline-df8470b2e0709f9a1f39bbe5e9fceb260bc20957/",
+    "sha256": "220ec82d890fdfd82a67a8c9e2c2832f7d35abd08cf0be898c7d840f2fe7b583",
+    "license": "Apache-2.0 (see bundled component notices)",
+    "scope": "OSE resource-request and GStreamer integration reference, not the TV starfish/libpf implementation or LG decoder/sink internals.",
+    "targets": {
+      "starfish-media-pipeline": ["src/mediaresource/requestor.cpp"],
+      "libpf": ["src/mediaresource/requestor.cpp"]
+    }
   }
 }

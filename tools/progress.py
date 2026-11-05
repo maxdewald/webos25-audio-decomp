@@ -5,7 +5,7 @@
   progress.py diff <target> <function|0xaddr> instruction diff, original vs src
   progress.py todo <target> [-n N]           largest functions not yet in src/
   progress.py symbols                        write symbols/<target>.elf.tsv for ARM targets without one
-  progress.py svg                            write progress.svg: original files with a reconstruction
+  progress.py svg [--no-match]               write progress.svg: original files with a reconstruction
 """
 import argparse
 import difflib
@@ -269,7 +269,7 @@ def summary(t):
         'reconstructed_functions': len(done), 'reconstructed_bytes': covered,
         'coverage_pct': round(100 * covered / total, 3) if total else 0.0,
         'matching_functions': sum(1 for f in scored if f.match == 100.0),
-        'match_pct': round(weighted / total, 3) if total else None,
+        'match_pct': round(weighted / total, 3) if total and scored else None,
         'symbols': bool(t.funcs),
     }
 
@@ -390,7 +390,7 @@ def progress_svg(rows):
     for i, r in enumerate(rows):
         y = HEAD + i * ROW
         c, m = r['coverage_pct'], r['match_pct']
-        arm = r['arch'] == 'arm' and m is not None
+        arm = r['arch'] == 'arm'
         out += [f'<text class="name" x="{PAD}" y="{y + 16}">{escape(r["target"])}</text>',
                 f'<text class="path" x="{PAD}" y="{y + 33}">{escape(r["path"])}</text>',
                 f'<rect class="track" x="{BX}" y="{y + 10}" width="{BW}" height="14" rx="7"/>']
@@ -402,7 +402,7 @@ def progress_svg(rows):
                        f'width="{max(BW * m / 100, 3):.1f}" height="14" rx="7"/>')
         out.append(f'<text class="pct" x="{BX + BW + 16}" y="{y + 22}">{c:.1f}%</text>')
         out.append(f'<text class="path" x="{BX + BW + 16}" y="{y + 38}">'
-                   f'{f"{m:.1f}% match" if arm else r["arch"]}</text>')
+                   f'{f"{m:.1f}% match" if arm and m is not None else r["arch"]}</text>')
     y = h - 26
     for x, cls, label in ((PAD, 'match', 'matches original instructions'),
                           (PAD + 230, 'cov', 'reconstructed (ARM)'),
@@ -415,7 +415,8 @@ def progress_svg(rows):
 
 def cmd_svg(args):
     targets = [t for t in load_targets() if t.src and any(f.src for f in t.funcs.values())]
-    score_all(targets)
+    if not args.no_match:
+        score_all(targets)
     rows = [summary(t) | {'path': '/' + str(t.binary.relative_to(ROOT / 'orig'))} for t in targets]
     rows.sort(key=lambda r: (-r['coverage_pct'], -(r['match_pct'] or 0)))
     out = ROOT / 'progress.svg'
@@ -446,7 +447,9 @@ def main():
     t.add_argument('-n', type=int, default=25)
     t.set_defaults(fn=cmd_todo)
     sub.add_parser('symbols').set_defaults(fn=cmd_symbols)
-    sub.add_parser('svg').set_defaults(fn=cmd_svg)
+    svg = sub.add_parser('svg')
+    svg.add_argument('--no-match', action='store_true', help='skip compiling and instruction matching')
+    svg.set_defaults(fn=cmd_svg)
     args = p.parse_args()
     args.fn(args)
 

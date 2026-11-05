@@ -1,6 +1,6 @@
 # webos25-audio-decomp
 
-Clean-room decompilation of the LG webOS 25 audio output path, from the media pipeline
+Source-assisted reconstruction of the LG webOS 25 audio output path, from the media pipeline
 down to the eARC output on the DSP. Firmware: LG OLED42C27LA (C2), Rockhopper
 10.3.1-3006, kernel 5.4.268-329.ptl4tv.5.
 
@@ -15,7 +15,7 @@ down to the eARC output on the DSP. Firmware: LG OLED42C27LA (C2), Rockhopper
 ```sh
 make verify        # orig/ holds the expected files (pull them from a rooted TV)
 make toolchain     # GCC 11.4.0 ARMv7-A Thumb-2 image, the compiler LG used
-make public-sources # pinned public C++ dependencies and LG reference source
+make public-sources # pinned public dependencies and webOS reference implementations
 make opensource     # optional: LG's firmware GPL/LGPL source (~4.4 GB)
 ```
 
@@ -29,10 +29,10 @@ To regenerate `build/decomp/`: Ghidra 12.2 with
 make status                          # coverage and instruction match per target
 make todo T=libumi                   # largest functions not yet reconstructed
 make diff T=libumi F=setOutputType   # instruction diff, original vs compiled src/
-make progress                        # regenerate progress.svg above
+make progress                        # regenerate chart; NO_MATCH=1 for coverage only
 ```
 
-1. Pick a function with `make todo`, read it in `build/decomp/<binary>.c`.
+1. Check `make public-source-map` first (references, not verified coverage), then `make todo`.
 2. Write it in `src/<target>/`, tagged with its Ghidra address on the line before:
 
    ```c

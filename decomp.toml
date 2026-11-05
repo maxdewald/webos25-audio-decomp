@@ -127,10 +127,14 @@ symbols = "symbols/libresource_mgr.so.1.0.0.functions.tsv"
 name = "libresource_mgr_client"
 binary = "orig/usr/lib/libresource_mgr_client.so.1.0.0"
 symbols = "symbols/libresource_mgr_client.so.1.0.0.functions.tsv"
+src = "src/libresource_mgr_client"
+cflags_extra = ["-fno-sized-deallocation"]
 
 [[target]]
 name = "libresource_mgr_client_c"
 binary = "orig/usr/lib/libresource_mgr_client_c.so.1.0.0"
+src = "src/libresource_mgr_client_c"
+cflags_extra = ["-Ilg-opensource/public/umediaserver/include/public", "-fno-sized-deallocation"]
 
 [[target]]
 name = "libAudioResources"
@@ -191,6 +195,8 @@ binary = "orig/usr/lib/libums_connector_impl.so.1.0.0"
 [[target]]
 name = "libums_connector_wrapper"
 binary = "orig/usr/lib/libums_connector_wrapper.so.1.0.0"
+src = "src/libums_connector_wrapper"
+cflags_extra = ["-Ilg-opensource/public/umediaserver/include/public", "-fno-sized-deallocation"]
 
 [[target]]
 name = "libums_dbi"

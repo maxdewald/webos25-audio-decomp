@@ -62,6 +62,15 @@ static long libpf_test_syscall(long) { return static_cast<long>(getpid()); }
                         'src/libmedia-resource-calculator/resource.cpp', 'tools/test_mrc_public.cpp',
                         '-o', str(mrc)], cwd=ROOT, check=True)
         subprocess.run([str(mrc)], check=True)
+        calculator = Path(directory) / 'calculator_test'
+        subprocess.run([compiler, '-std=c++14', '-Wall', '-Wextra', '-Wno-unused-parameter',
+                        '-fsanitize=address,undefined', '-fno-sanitize-recover=all',
+                        '-Isrc/libmedia-resource-calculator',
+                        '-Ilg-opensource/public/media-resource-calculator/calculator',
+                        'src/libmedia-resource-calculator/resource.cpp',
+                        'src/libmedia-resource-calculator/calculator.cpp', 'tools/test_mrc_calculator.cpp',
+                        '-o', str(calculator)], cwd=ROOT, check=True)
+        subprocess.run([str(calculator)], check=True)
 
 
 if __name__ == '__main__':

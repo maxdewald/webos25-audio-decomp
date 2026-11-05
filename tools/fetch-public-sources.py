@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""Fetch pinned public reference sources: fetch-public-sources.py [name ...]."""
+"""Fetch pinned public references: fetch-public-sources.py [--list] [name ...]."""
+import argparse
 import concurrent.futures
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
 import shutil
 import subprocess
-import sys
 import tarfile
 import tempfile
 
@@ -17,7 +17,8 @@ MANIFEST = ROOT / 'tools/public-sources.json'
 def fetch(name, entry):
     parent = ROOT / 'lg-opensource/public'
     destination = parent / name
-    identity = json.dumps(entry, sort_keys=True) + '\n'
+    identity = json.dumps({key: value for key, value in entry.items()
+                           if key not in ('targets', 'scope')}, sort_keys=True) + '\n'
     marker = destination / '.source.json'
     if marker.is_file() and marker.read_text() == identity:
         print(f'cached {name} {entry["revision"]}', flush=True)
@@ -58,12 +59,35 @@ def fetch(name, entry):
     print(f'fetched {name} {entry["revision"]}', flush=True)
 
 
+def list_sources(manifest, names):
+    print('Public references only; not verified binary coverage.')
+    for name in names:
+        entry = manifest[name]
+        destination = ROOT / 'lg-opensource/public' / name
+        print(f'{name} {entry["revision"]} ({entry["license"]})')
+        if entry.get('scope'):
+            print(f'  {entry["scope"]}')
+        for target, paths in entry.get('targets', {}).items():
+            print(f'  {target}:')
+            for path in paths:
+                reference = destination / path
+                state = 'present' if reference.exists() else 'missing'
+                print(f'    [{state}] {reference.relative_to(ROOT)}')
+
+
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--list', action='store_true', help='show target references without downloading')
+    parser.add_argument('names', nargs='*')
+    args = parser.parse_args()
     manifest = json.loads(MANIFEST.read_text())
-    names = sys.argv[1:] or list(manifest)
+    names = args.names or list(manifest)
     for name in names:
         if name not in manifest:
-            sys.exit(f'unknown source {name}')
+            parser.error(f'unknown source {name}')
+    if args.list:
+        list_sources(manifest, names)
+        return
     with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
         futures = [pool.submit(fetch, name, manifest[name]) for name in names]
         for future in futures:

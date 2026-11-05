@@ -28,7 +28,8 @@
  * Verification depth: _set_format, _cb_output_status, output_set_type,
  * output_pre/post_connect, output_pre/post_disconnect, output_set_format,
  * output_set_volume, output_set_earc_on, output_set_on were read instruction
- * by instruction; the other tagged functions only by symbol + strings.
+ * by instruction; output_set_mute was also verified against the Image.
+ * Other tagged functions were checked only by symbol + strings.
  *
  * webOS25-shipped differences found:
  *  - enum output_codec_t / FW_AUD_OUTPUT_CODEC_T stop at MAT: the codec name
@@ -208,7 +209,8 @@ int output_set_volume (struct aud_block_info *block, unsigned int volume)
  * @return int
  * @see
 */
-/* @0xffffffc010cb3070 */
+/* @0xffffffc010cb3070: verified Image +0x18..+0x34; set both DSP mute
+ * properties, ignore delivery status, then cache mute (no eARC HAL call). */
 int output_set_mute (struct aud_block_info *block, bool on)
 {
     struct aud_output_info *output = (struct aud_output_info *) block;
@@ -244,7 +246,8 @@ int output_set_delay (struct aud_block_info *block, unsigned int delay)
     return 0;
 }
 
-/* @0xffffffc010cb2694 */
+/* @0xffffffc010cb2694: verified Image; clock first, then ARC mute/channel/
+ * format/unmute/on; cache codec/channel/rate/bypass, but not acmod. */
 static void _set_format (struct aud_output_info *output, enum output_codec_t codec,
     unsigned int channel, unsigned int acmod, unsigned int sample_rate, bool bypass)
 {
@@ -706,7 +709,9 @@ static enum output_codec_t _adec_codec_convert_output_codec (FW_AUD_OUTPUT_CODEC
  * IEC 61937 bursts with its own ES/HBR lane setup (HAL_SetArcEsMode).
  * The ARM-side eARC link layer therefore advertises PCM for DTS bitstreams.
  */
-/* @0xffffffc010cb2d54 */
+/* @0xffffffc010cb2d54: verified Image; ignores payload length, preserves
+ * acmod for ES, and indexes the log codec table with the original event codec
+ * (+0x10c), not the sanitized codec. Unchanged ARC state still reapplies on. */
 static int _cb_output_status (void *_param, int _paramLen, void *_cbParam)
 {
     struct aud_output_info *output = (struct aud_output_info *) _cbParam;
@@ -958,7 +963,8 @@ static int output_resume (struct aud_block_info *block)
     return 0;
 }
 
-/* @0xffffffc010cb2800 */
+/* @0xffffffc010cb2800: verified Image; input side only. Temporary DSP/HAL
+ * mute and zero delay leave cached output->mute/output->delay unchanged. */
 static int output_pre_disconnect (struct aud_block_info *block, int port, bool in)
 {
     struct aud_output_info *output = (struct aud_output_info *) block;
@@ -976,7 +982,7 @@ static int output_pre_disconnect (struct aud_block_info *block, int port, bool i
 }
 
 
-/* @0xffffffc010cb2760 */
+/* @0xffffffc010cb2760: verified Image; input ARC sends STOP (0x10020000). */
 static int output_post_disconnect (struct aud_block_info *block, int port, bool in)
 {
     struct aud_output_info *output = (struct aud_output_info *) block;
@@ -990,7 +996,7 @@ static int output_post_disconnect (struct aud_block_info *block, int port, bool 
     return 0;
 }
 
-/* @0xffffffc010cb27b0 */
+/* @0xffffffc010cb27b0: verified Image; input ARC sends START (0x10010000). */
 static int output_pre_connect (struct aud_block_info *block, int port, bool in)
 {
     struct aud_output_info *output = (struct aud_output_info *) block;
@@ -1004,7 +1010,8 @@ static int output_pre_connect (struct aud_block_info *block, int port, bool in)
     return 0;
 }
 
-/* @0xffffffc010cb31d4 */
+/* @0xffffffc010cb31d4: verified Image; input side restores cached delay,
+ * unmutes ARC HAL, then restores cached DSP mute, irrespective of port. */
 static int output_post_connect (struct aud_block_info *block, int port, bool in)
 {
     struct aud_output_info *output = (struct aud_output_info *) block;

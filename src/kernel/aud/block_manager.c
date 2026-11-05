@@ -632,7 +632,12 @@ int bm_set_preffered_processor (struct aud_block_info *block_info, int proc)
     return 0;
 }
 
-/* @0xffffffc010c9e960 */
+/* @0xffffffc010c9e960: pre_disconnect runs for every connected output, then
+ * the input; disconnect uses the forwarded input pipeline/port. Failure
+ * (+0x180) preserves the recorded links and skips all post callbacks. Success
+ * calls output posts, input post, then deletes the input port and peer links
+ * (+0x1bc/+0x1e4/+0x1ec). Callback return values are ignored.
+ */
 static int _bm_disconnect_block_locked (struct aud_block_info *block_info_in, int port_in)
 {
     struct apipeline *pipe_in;
@@ -753,7 +758,8 @@ static int _bm_disconnect_block_locked (struct aud_block_info *block_info_in, in
     return ret;
 }
 
-/* @0xffffffc010c9edc0 */
+/* @0xffffffc010c9edc0: NULL is a successful no-op; otherwise bm_lock covers
+ * callbacks, pipeline disconnect and bookkeeping, and the helper result wins. */
 int bm_disconnect_block (struct aud_block_info *block_info_in, int port_in)
 {
     struct aud_bm_info *bm_info = &_bm_info;
@@ -870,7 +876,8 @@ int bm_remove_reserved (struct aud_block_info *block_info, int port, bool reserv
  *   resolve port forwards, apipeline_connect()          [+0x1cc]
  *   on error: log "error in connect ..." and RETURN (no post_connect,
  *             no _bm_add_port, nothing undone)           [+0x1d4 -> +0x230]
- *   _bm_add_port x2, port link (inlined _bm_connect_port)
+ *   _bm_add_port x2, port link (inlined _bm_connect_port); their allocation
+ *   failures and all callback return values do not change the pipeline result.
  *   post_connect(out, port_out, PORT_OUT) [impl+0x38, +0x308]
  *   post_connect(in,  port_in,  PORT_IN)  [impl+0x38, +0x324]
  * So post_connect is skipped only when apipeline_connect fails (e.g. a head or
@@ -1051,7 +1058,11 @@ int bm_connect_block_reserved (struct aud_block_info *block_info_in, int port_in
     return ret;
 }
 
-/* @0xffffffc010c9fab4 */
+/* @0xffffffc010c9fab4: reservations persist even after an immediate connect.
+ * The lookup key is type/index/port, not direction or reserver; an existing
+ * entry is not replaced. The connect result is discarded and every exit
+ * returns -1 (+0x128), including successful and deferred connections.
+ */
 static int _bm_connect_block_reserved (struct aud_block_info *block_info, int port,
     const char *block_type_to, int index_to, int port_to, bool to_in)
 {
@@ -1148,7 +1159,8 @@ int bm_connect_block_reserved_in (struct aud_block_info *block_info_out, int por
         true);
 }
 
-/* @0xffffffc010ca11d0 */
+/* @0xffffffc010ca11d0: reserve the missing output for this input (to_in=false);
+ * returns the shared helper's -1, not the pipeline connection status. */
 int bm_connect_block_reserved_out (const char *block_type_out, int index_out, int port_out,
     struct aud_block_info *block_info_in, int port_in)
 {
@@ -1274,6 +1286,9 @@ int bm_register_port_forward (struct aud_block_info *block_info, bool in,
 }
 
 
+/* Inlined in bm_suspend @0xffffffc010ca1780: disconnect recorded output peers
+ * (+0x198), resolving only input forwards. Ignore failures and retain links;
+ * unlike bm_disconnect_block, no pre/post_disconnect callbacks are invoked. */
 static int _bm_disconnect_blocks_without_update (void)
 {
     struct aud_bm_info *bm_info = &_bm_info;
@@ -1337,7 +1352,9 @@ static int _bm_disconnect_blocks_without_update (void)
  * Inlined into bm_resume (@0xffffffc010ca1b80): calls impl->pre_reconnect
  * (+0x60), apipeline_connect for every recorded link, impl->post_reconnect
  * (+0x68). pre_connect/post_connect are NOT called on resume, so the
- * drop_output_data pre/post pair is not replayed either.
+ * drop_output_data pre/post pair is not replayed either. Both endpoints use
+ * current port forwarding. apipeline_connect's result (+0x2d8) is ignored:
+ * post_reconnect still runs for every block after a failed reconnect.
  */
 static int _bm_reconnect_blocks (void)
 {
@@ -1464,7 +1481,8 @@ int bm_suspend (void)
     return 0;
 }
 
-/* @0xffffffc010ca1b80 */
+/* @0xffffffc010ca1b80: under bm_lock, resume ALL blocks before reconnect's
+ * three passes; clear suspended only after unlocking (+0x410/+0x418). */
 int bm_resume (void)
 {
     struct aud_bm_info *bm_info = &_bm_info;
@@ -1608,9 +1626,8 @@ static struct aud_block_info *_bm_create_block_locked (const char *block_type, i
 
     debug ("alloc and add in block list done.\n");
 
-    // find block in connect reserved list
-    // if block and index is in reserved list,
-    // connect to reserver.
+    // @0xffffffc010c9fe90 +0x2a8/+0x32c: replay every matching reservation
+    // after construction, using its direction; retain entries and ignore errors.
     rvd_con = _bm_find_block_in_reserved_list (block_type, index, -1);
     if (rvd_con)
     {
@@ -1637,9 +1654,7 @@ static struct aud_block_info *_bm_create_block_locked (const char *block_type, i
                 }
                 else
                 {
-                    // (A) - (B)
-                    // (A) block which is just created is in module.
-                    // (B) block which reserved is out module
+                    // (A) - (B): newly created output -> reserving input.
                     block_info_out = block_info;
                     port_out = rvd_con->port;
                     block_info_in = rvd_con->reserver->block_info;

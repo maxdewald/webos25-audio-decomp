@@ -22,7 +22,7 @@
 </style>
 <rect class="card" x="0.5" y="0.5" width="819" height="787" rx="10"/>
 <text class="title" x="24" y="38">Decompilation progress</text>
-<text class="sub" x="24" y="60">14 original files · 540 of 7,600 KiB of their code reconstructed (7.1%)</text>
+<text class="sub" x="24" y="60">14 original files · 542 of 7,600 KiB of their code reconstructed (7.1%)</text>
 <text class="name" x="24" y="108">libgstdecproxy</text>
 <text class="path" x="24" y="125">/usr/lib/gstreamer-1.0/libgstdecproxy.so</text>
 <rect class="track" x="330" y="102" width="340" height="14" rx="7"/>
@@ -58,19 +58,19 @@
 <rect class="match" x="330" y="286" width="93.7" height="14" rx="7"/>
 <text class="pct" x="686" y="298">100.0%</text>
 <text class="path" x="686" y="314">27.6% match</text>
-<text class="name" x="24" y="338">libaa</text>
-<text class="path" x="24" y="355">/usr/lib/libaa.so.2.0.0</text>
+<text class="name" x="24" y="338">kernel</text>
+<text class="path" x="24" y="355">/boot/Image-5.4.268-329.decompressed</text>
 <rect class="track" x="330" y="332" width="340" height="14" rx="7"/>
-<rect class="cov" x="330" y="332" width="339.5" height="14" rx="7"/>
-<rect class="match" x="330" y="332" width="184.8" height="14" rx="7"/>
-<text class="pct" x="686" y="344">99.8%</text>
-<text class="path" x="686" y="360">54.3% match</text>
-<text class="name" x="24" y="384">kernel</text>
-<text class="path" x="24" y="401">/boot/Image-5.4.268-329.decompressed</text>
+<rect class="dsp" x="330" y="332" width="340.0" height="14" rx="7"/>
+<text class="pct" x="686" y="344">100.0%</text>
+<text class="path" x="686" y="360">aarch64</text>
+<text class="name" x="24" y="384">libaa</text>
+<text class="path" x="24" y="401">/usr/lib/libaa.so.2.0.0</text>
 <rect class="track" x="330" y="378" width="340" height="14" rx="7"/>
-<rect class="dsp" x="330" y="378" width="335.5" height="14" rx="7"/>
-<text class="pct" x="686" y="390">98.7%</text>
-<text class="path" x="686" y="406">aarch64</text>
+<rect class="cov" x="330" y="378" width="339.5" height="14" rx="7"/>
+<rect class="match" x="330" y="378" width="184.8" height="14" rx="7"/>
+<text class="pct" x="686" y="390">99.8%</text>
+<text class="path" x="686" y="406">54.3% match</text>
 <text class="name" x="24" y="430">libmedia-resource-calculator</text>
 <text class="path" x="24" y="447">/usr/lib/libmedia-resource-calculator.so.1</text>
 <rect class="track" x="330" y="424" width="340" height="14" rx="7"/>

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Syntax-check reconstructed DSP sources and test the recovered ES semantics.
+"""Syntax-check DSP sources and test recovered ES and discovery semantics.
 
 usage: python3 tools/test_dsp2.py
 Tests use mocked firmware services; they do not execute or verify DSP firmware.
@@ -28,7 +28,7 @@ def main():
     run([cc, "-std=c11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only", *sources])
     tests = ROOT / "tools/tests/dsp2"
     with tempfile.TemporaryDirectory(prefix="dsp2-tests-") as temporary:
-        for name in ("gain", "delay", "transport"):
+        for name in ("gain", "delay", "transport", "debug"):
             output = Path(temporary) / name
             inputs = [tests / f"{name}.c"]
             if name == "delay":
@@ -38,7 +38,7 @@ def main():
                  "-fdata-sections", *flags, *inputs, "-o", output])
             run([output])
     run(["sh", "-n", ROOT / "tools/xtobjdump.sh"])
-    print("PASS: source syntax, recovered ES semantics and decoder shell syntax", flush=True)
+    print("PASS: source syntax, ES/discovery semantics and decoder shell syntax", flush=True)
 
 
 if __name__ == "__main__":

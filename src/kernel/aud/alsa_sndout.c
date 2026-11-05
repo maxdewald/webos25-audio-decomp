@@ -2387,8 +2387,9 @@ static void _set_atmos_encode_on (int on)
  *  - decoder_set_output_drop(idx, DROP_*) is replaced by
  *    decoder_set_output_mode(idx, MAIN|BYPASS, on/off) and the new
  *    sndout_info->mixer_connected_output bitmask:
- *      BYPASS: decoder_set_output_mode(main_audio, BYPASS, true) – always,
- *              the published "SPK open ? DROP_NONE : DROP_MAIN" is gone;
+ *      BYPASS: decoder_set_output_mode(main_audio, BYPASS, true) only when
+ *              the main input is connected (+0x360..+0x400); the published
+ *              "SPK open ? DROP_NONE : DROP_MAIN" selection is gone;
  *      leaving bypass for non-bypass: (main_audio, BYPASS, false) (published:
  *              DROP_SUB on bypass_master_index);
  *      PCM / ENCODING: mixer_connected_output |= output and
@@ -4785,7 +4786,9 @@ static int sndout_earc_output_type_get (struct snd_kcontrol *kcontrol,
     return 0;
 }
 
-/* @0xffffffc010cd8fe0 */
+/* @0xffffffc010cd8fe0: verified Image +0xc4..+0xe4; unsigned 32-bit
+ * limits {2,9,8,192000,1}. Reject before lock/init; successful settings are
+ * cached even with ARC off, then notify after unlocking. */
 static int sndout_earc_output_type (struct snd_kcontrol *kcontrol,
     struct snd_ctl_elem_value *ucontrol)
 {

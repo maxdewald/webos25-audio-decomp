@@ -21,7 +21,7 @@
  * Focused excerpt: surrounding original-file implementation remains external.
  */
 #include <linux/kernel.h>
-#include <linux/slab.h>
+#include <linux/list.h>
 
 #include "kaimc.h"
 #include "module_list.h"
@@ -29,10 +29,6 @@
 #include "log.h"
 
 logm_define (aud_pipeline, log_level_noti);
-#define trace(fmt,args...)	logm_trace(aud_pipeline,fmt,##args)
-#define debug(fmt,args...)	logm_debug(aud_pipeline,fmt,##args)
-#define info(fmt,args...)	logm_info(aud_pipeline,fmt,##args)
-#define noti(fmt,args...)	logm_noti(aud_pipeline,fmt,##args)
 #define error(fmt,args...)	logm_error(aud_pipeline,fmt,##args)
 
 struct element

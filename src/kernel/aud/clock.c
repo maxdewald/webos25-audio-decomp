@@ -27,39 +27,7 @@
  */
 
 
-/**
- *  @file clock.c
- *
- *  Audio driver implementation for  audio clock.
- *  clock functions manage clock of Speaker, Headphone(HP), Optic(SPDIF), and ARC output
- *  (include eARC).
- *
- *  speaker output : 48000Hz rate, 2 channels pcm.
- *  out_speaker - pcm
- *
- *  headphone output : only 48000Hz, 2 channels pcm.
- *  out_hp - pcmsub.
- *
- *  spdif output : 32000/44100/48000Hz rate, multi channels, pcm/aac/ac3 codec.
- *  pcm output : out_spdif - spdif
- *  es output : outes_spdif - spdif
- *
- *  arc output : 32000/44100/48000/64000/88200/96000/128000/17400/192000Hz rate,
- *  multi channels, pcm/aac/ac3/eac3/mat codec.
- *  pcm output : out_arc - arc
- *  es output : outes_arc - arc
- *
- *  @author	wonchang.shin (wonchang.shin@lge.com)
- *  @version    0.1
- *  @date       2020/10/26
- *
- *  @addtogroup output
- *  @{
- */
-
-/*------------------------------------------------------------------------------
-    File Inclusions
-------------------------------------------------------------------------------*/
+/* Clock state for speaker, headphone, optical and ARC/eARC outputs. */
 #include <linux/slab.h>
 #include <linux/list.h>
 #include <linux/kthread.h>

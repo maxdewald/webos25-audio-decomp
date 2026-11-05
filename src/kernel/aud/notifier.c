@@ -21,53 +21,13 @@
  * GNU General Public License for more details.
  */
 
-
-/**
- *  @file notifier.c
- *
- *  Audio driver implementation for  audio notifier.
- *  Audio notifier notifies alsa driver when input changed and kernel driver
- *  when output changed.
- *
- *  @author	wonchang.shin (wonchang.shin@lge.com)
- *  @version    0.1
- *  @date       2020/12/21
- *
- *  @addtogroup sndout
- *  @{
- */
-#include <linux/module.h>
-#include <linux/list.h>
-#include <linux/proc_fs.h>
-#include <sound/soc.h>
-#include <sound/pcm_params.h>
-
-#include "os_util.h"
-#include "base_device.h"
-#include "debug_util.h"
-
 #include "log.h"
-#include "audio_kapi.h"
-
-#include "block.h"
-#include "decoder.h"
-#include "mixer.h"
-#include "se.h"
-#include "output.h"
-#include "encoder.h"
 #include "renderer.h"
-#include "block_manager.h"
-#include "clock.h"
-
 #include "alsa/alsa_support_sndout.h"
 
 logm_define (notifier, log_level_noti);
-#define trace(fmt,args...)  logm_trace(notifier,fmt,##args)
 #define debug(fmt,args...)  logm_debug(notifier,fmt,##args)
-#define info(fmt,args...)   logm_info(notifier,fmt,##args)
 #define noti(fmt,args...)   logm_noti(notifier,fmt,##args)
-#define warn(fmt,args...)   logm_warning(notifier,fmt,##args)
-#define error(fmt,args...)  logm_error(notifier,fmt,##args)
 
 #define PLAY_SPEED_INDEX_MAX    2
 unsigned int play_speed[PLAY_SPEED_INDEX_MAX] = { 1000, 1000 };

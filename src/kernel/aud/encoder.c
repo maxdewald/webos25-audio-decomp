@@ -31,28 +31,9 @@
 #include "module/adec_module_list.h"
 #include "encoder.h"
 
-/*------------------------------------------------------------------------------
-    Constant Definitions
-------------------------------------------------------------------------------*/
-
-/*------------------------------------------------------------------------------
-    Macro Definitions
-------------------------------------------------------------------------------*/
-/// @brief Print log message for trace level
-#define trace(fmt,args...)      logm_trace (aencoder, fmt, ##args)
-/// @brief Print log message for debug level
-#define debug(fmt,args...)      logm_debug (aencoder, fmt, ##args)
-/// @brief Print log message for info level
+logm_define (aencoder, log_level_noti);
 #define info(fmt,args...)       logm_info (aencoder, fmt, ##args)
-/// @brief Print log message for noti level
-#define noti(fmt,args...)       logm_noti (aencoder, fmt, ##args)
-/// @brief Print log message for warning level
-#define warn(fmt,args...)       logm_warning (aencoder, fmt, ##args)
-/// @brief Print log message for error level
 #define error(fmt,args...)      logm_error (aencoder, fmt, ##args)
-
-#define AUD_DEC_LOCK()		    mutex_lock(&_enc_lock)
-#define AUD_DEC_UNLOCK()	    mutex_unlock(&_enc_lock)
 
 #define set_property(_prop, _value) ({                      \
     if (_prop == NULL) {                                    \
@@ -62,12 +43,6 @@
     *(_prop) = _value;                                      \
 })
 
-/*------------------------------------------------------------------------------
-    Type Definitions
-------------------------------------------------------------------------------*/
-/**
- * AUDIO Encoder Information.
- */
 struct aud_encoder_info
 {
     struct aud_block_info parent;
@@ -81,7 +56,6 @@ struct aud_encoder_info
      * occupies only alignment padding here; no DTS functionality is present. */
     unsigned char gap_24[4];
 
-    // 상태 변수들
     enum output_codec_t *codec;
     int *acmod;
     int *gain;
@@ -91,36 +65,7 @@ struct aud_encoder_info
     bool *ch_lock_mode;
 };
 
-/*------------------------------------------------------------------------------
-    External Function Prototype Declarations
-------------------------------------------------------------------------------*/
-
-/*------------------------------------------------------------------------------
-    External Variables
-------------------------------------------------------------------------------*/
-
-/*------------------------------------------------------------------------------
-    global Variables
-------------------------------------------------------------------------------*/
-
-/*------------------------------------------------------------------------------
-    Static Function Prototypes Declarations
-------------------------------------------------------------------------------*/
-
-/*------------------------------------------------------------------------------
-    Static Variables
-------------------------------------------------------------------------------*/
-logm_define (aencoder, log_level_noti);
-
-//TODO: wrapper 적용 안했으니 ddp/mat encoder instance 는 1개만 만들어져야 함
-static DEFINE_MUTEX (_enc_lock);
-
-/*==============================================================================
-    Implementation Group
-==============================================================================*/
-
 /* Shipped codec switch accepts AC3/EAC3/AAC/MAT only; no DTS arms. */
-
 /* @0xffffffc010cb4e44 */
 int aud_encoder_set_codec (struct aud_block_info *block, enum output_codec_t codec, int channel)
 {

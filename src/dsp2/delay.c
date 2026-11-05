@@ -7,7 +7,10 @@
  *   sha256 d1735e7ad803d5da3f4dfd778a5936d3f962a91e1d26f896ec1dba8423b7d3cd
  * Linked at 0x60000000. Property table @0x60102950: delay (int +0x100, setter),
  * packet-count (ro +0x140), queued-length (getter), delayed (bool +0x15c),
- * number-packet (+0x150), au-length (+0x144). FLIX: see module_core.c.
+ * number-packet (+0x150), au-length (+0x144). Branch FLIX now decoded with
+ * tools/xtobjdump.sh; remaining PCM fade math is explicitly incomplete.
+ * queued-length is a STRING getter (type 0), no geti: kernel aimc_get_property
+ * cannot read it. packet-count, au-length, number-packet and delay are integers.
  * Evidence: build/scratch/a13/delay.asm, build/decomp/audio_a0_dsp2.main_60000000.bin.c ~122932.
  *
  * ES handling (observed):
@@ -17,14 +20,22 @@
  *  - Drops: a delay change flushes the queue (queued ES lost), may drop the
  *    current buffer ("return delay chain", lvl 4), then queues `delay` ms of zero
  *    packets (typed ES in ES mode). LAST flushes (pushing what is queued),
- *    DISCONNECT flushes and resets delay to 0.
+ *    synchronous DISCONNECT flushes and resets delay to 0.
+ * For ES channels=8/data-rate=192000, bytes_per_ms_unit=16 and rate_khz=192;
+ * unit=ceil(192*16/48)=64 bytes per 48-kHz tick. With au-length=256 and a
+ * 32768-byte input, number-packet=max(1,ceil(floor(32768/256)/64))=2.
+ * Release requires floor(192*256*packet_count/48)>256+192*delay-1;
+ * at 10 ms the minimum is 3 chunks. Normal positive values do not hold an
+ * infinite stream forever; a short tail can remain queued until LAST.
+ * FIRST uses sampling-rate in kHz (default 48), not a raw GStreamer 48000;
+ * ES data-rate=192000 is explicitly normalized to 192. No live FIRST was read.
  *  - No data-type based drop and no "drop until first" logic.
  */
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
-struct aud_event { int pad[3]; int type; };
+struct aud_event { int pad[3]; int type; unsigned prop; };
 struct aud_data {
     int pad[4];
     int type;                    /* +0x10 */
@@ -132,11 +143,10 @@ int delay_queue_push_locked(struct delay *dl, struct aud_data *d, bool es)
         aud_object_put(d);
         return 0;
     }
-    aud_data_adapter_push(dl->adapter, aud_object_get(d));
+    aud_data_adapter_push(dl->adapter, d);
     if (d->type == 0 || (dl->es && d->type == 1))
         dl->packet_count++;
-    /* "%s: packet_count=%d type=%d" (lvl 5) */
-    aud_object_put(d);
+    /* "%s: packet_count=%d type=%d" (lvl 5); adapter owns d. */
     return 0;
 }
 
@@ -163,20 +173,23 @@ int delay_add_zero(struct delay *dl, int ms)
     return 0;
 }
 
-/* @0x6008fffc delay_queue_fadeout: fade the queued PCM tail; returns nonzero when
- * something was pushed [FLIX-heavy, body not reconstructed]. */
-int delay_queue_fadeout(struct delay *dl)
-{
-    (void)dl;
-    return 0;
-}
+/* 0x6008fffc: queued PCM fadeout is not reconstructed. [FLIX] Declaration
+ * only; the ES paths do not call it. Do not substitute a successful no-op. */
+extern int delay_queue_fadeout(struct delay *dl);
 
-/* @0x600900ac delay_queue_flush: push (push_all) or drop everything queued.
- * "flush all remain data"; for Dolby PCM up to 2 zero packets are added. */
+/* Unresolved PCM-only prefix of delay_queue_flush @0x600900ac. */
+extern void delay_queue_flush_pcm_unrecovered(struct delay *, int push_all);
+
+/* @0x600900ac delay_queue_flush: recovered ES path; PCM remains unresolved. */
 void delay_queue_flush(struct delay *dl, int push_all)
 {
     struct aud_data *d;
 
+    if (!dl->es && push_all) {
+        delay_queue_flush_pcm_unrecovered(dl, push_all);
+        return;
+    }
+    aud_mutex_lock(dl->mutex);
     while ((d = aud_data_adapter_dequeue(dl->adapter)) != NULL) {
         if (d->type != 2 && d->type != 3)
             dl->packet_count--;
@@ -185,6 +198,9 @@ void delay_queue_flush(struct delay *dl, int push_all)
         else
             aud_object_put(d);
     }
+    _pending_events_empty(dl);
+    dl->packet_count = 0;
+    aud_mutex_unlock(dl->mutex);
 }
 
 /* @0x60090180 delay_set_delay */
@@ -194,7 +210,7 @@ int delay_set_delay(struct delay *dl, int ms)
     unsigned queued;
 
     aud_mutex_lock(dl->mutex);
-    if (dl->delay == ms) {                            /* FLIX @0x6009019a -> 0x60090295 [FLIX?] */
+    if (dl->delay == ms) {                            /* decoded beq @0x6009019a -> 0x60090295 */
         aud_mutex_unlock(dl->mutex);
         return 0;
     }
@@ -211,8 +227,8 @@ int delay_set_delay(struct delay *dl, int ms)
     /* "%s: send delay-changed" (lvl 3) */
     {
         struct aud_event *e = aud_event_newv_custom("delay-changed",
-            "is-delay", ms != 0, "unit-per-packet", dl->new_number_packet,
-            "au-length", dl->new_au_length, "es", dl->es, NULL);
+            "is-delay", ms != 0, "unit-per-packet", dl->number_packet,
+            "au-length", dl->au_length, "es", dl->es, NULL);
         if (e)
             _pending_events_add(&dl->pending_events, e, dl->adapter, dl,
                                 (int (*)(void *, struct aud_event *))delay_push_event);
@@ -227,19 +243,28 @@ int delay_chain(void **port, struct aud_data *d)
     struct delay *dl = port[1];
     int old = dl->delay;
 
-    if (dl->es && d->size != dl->last_size) {
-        /* ES: number-packet = ceil(size / (rate*bytes/48 * au-length)) (0x6009031f);
-         * "%s: size %d->%d nPacket %d first %d" (lvl 2),
-         * "%s: number_packet or au length is changed %d->%d, %d->%d" (lvl 2) */
-        dl->last_size = d->size;
-        dl->recalc = false;
+    /* 0x60090309/60090530/600905b8: re-evaluate on FIRST (recalc), the first
+     * buffer, or a size change; the two divisions are NOT interchangeable with
+     * ceil(size/(unit*au)). The firmware first truncates size/new_au_length. */
+    if (dl->es && (dl->recalc || !dl->last_size || d->size != dl->last_size)) {
+        unsigned unit = (unsigned)((dl->rate_khz * dl->bytes_per_ms_unit + 47) / 48);
+        unsigned units = d->size / (unsigned)dl->new_au_length;
+        unsigned packets = (units + unit - 1) / unit;
+        dl->new_number_packet = packets ? (int)packets : 1;
+    }
+    dl->last_size = d->size;                           /* 0x60090362: for ALL data types */
+    dl->recalc = false;
+    if (dl->number_packet != dl->new_number_packet || dl->au_length != dl->new_au_length) {
+        dl->number_packet = dl->new_number_packet;     /* 0x60090384 */
+        dl->au_length = dl->new_au_length;
     }
 
-    if (dl->delay != dl->new_delay) {                 /* FLIX @0x60090393 -> 0x600904b8 [FLIX?] */
+    if (dl->delay != dl->new_delay) {                 /* decoded bne @0x60090393 -> 0x600904b8 */
         int pushed = delay_set_delay(dl, dl->new_delay);
 
-        if (dl->delay)                                /* "%s: add zero %d ms pushed count %d" lvl 3 */
-            delay_add_zero(dl, dl->delay);
+        if (dl->delay)                                /* 0x600904c7..600904e8 */
+            delay_add_zero(dl, (dl->rate_khz * dl->delay + dl->rate_khz - 1) /
+                              dl->rate_khz);
         dl->fadein_pending = !dl->es;
         if (pushed) {
             aud_object_put(d);                        /* current buffer dropped */
@@ -263,17 +288,23 @@ int delay_chain(void **port, struct aud_data *d)
 
     aud_mutex_lock(dl->mutex);
     delay_queue_push_locked(dl, d, dl->es);
-    /* release while more than `delay` ms is queued (0x600903ca / 0x6009045a) */
+    /* Exact 32-bit unsigned predicate @0x600903ca..600903e8 and
+     * 0x6009045a..60090472 (decoded bgeu exits). The old reconstruction omitted
+     * rate/48 and the one-AU rounding term. No PCM fade or bit-depth gate for ES. */
     while (dl->q_in != dl->q_out &&
-           (unsigned)(dl->au_length * dl->packet_count) >
-           (unsigned)(dl->rate_khz * dl->delay)) {
+           ((uint32_t)dl->rate_khz * ((uint32_t)dl->au_length *
+                                    (uint32_t)dl->packet_count)) / 48u >
+           (uint32_t)dl->au_length + (uint32_t)dl->rate_khz *
+                                     (uint32_t)dl->delay - 1u) {
         struct aud_data *o = aud_data_adapter_dequeue(dl->adapter);
         if (!o)
             break;
         if (o->type != 2 && o->type != 3)
             dl->packet_count--;
         /* "%s: packet_count=%d type=%d" (lvl 5) */
+        unsigned consumed = o->size;                 /* 0x6009049b */
         delay_push_output(dl, o);
+        _pending_events_update(&dl->pending_events, consumed);
         _pending_events_check(&dl->pending_events);
     }
     aud_mutex_unlock(dl->mutex);
@@ -300,11 +331,11 @@ int delay_event(struct delay *dl, void *port, struct aud_event *e)
         return 0;
     }
 
-    if (e->type == 1) {                               /* FLIX @0x600906d0 -> 0x60090768 */
+    if (e->type == 1) {                               /* decoded beqi type,1 @0x600906d0 */
         const char *codec;
 
         /* "%s: got first event" (lvl 3) */
-        if (dl->new_delay != dl->delay)               /* FLIX @0x60090776 [FLIX?] */
+        if (dl->new_delay != dl->delay)               /* decoded bne @0x60090776 */
             delay_set_delay(dl, dl->new_delay);
         dl->channels = aud_event_value_get_int(e, "channels", 8);
         dl->bits = aud_event_value_get_int(e, "bits-per-sample", 32);
@@ -342,17 +373,21 @@ int delay_event(struct delay *dl, void *port, struct aud_event *e)
             /* the FIRST is queued behind the data already in the delay line */
             _pending_events_add(&dl->pending_events, e, dl->adapter, dl,
                                 (int (*)(void *, struct aud_event *))delay_push_event);
+            if (dl->q_in == dl->q_out)               /* decoded beq @0x60090934 */
+                delay_add_zero(dl, dl->delay);        /* @0x60090a05 */
             return 0;
         }
         _pending_events_empty(dl);                    /* 0x600909e9 */
+        if (dl->q_in == dl->q_out)                   /* @0x600909f5 -> 60090a81 */
+            delay_add_zero(dl, dl->delay);            /* zero delay: empty no-op */
         return aud_module_default_event(dl, port, e); /* forwarded at once */
     }
 
-    if (e->type == 2) {                               /* FLIX -> 0x60090940 [FLIX?] LAST */
+    if (e->type == 2) {                               /* decoded beqi type,2 @0x600906d8 */
         /* "%s: last event" (lvl 3) */
         if (dl->delay)
             delay_queue_flush(dl, 1);                 /* push the tail */
-    } else if (e->type == 6) {                        /* FLIX -> 0x60090964 [FLIX?] DISCONNECT */
+    } else if (e->type == 6 && (e->prop & 2)) {       /* 0x60090966: only SYNC DISCONNECT */
         /* "%s: disconnect event" (lvl 3) */
         if (dl->delay) {
             delay_queue_flush(dl, 0);                 /* drop the tail */
@@ -397,9 +432,11 @@ int delay_set_param_delay(struct delay *dl, const void *prop, const char *val)
     return 0;
 }
 
-/* @0x60090c10 delay_prop_gets_queued_length: "%d" of q_in - q_out */
-int delay_prop_gets_queued_length(struct delay *dl, char *out, unsigned n)
+/* @0x60090c10: allocated string, NOT a (buffer,size) getter. No geti is present
+ * in descriptor @0x601029a0, so integer ADEC_CMD_GET_PROP returns -1. */
+char *delay_prop_gets_queued_length(struct delay *dl, const void *prop)
 {
-    extern int snprintf(char *, size_t, const char *, ...);
-    return snprintf(out, n, "%d", (int)(dl->q_in - dl->q_out));
+    extern char *audutil_strdup_printf(const char *, ...);
+    (void)prop;
+    return audutil_strdup_printf("%d", (int)(dl->q_in - dl->q_out));
 }

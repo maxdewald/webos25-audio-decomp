@@ -59,7 +59,7 @@ report coverage only.
   Confirm a name with `tools/symtab_probe.py` and the function's logged `__func__`.
 - Disassemble ARM with `--triple=armv7 --mattr=+thumb-mode`. Plain `thumbv7` crashes
   on barrier instructions.
-- Xtensa FLIX bundles are opaque to Ghidra. Conditions inside them are marked `[FLIX]`
-  in `src/` and not guessed.
+- Ghidra cannot decode Xtensa FLIX. `tools/xtobjdump.sh dsp2 START END` decodes validated
+  branch slots; unresolved SIMD/float slots remain marked `[FLIX]`.
 - Ghidra drops the string arguments of `std::string::compare`. Recover them with
   `tools/funcstrings.py`.

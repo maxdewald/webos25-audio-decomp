@@ -22,7 +22,7 @@
 </style>
 <rect class="card" x="0.5" y="0.5" width="819" height="787" rx="10"/>
 <text class="title" x="24" y="38">Decompilation progress</text>
-<text class="sub" x="24" y="60">14 original files · 526 of 7,596 KiB of their code reconstructed (6.9%)</text>
+<text class="sub" x="24" y="60">14 original files · 529 of 7,600 KiB of their code reconstructed (7.0%)</text>
 <text class="name" x="24" y="108">libgstdecproxy</text>
 <text class="path" x="24" y="125">/usr/lib/gstreamer-1.0/libgstdecproxy.so</text>
 <rect class="track" x="330" y="102" width="340" height="14" rx="7"/>
@@ -74,8 +74,8 @@
 <text class="name" x="24" y="430">dsp2</text>
 <text class="path" x="24" y="447">/lib/firmware/audio_a0_dsp2.bin</text>
 <rect class="track" x="330" y="424" width="340" height="14" rx="7"/>
-<rect class="dsp" x="330" y="424" width="21.7" height="14" rx="7"/>
-<text class="pct" x="686" y="436">6.4%</text>
+<rect class="dsp" x="330" y="424" width="22.0" height="14" rx="7"/>
+<text class="pct" x="686" y="436">6.5%</text>
 <text class="path" x="686" y="452">xtensa</text>
 <text class="name" x="24" y="476">libmedia-resource-calculator</text>
 <text class="path" x="24" y="493">/usr/lib/libmedia-resource-calculator.so.1</text>

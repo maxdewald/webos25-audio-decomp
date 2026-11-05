@@ -231,7 +231,7 @@ src = "src/dsp2"
 
 # LG audio driver ("aud") inside the kernel Image: only functions whose names appear in
 # LG's GPL kdriver/core/aud renderer/block_manager/mixer/output/driver/aapi_media/
-# alsa_sndout.c and hal/o22 eARC (addresses and sizes from the shipped kallsyms).
+# alsa_sndout.c, focused module_list/proc/kaimc paths and hal/o22 eARC (shipped kallsyms).
 # Coverage only.
 [[target]]
 name = "kernel"

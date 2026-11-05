@@ -13,10 +13,11 @@
  * Linked at 0x60000000. Matches the structure of the kernel-side module.c (names only).
  *
  * FLIX: each op0=0xE/0xF bundle is 8 bytes. For branch-shaped bundles the target is
- *   A + 4 + ((sext12((w1 >> 8) & 0xfff) << 4) | ((w0 >> 24) & 0xf))
+ *   A + 4 + sext18((((w1 >> 8) & 0x3fff) << 4) | (w0 >> 28))   (w0/w1 little-endian)
  * (checked on all 263 bundles in lipsync/delay/core: every target is an instruction
- * start; tools/flix_annot.py). The branch CONDITION stays opaque, so conditions only
- * known from the target block are marked [FLIX?]. Bundles whose target is a
+ * start; tools/flix_annot.py). tools/xtobjdump.sh now decodes the branch condition
+ * (validated, build/scratch/flixdec/README.md); [FLIX?] marks below predate it and
+ * were inferred from the target block. Bundles whose target is a
  * logmm_printl call right after a log-mask load are log guards and are dropped.
  *
  * Log levels: logmm_printl(level n) is gated by bit n of a per-source GLOBAL logm

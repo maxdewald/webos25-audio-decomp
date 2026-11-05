@@ -1,3 +1,9 @@
+ffffffc010c8ee24	348	aimc_get_property
+ffffffc010c90010	228	inst_prop_read_open
+ffffffc010c97680	256	aproc_lc_release
+ffffffc010c97f10	964	aproc_lc_read
+ffffffc010c985d0	880	log_capture_log
+ffffffc010c98df0	496	aproc_lc_trigger
 ffffffc010c9d280	160	_bm_add_port_connection.isra.0
 ffffffc010c9d320	260	_bm_find_farm_in_workfarm_list
 ffffffc010c9d424	364	_bm_get_block_port

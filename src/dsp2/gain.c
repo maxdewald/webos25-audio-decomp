@@ -4,10 +4,14 @@
  * Also aud_lmodule_skip_nonpcm (legacy lmodule helper living next to the module code).
  * RECONSTRUCTION from lib/firmware/audio_a0_dsp2.bin
  *   sha256 c32c0f65f8a4238075530417dfdda012c64317a1a9270a4e7bf80d5ce7db134d
- * Main segment linked at 0x60000000. Every op0=0xE/0xF FLIX bundle is 8 bytes and
- * OPAQUE. Branch-shaped bundles were read with the hypothesis decoder in
- * tools/flix_annot.py ("kind=B cond=N" reads like beqi aX,N). Conditions
- * that depend only on that hypothesis are marked [FLIX?]; fully unreadable ones [FLIX].
+ * Main segment linked at 0x60000000. Branch-slot FLIX conditions are decoded by
+ * tools/xtobjdump.sh (Zephyr intel_tgl_adsp overlay, independently checked branch
+ * targets/log guards). Non-branch SIMD/float bundles are NOT validated by those
+ * checks: remaining [FLIX] markers concern PCM math, not the ES path.
+ * ES does not enter gain_control or gain_set_fade_gain. No bits-per-sample test
+ * exists here; channels only sets channel and the pre-dispatch frame division.
+ * All ES-only buffers are pushed (original or same-size zeros); this module has
+ * no ES queue or wait. Allocation failure can discard the input with return -1.
  * Log guard bundles (l32i aN,<mask 0x4ff90098>) are dropped: they only gate logmm_printl.
  * Evidence: build/decomp/audio_a0_dsp2.main_60000000.bin.c (gain_chain and its
  *           __blk_ fragments, FUN_60088930/FUN_60088aa9 = mid-function blocks of
@@ -137,21 +141,14 @@ extern int   aud_prop_get_value_int(void *prop, const char *k, int def);
  * PCM kernels
  * ---------------------------------------------------------------------- */
 
-/* @0x60088118: apply gain to n frames of 32-bit PCM. Switches on channels 2/4/6/8;
- * any other count logs "invalid channel. %d" (line 0xe9). */
-void gain_control(struct gain_module *m, void *dst, const void *src, int frames, int channels)
-{
-    (void)m; (void)dst; (void)src; (void)frames;
-    switch (channels) {
-    case 2: case 4: case 6: case 8:
-        /* [FLIX] per-channel multiply/fade loops (0x6008815b..0x600883e8) are
-         * HiFi SIMD bundles; the fade update rule could not be decoded. */
-        return;
-    default:
-        logmm_printl(gain_log, 0, "gain_control", 0xe9, "invalid channel. %d\n", channels);
-        return;
-    }
-}
+/* 0x60088118: ONE 32-bit PCM frame, at src/dst + word_offset, not n frames.
+ * Verified caller @60088ba2..60088bad: a2=src, a3=word_offset, a4=dst,
+ * a5=channels, a6=effective Q23 gain. Dispatch is 2/4/6/8 channels.
+ * Each channel decodes as mulf32s -> slaisq56s 8 -> sat48s -> trunca32q48;
+ * exact fixed-point saturation/rounding semantics remain unvalidated. */
+/* [FLIX] Unresolved SIMD semantics: declaration only, not a no-op substitute. */
+extern void gain_control(const int32_t *src, int word_offset, int32_t *dst,
+                         int channels, int32_t effective_gain);
 
 /* @0x600883ec */
 int gcd(int a, int b)
@@ -159,14 +156,10 @@ int gcd(int a, int b)
     return b == 0 ? a : gcd(b, a % b);
 }
 
-/* @0x60088400: step fade_gain toward fade_target. It reads +0x114/+0x130/+0x134/+0x138/
- * +0x158 (target, stop-after, start, length, fade-type). */
-void gain_set_fade_gain(struct gain_module *m)
-{
-    (void)m;
-    /* [FLIX] the body starting at 0x6008841e is one opaque bundle stream (float/fixed
-     * curve per fade-type). */
-}
+/* 0x60088400: reads +0x114/+0x130/+0x134/+0x138/+0x158 (target,
+ * stop-after, start, length, fade-type). [FLIX] Float/fixed curve bundles from
+ * 0x6008841e remain unresolved. Declaration only; not counted as recovered. */
+extern void gain_set_fade_gain(struct gain_module *m);
 
 /* @0x600886e8: re-send the stored FIRST_AU downstream when the mute state flips.
  * muted=1 sends the "acmod=2" copy, muted=0 sends the original event. */
@@ -184,13 +177,17 @@ void gain_resend_first_event_in_transition(struct gain_module *m, int muted)
 /* ------------------------------------------------------------------------
  * gain_handle_nonpcm (inlined into gain_chain, see header)
  * Returns gain_chain's return value. The caller has already computed
- * muted = mute-input || mute-output || [FLIX?] current gain is mute.
+ * muted = mute-input || mute-output || (uint32_t)current_gain < 4.
+ * 0x6008893e loads current_gain; the bundle at 0x60088941 is bltui a14,4.
+ * Gain values 0..3 therefore mute ES even with both mute properties clear;
+ * a negative gain is NOT below this unsigned threshold.
  * ---------------------------------------------------------------------- */
 static void es_finish(struct gain_module *m, int muted, bool transition)
 {
-    if (transition)                       /* 0x60088d4e; FLIX?@0x60088d50 picks 1/0 */
+    if (transition)                       /* 0x60088d50: beqi muted,1 -> mute event */
         gain_resend_first_event_in_transition(m, muted == 1);
-    m->prev_muted = muted;                /* 0x60088d60 */
+    if (transition)
+        m->prev_muted = muted;            /* 0x60088d60; equal already otherwise */
     m->delay_changed = false;
 }
 
@@ -198,10 +195,9 @@ static inline int gain_handle_nonpcm(struct gain_module *m, struct aud_data *d, 
 {
     const bool transition = muted != m->prev_muted;          /* 0x600888b1..0x600888bc */
 
-    /* 0x6008889e/0x600888a6: [FLIX?] beqi type,2 / beqi type,3 */
+    /* 0x6008889e/0x600888a6: decoded beqi type,2 / beqi type,3. */
     if (d->type == AUD_DATA_META) {
-        /* 0x60088a5d: "META drop? %s" (line 0x178). [FLIX?]@0x60088a6a/0x60088a85:
-         * YES and the drop both follow muted==1. */
+        /* 0x60088a6a beqi muted,1; 0x60088a85 bnei muted,1 -> push. */
         logmm_printl(gain_log, 4, "gain_handle_nonpcm", 0x178, "META drop? %s",
                      muted == 1 ? "YES" : "NO");
         if (muted == 1) {
@@ -223,8 +219,8 @@ static inline int gain_handle_nonpcm(struct gain_module *m, struct aud_data *d, 
 
     if (!m->es_mode) {
         /* 0x60088d6d: ES while the stream was NOT announced as ES (+0x13c == 0).
-         * "ES drop? %s" (line 0x18a). [FLIX?]@0x60088d7a and @0x60088d95 test the same
-         * muted==1: YES -> aud_object_put (0x60088d9d), NO -> push unchanged (0x60088e78). */
+         * 0x60088d7a beqi muted,1; 0x60088d95 bnei muted,1:
+         * YES -> aud_object_put (0x60088d9d), NO -> push unchanged (0x60088e78). */
         logmm_printl(gain_log, 4, "gain_handle_nonpcm", 0x18a, "ES drop? %s",
                      muted == 1 ? "YES" : "NO");
         if (muted == 1)
@@ -236,8 +232,11 @@ static inline int gain_handle_nonpcm(struct gain_module *m, struct aud_data *d, 
     }
 
     /* ES-only stream (es_mode). Muting turns ES into same-size zero buffers, but only on
-     * packet boundaries (es_pkt_pos == 0) so no IEC 61937 burst gets cut in half. */
-    if (muted == 1) {                                         /* [FLIX?]@0x600888c5 */
+     * packet boundaries (es_pkt_pos == 0). With a valid positive unit count,
+     * unmute resumes original bytes at the next boundary; it never holds data
+     * waiting for the boundary, only sends zeros until then. No unit-count
+     * validation is present; zero would reach the signed remainder divisor. */
+    if (muted == 1) {                                         /* decoded beqi @0x600888c5 */
         if (m->es_zero_state == 0 && m->es_pkt_pos == 0)      /* 0x60088fe5 */
             m->es_zero_state = 2;
         if (m->es_zero_state == 2)
@@ -247,7 +246,7 @@ static inline int gain_handle_nonpcm(struct gain_module *m, struct aud_data *d, 
             logmm_printl(gain_log, 4, "gain_handle_nonpcm", 0x19d,
                          "MUTE : ES ONLY.. wait until sending whole packet.. %d/%d",
                          m->es_pkt_pos + 1, m->es_unit_per_packet);
-    } else if (m->es_zero_state == 2) {                       /* [FLIX?]@0x600888d2 */
+    } else if (m->es_zero_state == 2) {                       /* decoded beqi @0x600888d2 */
         if (m->es_pkt_pos == 0) {                             /* 0x60088ec8 */
             logmm_printl(gain_log, 4, "gain_handle_nonpcm", 0x1a5,
                          "UNMUTE : ES ONLY.. so stop sending zero data");
@@ -314,7 +313,11 @@ static void gain_calc_fade_delta(struct gain_module *m)
     m->gain_changed = true;
 }
 
-/* @0x6008874c: gain_chain (includes FUN_60088930 / FUN_60088aa9 and the __blk_ tails) */
+/* [FLIX] PCM body 0x60088950..0x60088d2c is not reconstructed. This explicit
+ * unresolved dependency prevents returning uninitialized PCM as successful output. */
+extern int gain_chain_pcm_unrecovered(struct gain_module *, struct aud_data *, int muted);
+
+/* @0x6008874c: ES-complete gain_chain; PCM delegates to an unresolved dependency. */
 int gain_chain(struct aud_port *port, struct aud_data *d)
 {
     struct gain_module *m = (struct gain_module *)port->module;
@@ -337,47 +340,22 @@ int gain_chain(struct aud_port *port, struct aud_data *d)
     aud_mutex_unlock(&m->lock);
 
     /* 0x60088847..0x6008894b */
-    muted = m->mute_input || m->mute_output;
-    if (!muted) {
-        /* [FLIX]@0x60088941 a further test on current_gain (+0xf0) can also set muted. */
-    }
+    muted = m->mute_input || m->mute_output || (uint32_t)m->current_gain < 4u;
 
     if (d->type != AUD_DATA_PCM)                               /* 0x60088898 */
         return gain_handle_nonpcm(m, d, muted);
 
-    /* PCM (0x60088950..0x60088d2c). Logs "prev_state(%s)=>(%s) need_gain(%s) isTran(%s)
-     * changed(%s)". If nothing needs doing ("no need to gain control") the buffer is
-     * pushed unchanged. Otherwise a new buffer is made (aud_data_new, or aud_data_new_zero
-     * when muted with no transition), gain_control runs per chunk, and gain_set_fade_gain
-     * steps the fade ("Mute Transition fade in/out", "Gain fade in/out").
-     * [FLIX] the need_gain/isTran decisions (0x60088955, 0x600889c2, 0x600889ec,
-     * 0x60088bb5) are opaque. */
-    {
-        bool transition = muted != m->prev_muted;
-        struct aud_data *out = muted && !transition ? aud_data_new_zero(d->size)
-                                                    : aud_data_new(d->size);
-        if (!out) {
-            logmm_printl(gain_log, 0, "gain_chain", 0, "no outdata. %d\n", d->size);
-            aud_object_put(d);
-            return -1;
-        }
-        out->index = d->index;
-        out->ts = d->ts;
-        if (!(muted && !transition))
-            gain_control(m, out->ptr, d->ptr, (int)(d->size / 4u / (unsigned)m->channel),
-                         m->channel);
-        if (m->fade_pos || m->fade_gain != m->fade_target)
-            gain_set_fade_gain(m);
-        aud_object_put(d);
-        aud_module_push_data(m, 0, out);
-        if (transition)
-            gain_resend_first_event_in_transition(m, muted == 1);
-        m->gain_changed = false;
-        m->final_gain = muted;      /* 0x60088d21 stores the state word into +0xf8 */
-        m->prev_muted = muted;
-        m->delay_changed = false;
-    }
-    return 0;
+    /* PCM scalar gates decoded (tools/xtobjdump.sh):
+     * 60088955: delay_changed && prev_muted==1 && !muted skips one unmute,
+     *           keeping prev_muted for this PCM buffer; does NOT affect ES.
+     * 600889c2: current_gain==UNITY enters further fast-path tests at 60088f13:
+     *           fade_gain==UNITY, delta_g==0, !gain_changed, !prev_muted, !muted
+     *           => forward original, final_gain=UNITY.
+     * 600889ec: signed word-count <1 skips frame processing.
+     * 60088bb5: processed-word-offset >= total-word-count exits frame loop.
+     * 60088d21 stores a5, the last effective Q23 gain, NOT the mute boolean.
+     * [FLIX] Per-frame fade math and SIMD rounding remain unresolved. */
+    return gain_chain_pcm_unrecovered(m, d, muted);
 }
 
 /* @0x60089084: gain_event */
@@ -392,8 +370,10 @@ int gain_event(struct gain_module *m, struct aud_port *port, struct aud_event *e
     if (e->type == AUD_EVENT_FIRST_AU) {                       /* 0x6008913e */
         int need_mute = 1;
         if (!m->mute_input && !m->mute_output) {
-            /* [FLIX?]@0x6008929c/0x600892a7: current_gain / pending gain tests keep 1 */
-            need_mute = m->prev_muted == 1;
+            /* Both decoded bltui <4 (unsigned); pending -1 is not a mute.
+             * If neither gain is <4, prev_muted==1 keeps the muted FIRST. */
+            need_mute = (uint32_t)m->current_gain < 4u ||
+                        (uint32_t)m->gain < 4u || m->prev_muted == 1;
         }
         logmm_printl(gain_log, 3, "gain_event", 0x2ae, "got first event\n");
         m->channel = aud_event_value_get_int(e, "channels", 2);
@@ -422,7 +402,7 @@ int gain_event(struct gain_module *m, struct aud_port *port, struct aud_event *e
         }
     }
 
-    if (e->type == AUD_EVENT_LAST_AU) {                        /* [FLIX?]@0x600890d0 */
+    if (e->type == AUD_EVENT_LAST_AU) {                        /* decoded beqi type,2 @0x600890d0 */
         logmm_printl(gain_log, 3, "gain_event", 0x2d8, "port%d, last event\n", port->index);
         m->got_first_data = false;
     }
@@ -452,7 +432,7 @@ int gain_command(struct gain_module *m, uint32_t cmd, int32_t *arg, unsigned len
     case CMD_NOP_B:
     case CMD_NOP_C:
         return 0;
-    case CMD_SET_GAIN:                                          /* [FLIX?]@0x60089375 */
+    case CMD_SET_GAIN:                                          /* decoded beq cmd,0x66000004 @0x60089375 */
         m->gain = arg[0];
         return 0;
     case CMD_SET_CHANNEL:

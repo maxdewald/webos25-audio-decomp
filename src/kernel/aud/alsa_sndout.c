@@ -2290,8 +2290,9 @@ static void _get_output_format (struct alsa_sndout_output_type *output,
         }
     }
 
-    // optic/arc/earc exceptional case
-    // if not 1x, out pcm.
+    /* Shipped +0xb8..+0xc8: this final override wins over codec selection
+     * and PCM-bypass exceptions. It affects routing, not output->bypass in
+     * output.c, since the downstream output_set_format is logging-only. */
     if (notifier_get_play_speed (main_audio) != 1000)
     {
         *output_codec = OUTPUT_CODEC_PCM;

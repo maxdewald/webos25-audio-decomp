@@ -293,7 +293,9 @@ int output_set_format (struct aud_block_info *block, enum output_codec_t codec,
 {
     struct aud_output_info *output = (struct aud_output_info *) block;
 
-    //_set_format (output, codec, channel, output->acmod, sample_rate, bypass);
+    /* Shipped body is logging-only: neither apply format nor cache bypass.
+     * _set_output's false argument is NOT forwarded to aud_clock_update_output.
+     * The later output_status callback reads the existing output->bypass. */
 
     noti ("%s %d, %d, %d %d.\n", OUTPUT_TO_STR (output), codec, channel, sample_rate, bypass);
 
@@ -697,8 +699,21 @@ static enum output_codec_t _adec_codec_convert_output_codec (FW_AUD_OUTPUT_CODEC
 
 /*
  * "output_status" event from dsp1 output_arc/output_spdif (raised on the first
- * AU after codec/rate/channels/acmod change, payload {codec, channels,
- * data_rate, acmod}).
+ * FIRST whose codec/rate/channels differ (or PCM acmod changes), payload
+ * {codec, channels, data_rate, acmod}. FIRST delivery alone does not imply a
+ * notification. DSP callers: aud_module_event_locked @0x600fd680 and replay
+ * in aud_module_chain_locked @0x600fd044, reconstructed in dsp1/module.c.
+ * Kernel callback caller: kaimc.c::noti_handler_work @0xffffffc010c8cc50,
+ * scheduled by cb_func_local after the IMC_ProcessHeader named-event branch.
+ * It is not called synchronously by notifier_set_play_speed.
+ *
+ * bypass is NOT in the event payload. This callback passes output->bypass
+ * (32-bit +0x54, normalized to bool) to _set_format. output_set_format never
+ * changes it. Thus bypass=0 here reflects existing/initially zero object state,
+ * not a bypass=false value copied out of the new FIRST event.
+ * An aligned B/BL scan of the exact Image found only _set_format+0x38 and
+ * output_set_earc_on+0x40 directly calling aud_clock_update_output; it found
+ * no direct notifier/routing call (indirect callers are not ruled out).
  *
  * Consequence for DTS ES on eARC (observed in shipped code): a dsp1 report of
  * codec 5..9 becomes OUTPUT_CODEC_PCM here, so if anything differs from the

@@ -170,15 +170,18 @@ symbols = "symbols/libav-proxy.so.1.0.0.functions.tsv"
 name = "libavacontroller"
 binary = "orig/usr/lib/libavacontroller.so.1.0.0"
 symbols = "symbols/libavacontroller.so.1.0.0.functions.tsv"
+src = "src/libavacontroller"
 
 [[target]]
 name = "libdile_audio_direct"
 binary = "orig/usr/lib/libdile_audio_direct.so.1.0.0"
 symbols = "symbols/libdile_audio_direct.so.1.0.0.functions.tsv"
+src = "src/libdile_audio_direct"
 
 [[target]]
 name = "libdile_audio_pcm"
 binary = "orig/usr/lib/libdile_audio_pcm.so.1.0.0"
+src = "src/libdile_audio_pcm"
 
 [[target]]
 name = "libumedia_api"

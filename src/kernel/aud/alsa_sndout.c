@@ -1474,6 +1474,13 @@ struct aud_block_info *sndout_get_se_info (common_output_ext_type_t output)
 
 EXPORT_SYMBOL (sndout_get_se_info);
 
+/* Raw Image +0x6c..+0x90 / +0x10c..+0x190: independent of the ARC
+ * bypass edge. With eARC PCM+mix on, channels 6/8 use mixer port 2, channel 2
+ * uses port 0 (all three enable decoder multi-PCM); every other case uses
+ * port 0 and disables multi-PCM for decoder indices 0/1. SPK's SE receives
+ * mixer ports 0 and 2, then feeds the speaker from SE port 0. Neither ARC
+ * selection nor mix_option=NONE removes another output's PCM connection.
+ * Actual audibility also needs its gain/mute and external hardware gates. */
 /* @0xffffffc010cd2870 */
 static void _connect_pcm (struct alsa_sndout_list_output *list_output)
 {
@@ -1556,6 +1563,16 @@ static void _connect_pcm (struct alsa_sndout_list_output *list_output)
     }
 }
 
+/* Inlined in sndout_init @0xffffffc010cd3fd8..0xffffffc010cd4034: HP is
+ * created and fed from mixer PCM port 0 WITHOUT setting opened_output. HP
+ * disconnect/close intentionally retain this edge/object. Thus ARC-only
+ * opened_output is not proof of PCM isolation from headphones. Registration
+ * initializes all output gains to unity and mutes to 1; output_add applies
+ * those cached values (@0xffffffc010cd3b48..0xffffffc010cd3b60). A retained HP
+ * mute=0 removes that mute gate regardless of eARC mix_option, but does not
+ * prove live audibility. Neither a generic property setter nor this static
+ * edge proves current-TV gain/unmute state. Physical jack/amplifier enable
+ * and DSP mixer content remain separate, unproved gates. */
 static void default_hp_connection (void)
 {
     struct alsa_sndout_list_output *list_output = NULL;
@@ -2397,6 +2414,14 @@ static void _set_atmos_encode_on (int on)
  *              (main_audio, MAIN, true);
  *      on every disconnect of the output: mixer_connected_output &= ~output,
  *              when it becomes 0 -> (main_audio, MAIN, false).
+ *  - Custom routes are only replaced when the cache guard misses. The guard
+ *    compares codec/bypass/forced_5_1, main_audio only for bypass, plus eARC/
+ *    WOWCAST PCM channel_num only for non-bypass. It does NOT compare sample
+ *    rate, mix_option, input membership, or the live DSP graph. An unchanged
+ *    control write therefore need not repair an externally modified route;
+ *    changing only mix_option can retain port 0/2 when codec/bypass stay equal.
+ *    A miss tears down this output's edges, not every PCM output. A SPK or
+ *    optic PCM route may coexist with ARC bypass; HP remains special below.
  *  - The renderer BYPASS_PORT -> mixer BYPASS_PORT link is still only made
  *    when bypass == true AND the main audio input is connected
  *    (_input_connected_any), exactly as published.
@@ -2626,6 +2651,9 @@ static void _old_optic_connect_output (sndout_optic_mode_ext_type_t optic_output
     }
 }
 
+/* Legacy table path: ARC > SE_ARC > WOWCAST priority, SE_ARC forced PCM.
+ * It never calls _get_output_format, so its codec/bypass choice has neither
+ * the play-speed override nor the eARC mix_option/PCM-bypass exceptions. */
 /* @0xffffffc010cd4f64 */
 static void _old_arc_connect_output (sndout_arc_mode_ext_type_t arc_output_type)
 {
@@ -2803,6 +2831,20 @@ static void _connect_output (struct alsa_sndout_list_output *list_output,
     }
 }
 
+/* Re-evaluation entry points in the Image: first SNDOUT_CONNECT for an
+ * optic/ARC-family output (before adding the logical connection), every valid
+ * SNDOUT_MAINAUDIO_OUTPUT write, notifier_input_changed, or changed play speed
+ * at index 0/1. The two notifier paths enter via sndout_connect_output.
+ * These are static controls/events, not dmesg patterns. Parameter/onoff
+ * handlers below also call the selected connector directly.
+ *
+ * Optic family and ARC family are both processed; within each choose only
+ * OPTIC > OPTIC_LG and ARC > SE_ARC > WOWCAST. Configuration priority is
+ * WOWCAST-on > eARC-on > ARC, independently of that output-object priority.
+ * _gNewInterfaceOpticArc starts false; ARC/OPTIC_OUTPUT_TYPE writes set true
+ * before validation, SPDIF_OUTPUTTYPE writes false before validation, while
+ * EARC_OUTPUT_TYPE does not change it. Legacy eARC set_type=NONE falls back
+ * to _old_arc_connect_output and thus omits the play-speed override. */
 /* @0xffffffc010cd51f0 */
 static void _connect_output_all (void)
 {
@@ -2903,6 +2945,17 @@ static void _set_input_gain (int index, int gain)
     mixer_set_volume (sndout_info->mixer_info, index, gain);
 }
 
+/* SNDOUT_CONNECT's list is bookkeeping, not a per-output PCM filter:
+ * the first occurrence of an input connects renderer main port 0 to its
+ * shared mixer input; adding another output for that input reuses it. Each
+ * live PCM output consumes its selected mixer output, including other mixer
+ * inputs, subject to DSP mixing/gain/mute. A custom burst on mixer PCM port 0
+ * can therefore reach the permanently connected HP and separately connected
+ * SPK/OPTIC; ARC's bypass/mix-off choice does not isolate those branches.
+ * On first logical optic/ARC connection _connect_output_all runs BEFORE
+ * _add_connection, so its bypass reservation may wait for a later connect/
+ * re-evaluation. This function notifies after locked exits, including some
+ * failures, but that notifier is not a reconnect in the shipped Image. */
 /* @0xffffffc010cd6530 */
 static int sndout_connect (struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)
 {
@@ -3122,6 +3175,12 @@ static int sndout_disconnect_get (struct snd_kcontrol *kcontrol,
     return 0;
 }
 
+/* Last logical use of an input removes its shared renderer -> mixer edge;
+ * last logical use of a non-HP output removes that output's upstream edge.
+ * HP deliberately keeps mixer -> output_hp. No reconnect/notification here.
+ * The bypass input is global: matching bypass_master_index tears it down
+ * even if another logical output still uses the same input. output_set is
+ * invalidated when no output memberships remain, not by live graph queries. */
 /* @0xffffffc010cd5e54 */
 static int sndout_disconnect (struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)
 {
@@ -4695,6 +4754,12 @@ static int sndout_earc_onoff_get (struct snd_kcontrol *kcontrol,
     return 0;
 }
 
+/* SNDOUT_EARC_ONOFF accepts only 0/1. Cache first; only an actual change
+ * with an existing opened ARC (preferred) or SE_ARC updates HAL on/off and
+ * reevaluates its route. Turning off selects ARC config; WOWCAST is excluded.
+ * Valid unchanged writes still call notifier_output_changed (a no-op hook in
+ * this Image), not _connect_output. No automatic HDMI renegotiation callback
+ * or delayed queue is present in this handler. */
 /* @0xffffffc010cd9260 */
 static int sndout_earc_onoff (struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)
 {
@@ -4789,7 +4854,11 @@ static int sndout_earc_output_type_get (struct snd_kcontrol *kcontrol,
 
 /* @0xffffffc010cd8fe0: verified Image +0xc4..+0xe4; unsigned 32-bit
  * limits {2,9,8,192000,1}. Reject before lock/init; successful settings are
- * cached even with ARC off, then notify after unlocking. */
+ * cached even with ARC off, then notify after unlocking. output_get precedes
+ * validation and can initialize soundout (including HP). Every valid write
+ * attempts reconnection iff COMMON_ARC is open AND earc_on, even if values
+ * did not change; _set_output's guard can still suppress all graph changes.
+ * This control does not enable the new ARC/optic interface selector. */
 static int sndout_earc_output_type (struct snd_kcontrol *kcontrol,
     struct snd_ctl_elem_value *ucontrol)
 {

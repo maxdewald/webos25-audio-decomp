@@ -66,6 +66,22 @@ struct hma_shmem
     unsigned int paddr;
 };
 
+/* Shipped allocation 0xc8 @0xffffffc010c99b68. lock +0x10, name[32]
+ * +0x30 (zeroed and only used by IPC error/trace logs), number +0x50,
+ * messages +0x58, wq +0x68, processor +0x80, mod_owner +0x88,
+ * hma lock +0x90/list +0xb0, task_id +0xc0. No stored opener pid/tgid/comm.
+ * Bounded raw proof: open/release, ioctl (incl. inlined add-implement/write),
+ * ipc_read, post_imc, task-status, processor/owner constructors and command
+ * handler registration. This does NOT exclude unrelated kernel subsystems.
+ * aud_proc_info.pid +0x48 is the opaque uimc pointer passed to registration,
+ * NOT a Linux PID; its name is processor_%d. Owner has a user_%p name, instance
+ * list/lock/flags/wq (0x70 bytes), not task identity. Handler nodes are 0x20
+ * bytes: next/target/callback/arg; no automatic caller identity is captured.
+ * Module ownership is not absent: create/connect/destroy pass this mod_owner.
+ * owner_inst_by_uid @0xffffffc010c90810 searches its instances under owner lock,
+ * then may fall back to global UID lookup when allow_nonsecure_connect is set
+ * (shipped data default true). This is object ownership, not pid/tgid identity;
+ * no claim about unrelated credential or procfs access controls is made. */
 struct user_imc
 {
     struct list_head proc_list;
@@ -83,6 +99,8 @@ struct user_imc
     struct mutex hma_shmem_lock;
     struct list_head hma_shmems;
 
+    /* Explicit AUIMC_IO_SET_PID (0x40044d14) payload, initially UINT_MAX;
+     * advisory liveness only, not opener identity or an authorization check. */
     unsigned int task_id;
 };
 
@@ -153,7 +171,12 @@ static int open (struct inode *inode, struct file *filp)
     return 0;
 }
 
-/* @0xffffffc010c99a40: unregister processor, delete owner, unlink, free mappings. */
+/* @0xffffffc010c99a40: unregister processor, delete owner, unlink, free mappings.
+ * del_owner @0xffffffc010c93c80 clears instance->owner, unlinks under owner lock
+ * and put_instance()s each entry, then frees owner. Unlike aren slots, module
+ * instances DO have users refcounts: put_instance @0xffffffc010c939a0 decrements
+ * users +0x40; only zero disconnects ports/sends DESTROY_MODULE and frees it.
+ * This is distinct from the non-atomic successful-uimc-open count below. */
 static int release (struct inode *inode, struct file *filp)
 {
     struct user_imc *uimc = filp->private_data;
@@ -374,6 +397,11 @@ static int ipc_write (struct user_imc *uimc, struct auimc_ipc_header *aipc)
 
 }
 
+/* Raw @0xffffffc010c99f90..0xffffffc010c9a254: queue is per uimc, not
+ * per pid or reader thread. Oversize head returns 0 without dequeue; user-copy
+ * failure returns -EFAULT and retains it; only successful copy dequeues/frees.
+ * Handler/implementation registration binds the supplied processor, not current.
+ * ioctl's SP_EL0 reads are stack-canary accesses (+0x458), not identity saves. */
 static int ipc_read (struct user_imc *uimc, struct auimc_ipc_header *aipc)
 {
     int rc;
@@ -486,6 +514,10 @@ static int add_implement_port_buf_def (struct user_imc *uimc,
     return 0;
 }
 
+/* Raw @0xffffffc010c9b1d0: global-list lock then uimc lock; explicit task_id
+ * -> find_vpid -> pid_task(PIDTYPE_PID), flags &0x404 only. Missing task, zero
+ * id or unmatched processor returns true; UINT_MAX is nonzero and looked up.
+ * No tgid/comm comparison and no permission gate on IPC/module operations. */
 bool ausrimc_get_task_status_normal (int processor_number)
 {
     struct user_imc *uimc;

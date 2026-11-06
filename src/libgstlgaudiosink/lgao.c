@@ -9,10 +9,6 @@
  * Names, prototypes and struct layouts come from the binary's DWARF (lgao.c CU).
  * Tags are raw ELF VAs (decomp.toml src_addr_bias = 0x10000).
  * Evidence: build/scratch/evidence/renderer-abi/, build/decomp/libgstlgaudiosink.so.c.
- *
- * Not tagged here because renderer.c already tags their addresses:
- *   _lgao_connect_renderer (0x1441c), _lgao_open_renderer (0x14924),
- *   _lgao_config_set_renderer_param (0x16fc4; renderer.c calls it "lgao_config").
  */
 #include <math.h>
 #include <pthread.h>
@@ -290,7 +286,9 @@ static inline void _lgao_set_msgpid_to_signal(lgao *ao)
         LOGE(0x76f, "error sigaction\n");
 }
 
-/* [not tagged: renderer.c owns @0x1441c] */
+/* @0x1441c: GET_BYPASS_UID follows SET_PCM_INFO on every rebuilt renderer.
+ * The call creates new appsrcs; caps teardown invalidates the old borrowed ones.
+ * No es/codec test here: PCM versus ES bypass selection belongs to the kernel. */
 int _lgao_connect_renderer(lgao *ao)
 {
     unsigned int uid_src = 0, uid_gain = 0;
@@ -413,7 +411,8 @@ static inline void _lgao_aimc_init(lgao *ao)
     ao->con = con;
 }
 
-/* [not tagged: renderer.c owns @0x14924] */
+/* @0x14924: sink index maps to AREN index +4 only in mixer mode.
+ * All instances open aren0; SET_INDEX, not the device filename, selects the slot. */
 int _lgao_open_renderer(lgao *ao)
 {
     unsigned int index = ao->index + (ao->isMixer ? 4 : 0);
@@ -1263,7 +1262,11 @@ int lgao_get_audio_info(void *a, LGAO_AUDIO_INFO_T prop, unsigned int *value)
     return 0;
 }
 
-/* @0x1699c: -1 = no renderer/info yet, 0 = same PCM format, 1 = changed, 2 = restart */
+/* @0x1699c: -1 = no renderer/info yet, 0 = same PCM format, 1 = changed, 2 = restart.
+ * Raw Thumb 0x169a8..0x169d6 compares rate, packed channels/bps, endian and sign
+ * only: es/codec/codec-str/data-* do not force reopening. ES -> S16LE stereo
+ * rebuilds only if one of those PCM fields changes. restart=1 alone returns 2;
+ * the CAPS handler only logs that case, without config/connect or FIRST rearm. */
 int lgao_compare_audio_info(void *a, LGAO_AUDIO_START_INFO_T *newinfo)
 {
     lgao *ao = a;
@@ -1462,7 +1465,10 @@ out:
     ioctl(ao->fd, AREN_SET_RTS_PARAM, &dst);
 }
 
-/* [not tagged: renderer.c owns @0x16fc4] PCM format + bypass selection.
+/* Preserve the shipped out-of-line memset, rather than GCC's NEON expansion. */
+extern void *renderer_memset(void *, int, size_t) __asm__("memset");
+
+/* @0x16fc4: PCM format + bypass selection.
  * pcm_bypass/pcm_multi_ch decide whether GET_BYPASS_UID later builds a PCM
  * or an ES bypass in the kernel. */
 void _lgao_config_set_renderer_param(lgao *ao)
@@ -1471,13 +1477,13 @@ void _lgao_config_set_renderer_param(lgao *ao)
     struct aren_pcm_info pcm_info;
     bool is_jp4k;
 
-    memset(&pcm_info, 0, sizeof(pcm_info));
+    renderer_memset(&pcm_info, 0, sizeof(pcm_info));
     is_jp4k = ao->appType == LGAO_APPTYPE_JP4K;
     ioctl(ao->fd, AREN_SET_JP4K_STREAM, &is_jp4k);
 
-    pcm_info.sampling_rate = pAudioInfo->freq;
-    pcm_info.channels = pAudioInfo->numberOfChannel;
     pcm_info.bits_per_sample = pAudioInfo->bitsPerSample;
+    pcm_info.channels = pAudioInfo->numberOfChannel;
+    pcm_info.sampling_rate = pAudioInfo->freq;
     pcm_info.byte_align = pAudioInfo->bigEndianOfPcm;
     pcm_info.sign = pAudioInfo->unsignedOfPcm;
     pcm_info.clock_x4 = pAudioInfo->clock_x4;

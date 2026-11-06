@@ -40,7 +40,7 @@ struct pcmcvt {
     int input_endian, input_sign;             /* +0x18c, +0x190 */
     int output_channels, output_bits, output_rate; /* +0x194..19c */
     unsigned output_samples;                 /* +0x1a0 */
-    bool generate_lfe, unused_1a5;            /* +0x1a4, +0x1a5 */
+    bool generate_lfe, gain_enable_property;  /* +0x1a4,+0x1a5; latter not active RFT state */
     int gain, acmod;                          /* +0x1a8, +0x1ac */
     bool available;                          /* +0x1b0 */
     void *rft_buffer, *src_buffer;            /* +0x1b4, +0x1b8 */
@@ -144,7 +144,9 @@ static int src_formats_equal(struct pcmcvt *m)
  * precedes SRC. SRC sees OUTPUT bits/channels on BOTH sides, so even a 16->32
  * RFT conversion can set +0xfc=1 when rates match (tail @0x6009adec).
  * No endian/sign/gain/LFE/available check exists in the SRC bypass predicate.
- * Setting properties does not flush queued input; FIRST handles that separately. */
+ * Setting properties does not flush queued input; FIRST handles that separately.
+ * Does NOT apply m->gain or gain_enable_property: active RFT gain survives format
+ * properties, FIRST, SET_ALLFMT and flush, even if the property cache disagrees. */
 int Pcmcvt_SetParamToLibs(struct pcmcvt *m)
 {
     RFT_SetInPCMFormat(m->rft, m->input_bits);
@@ -317,6 +319,13 @@ static int set_fmt(struct pcmcvt *m, struct pcmcvt_fmt *f)
  * not deferred until FIRST. len is not checked for these commands in firmware.
  * No command here sets event es/codec/data-rate or output aud_data type.
  * ENABLE_BYPASS=0x50090008 misleadingly only sets acmod (second argument).
+ * SET_GAIN=0x50040008 reads [gain,enable] @6009b474/77 and calls RFT_SetGai
+ * @6009b486; does not update cached m->gain or +1a5. Enable must equal 1.
+ * INIT(10000000) resets SRC/accounting only; START/STOP/PAUSE/10070000 return
+ * without resetting RFT. Default-command SET_PROP(10180004), via module_core
+ * @60076444 ->600759cc, can reach gain/gain-enable in pcmcvt_properties below.
+ * This establishes setter availability, NOT that a command was sent or gain
+ * is enabled on the current TV. No live gain state was observed here.
  */
 int Pcmcvt_Cmd(struct pcmcvt *m, uint32_t cmd, void *arg, unsigned len)
 {
@@ -451,7 +460,9 @@ int Pcmcvt_Chai(struct aud_port *port, struct aud_data *data)
     return 0;
 }
 
-/* @0x6009c134: no initial SetParamToLibs; FIRST/allfmt/init establishes formats. */
+/* @0x6009c134: no initial SetParamToLibs; FIRST/allfmt establishes formats.
+ * @c182..c19f caches 0x800000 but disables RFT. RFT_SetGai(disable) writes only
+ * +18, NOT +1c: an existing raw gain word is retained, never initialized here. */
 int Pcmcvt_Constructor(struct pcmcvt *m)
 {
     m->src = lgsrc_create();
@@ -463,7 +474,7 @@ int Pcmcvt_Constructor(struct pcmcvt *m)
     m->input_rate = m->output_rate = 48000;
     m->input_bits = m->output_bits = 32;
     m->over_protect = m->unused_100 = m->input_endian = m->input_sign = 0;
-    m->generate_lfe = m->unused_1a5 = false;
+    m->generate_lfe = m->gain_enable_property = false;
     m->gain = 0x800000;
     RFT_SetGai(m->rft, 0, m->gain);
     RFT_SetAcmod(m->rft, 0);
@@ -646,7 +657,9 @@ int set_prop_runing_mode(struct pcmcvt *m, const void *prop, const char *s)
     (void)prop;
     return Pcmcvt_SetMode(m, parse_int(s));
 }
-/* @0x6009cc6c */
+/* @0x6009cc6c: property gain==0x800000 disables arithmetic, every other raw
+ * value enables it. Unlike SET_GAIN this updates m->gain. Setting unity does
+ * not overwrite the previous active RFT gain word because the setter disables. */
 int set_prop_gain(struct pcmcvt *m, const void *prop, const char *s)
 {
     (void)prop;
@@ -654,7 +667,10 @@ int set_prop_gain(struct pcmcvt *m, const void *prop, const char *s)
     RFT_SetGai(m->rft, m->gain != 0x800000, m->gain);
     return 0;
 }
-/* @0x6009ccf8 */
+/* @0x6009ccf8: true/yes/1 enables even cached UNITY; all other strings disable.
+ * Does not store +1a5. The property descriptor's getter offset is not evidence
+ * that this setter maintains it. A later enable restores cached PROPERTY gain,
+ * not the last gain passed through explicit SET_GAIN. */
 int set_prop_gain_enable(struct pcmcvt *m, const void *prop, const char *s)
 {
     (void)prop;
@@ -681,6 +697,37 @@ char *pcmcvt_gets_internal_buf_size(struct pcmcvt *m)
 {
     return audutil_strdup_printf("(int)%u", queued_bytes(m));
 }
+/* Literal table @60103630..601038d7, reached through impl+30 @60103600.
+ * Firmware descriptors are 0x28 bytes; this is a semantic host view. Offsets
+ * are getter metadata, NOT stores performed before a custom set callback.
+ * module_core set_prop @60075109..60075140 calls the callback instead of store. */
+struct pcmcvt_property {
+    const char *name;
+    unsigned type, firmware_offset, flags;
+    int (*set)(struct pcmcvt *, const void *, const char *);
+    char *(*gets)(struct pcmcvt *);
+};
+const struct pcmcvt_property pcmcvt_properties[] = {
+    {"in-sampling-rate", 2, 0x188, 0, set_prop_input_rate, NULL},
+    {"in-channels", 2, 0x180, 0, set_prop_input_channels, NULL},
+    {"in-bit-per-sample", 2, 0x184, 0, set_prop_input_bits, NULL},
+    {"out-sampling-rate", 2, 0x19c, 0, set_prop_output_rate, NULL},
+    {"out-channels", 2, 0x194, 0, set_prop_output_channels, NULL},
+    {"out-bit-per-sample", 2, 0x198, 0, set_prop_output_bits, NULL},
+    {"generate-lfe", 1, 0x1a4, 0, set_prop_generate_lfe, NULL},
+    {"out-samples", 2, 0x1a0, 0, set_prop_output_samples, NULL},
+    {"over-protect", 2, 0xf8, 0, set_prop_over_protect, NULL},
+    {"running-mode", 2, 0x118, 0, set_prop_runing_mode, NULL},
+    {"gain", 2, 0x1a8, 0, set_prop_gain, NULL},
+    {"gain-enable", 1, 0x1a5, 0, set_prop_gain_enable, NULL},
+    {"acmod", 1, 0x1ac, 0, set_prop_acmod, NULL},
+    {"endian", 2, 0x18c, 0, set_prop_input_endian, NULL},
+    {"sign", 2, 0x190, 0, set_prop_input_sign, NULL},
+    {"available", 1, 0x1b0, 0, set_prop_available, NULL},
+    {"internal_buf_size", 0, 0, 1, NULL, pcmcvt_gets_internal_buf_size},
+    {NULL, 0, 0, 0, NULL, NULL}
+};
+
 /* @0x6009ce18 */
 void Pcmcvt_Init(void)
 {

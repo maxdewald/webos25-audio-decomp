@@ -637,6 +637,10 @@ static int mixer_get_module_uid (struct aud_mixer_info *mixer, int port,
  * No fader in this path (mixer_set_bypass_fader / AREN_SET_BYPASS_FADER act
  * on uid_fader, which is 0 for the BYPASS_PORT entry, i.e. on port <index>
  * PCM inputs only). Created once in mixer_create, not per connection.
+ * The bypass forward is independent of mixerbin's output ports 0/1/2.
+ * Selecting it for ARC does not disconnect mixerbin -> HP/SPK/OPTIC edges;
+ * that policy lives in alsa_sndout.c. This establishes topology, not what
+ * DSP2's mixer algorithm places on PCM outputs (separately reconstructed).
  */
 /* @0xffffffc010cadc20 */
 static int mixer_set_bypass_pipeline (struct aud_block_info *block,

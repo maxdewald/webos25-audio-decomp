@@ -32,6 +32,14 @@ logm_define (notifier, log_level_noti);
 #define PLAY_SPEED_INDEX_MAX    2
 unsigned int play_speed[PLAY_SPEED_INDEX_MAX] = { 1000, 1000 };
 
+/* Image direct callers: sndout_connect+0x140, optic_output_type+0x124,
+ * arc_output_type+0x130, wowcast_output_type_put+0xe4, earc_output_type+0x120,
+ * earc_onoff+0xe8, arc_onoff+0xf8, spdif_output_type+0xd8 (all sndout_*).
+ * This is NOT a reconnect/event queue in this Image: renderer_change_output
+ * @0xffffffc010cad3f0 is just RET. Reconnection occurs separately inside the
+ * control handlers, before notification; even unchanged valid writes notify.
+ * Digest-bound aligned direct-call evidence: test_output_routing.py. Indirect
+ * callers are not ruled out. */
 /* @0xffffffc010cc32a0 */
 void notifier_output_changed (void)
 {
@@ -40,6 +48,13 @@ void notifier_output_changed (void)
     debug ("output changed\n");
 }
 
+/* The sole aligned direct Image caller is decoder_decoded_info_cb+0xf8
+ * @0xffffffc010ca62d8. Raw callback +0x10 checks payload length 0x2c;
+ * +0x54..+0x78 / +0x164..+0x17c compare converted codec, sampling rate,
+ * channels, bits/sample and acmod against prior decoded info. Only a change
+ * notifies, after storing the new info; unrelated fields do not reconnect.
+ * Unlike output_changed, this really invokes the locked soundout reconnect
+ * dispatcher; it is not an eARC-IRQ or log-text heuristic. */
 /* @0xffffffc010cc3310 */
 void notifier_input_changed (void)
 {
@@ -56,6 +71,8 @@ void notifier_input_changed (void)
  * goes through _old_arc_connect_output instead, without that speed override.
  * output_set_format is logging-only in this Image: it neither sets hardware nor
  * stores bypass. The later DSP output_status event drives _set_format instead.
+ * The only aligned direct caller is aren_set_speed+0x11c
+ * @0xffffffc010cbe75c (AREN_SET_SPEED 0x40045209; suppressed in VSP mode).
  * This setter does not itself send FIRST, flush, or a clock-update command. */
 /* @0xffffffc010cc3380 */
 void notifier_set_play_speed (int index, unsigned int speed)

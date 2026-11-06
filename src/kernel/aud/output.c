@@ -775,6 +775,14 @@ static int _cb_output_status (void *_param, int _paramLen, void *_cbParam)
     return 0;
 }
 
+/* Physical selection is by OUTPUT_{SPEAKER,HP,OPTIC,ARC} = 0,1,2,3:
+ * queue -> outctrlbin -> output_{speaker,spdif,arc}; HP omits the queue and
+ * uses output_hp. This queue is a DSP pipeline module, NOT delayed kernel
+ * route policy. Creation/resume (not notifier_output_changed) rebuilds it.
+ * ARC/SE_ARC/WOWCAST map to the same physical ARC index; output_add refuses
+ * another live block at that index rather than mirroring to a second output.
+ * Format notification output_status only adjusts clock/HAL/cache; it does
+ * not call sndout_connect_output or modify block-manager routing. */
 /* @0xffffffc010cb3b90 */
 int output_set_type (struct aud_block_info *block, enum output_type_t output_type)
 {

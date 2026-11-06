@@ -38,6 +38,7 @@ name = "starfish-media-pipeline"
 binary = "orig/usr/sbin/starfish-media-pipeline"
 symbols = "symbols/starfish-media-pipeline.functions.tsv"
 src = "src/starfish-media-pipeline"
+cflags_extra = ["-isystem", "lg-opensource/public/boost"]
 
 [[target]]
 name = "libmedia-resource-calculator"
@@ -56,6 +57,7 @@ src = "src/audiod"
 name = "audiooutputd"
 binary = "orig/usr/sbin/audiooutputd"
 symbols = "symbols/audiooutputd.functions.tsv"
+src = "src/audiooutputd"
 
 [[target]]
 name = "umediaserver"

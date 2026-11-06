@@ -10,33 +10,7 @@
 #include <stdint.h>
 #include <string.h>
 
-struct rft_config {
-    int32_t in_bytes;             /* +00 bits-per-sample / 8 */
-    int32_t in_ch;                /* +04 */
-    int32_t in_unsigned;          /* +08: exactly 1 selects unsigned alignment */
-    int32_t in_endian;            /* +0c: exactly 1 selects byte swapping */
-    int32_t out_bytes;            /* +10 */
-    int32_t out_ch;               /* +14 */
-    int32_t gain_enable;          /* +18: exactly 1 selects gain */
-    int32_t gain;                 /* +1c raw fixed-point argument */
-    int32_t acmod;                /* +20 */
-    uint8_t gen_lfe;              /* +24 */
-    uint8_t reserved[3];
-    int32_t processing_frames;    /* +28; firmware calls this ProcessingSample */
-    int32_t lfe_history[4];       /* +2c,+30 input history; +34,+38 output history */
-};
-_Static_assert(sizeof(struct rft_config) == 0x3c, "RFT firmware state size");
-_Static_assert(offsetof(struct rft_config, processing_frames) == 0x28, "RFT frame offset");
-_Static_assert(offsetof(struct rft_config, lfe_history) == 0x2c, "RFT LFE offset");
-
-/* [FLIX] @6009dc0a..6009dc51: l32f24 -> mulf32s.ll -> slaisq56s 8
- * -> sat48s -> trunca32q48. Gain unity/rounding/low-bit effects are NOT proven.
- * This required external implementation must not be replaced by a copy/no-op. */
-extern int32_t rft_gain_sample_flix(int32_t sample, int32_t gain);
-/* [FLIX] @6009d7b3..6009d830: coefficient table 0x60006f80, mulfp32x2rs,
- * mulsfp32x2rs, add32_hl_lh, slai32s, sel16i, add32s. Receives the averaged
- * mono plane and updates the four state words. Exact filter math unresolved. */
-extern void rft_lfe_filter_flix(struct rft_config *r, int32_t *mono, size_t frames);
+#include "rft.h"
 
 static uint32_t rft_load_le(const uint8_t *p, unsigned bytes)
 {
@@ -189,8 +163,9 @@ void _LGRFT_GenerateLFE2ch(void *config, const int32_t *src, int32_t *dst)
 int _LGRFT_Gai(void *config, const int32_t *src, int32_t *dst, int32_t count)
 {
     const struct rft_config *r = config;
+    int32_t gain = r->gain; /* @dc03 cached before the count check, not per sample. */
     for (int32_t i = 0; i < count; ++i)
-        dst[i] = rft_gain_sample_flix(src[i], r->gain);
+        dst[i] = rft_gain_sample_flix(src[i], gain);
     return 0;
 }
 

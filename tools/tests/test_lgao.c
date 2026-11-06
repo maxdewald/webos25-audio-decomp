@@ -15,6 +15,7 @@
 #define AREN_SET_MUTE 10
 #define AREN_SET_SPEED 9
 #define UNSET (~0u)
+#define renderer_memset memset
 struct aud_module { int id; };
 struct aud_object { int refs, kind; };
 enum aud_value_type { aud_value_int, aud_value_bool, aud_value_str };
@@ -238,8 +239,38 @@ static void reset(void)
     disconnects = destroys = messages = opens = connects = starts = stops = plays = 0;
     sequence = open_order = connect_order = start_order = 0;
 }
+static void compare_caps_tests(void)
+{
+    lgao ao = context();
+    LGAO_AUDIO_START_INFO_T caps = ao.audioStartInfo;
+    caps.es = 1;
+    caps.codecType = LGAO_CODEC_MAT;
+    strcpy(caps.codec_str, "mat");
+    caps.data_rate = 192000; caps.data_channels = 8; caps.data_bps = 16;
+    caps.clock_x4 = 1; caps.downmix = 1; caps.acmod = 7;
+    assert(lgao_compare_audio_info(&ao, &caps) == 0);
+    caps.restart = 2;
+    assert(lgao_compare_audio_info(&ao, &caps) == 0);
+    caps.restart = 1;
+    assert(lgao_compare_audio_info(&ao, &caps) == 2);
+    for (int field = 0; field < 5; ++field) {
+        caps = ao.audioStartInfo;
+        if (field == 0) ++caps.freq;
+        if (field == 1) ++caps.numberOfChannel;
+        if (field == 2) ++caps.bitsPerSample;
+        if (field == 3) ++caps.bigEndianOfPcm;
+        if (field == 4) ++caps.unsignedOfPcm;
+        assert(lgao_compare_audio_info(&ao, &caps) == 1);
+    }
+    ao.fd = -1; ao.audioStartInfo.codecType = LGAO_CODEC_UNKNOWN;
+    assert(lgao_compare_audio_info(&ao, &caps) == -1);
+    ao.audioStartInfo.codecType = LGAO_CODEC_PCM;
+    assert(lgao_compare_audio_info(&ao, &caps) == 1);
+    assert(lgao_compare_audio_info(NULL, &caps) == -1);
+}
 int main(void)
 {
+    compare_caps_tests();
     unsigned char bytes[] = {1, 3, 5, 7};
     lgao ao = context();
     assert(lgao_feed(&ao, bytes, 4, 1000000000, LGAO_DATA_ES) == 4);

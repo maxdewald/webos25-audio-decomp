@@ -335,6 +335,14 @@ static bool renderer_in_whitelist (struct aud_renderer_info *renderer, char *pro
  * wrapper. The cache entry (list_param) keeps either `val` or `str_val`; it is
  * replayed by renderer_resume(). Properties set with aimc_set_property()
  * directly (drop_output_data, state, upperbound/count_transition) are NOT cached.
+ * aimc_set_property @0xffffffc010c8ec00 packages length + NUL string and sends
+ * ADEC_CMD_SET_PROP=0x10180004 (+0x118..+0x130), NOT PCMCVT gain command
+ * 0x50040008. The renderer bypass converter is only explicitly set out-channels
+ * here/default/start and replayed on resume; no renderer gain command targets
+ * uid_pcmcvt_bypass. This is a bounded renderer-path result: arbitrary user IPC
+ * and proc debug command injection can send caller-chosen commands/targets.
+ * That capability is not evidence that converter gain is enabled on the current
+ * TV. DSP/FLIX sample math and live gain state are not established by this path.
  */
 /* @0xffffffc010ca8ee4 */
 static int _renderer_set_property (struct aud_renderer_info *renderer, unsigned int target,
@@ -671,7 +679,9 @@ bool renderer_get_pcm_bypass (struct aud_block_info * block)
     return renderer->is_bypass_rts_PCM;
 }
 
-/* @0xffffffc010cab0b0 */
+/* @0xffffffc010cab0b0: only when is_bypass_rts_PCM (+0x4d), cached
+ * out-channels to uid_pcmcvt_bypass (+0x34). Raw aren_start +0xd0/+0x130
+ * calls this with 2 for input channels <=2, otherwise 8. No gain side effect. */
 int renderer_set_pcm_bypass_rts_out_channels (struct aud_block_info *block, unsigned int channels)
 {
     struct aud_renderer_info *renderer = (struct aud_renderer_info *) block;
@@ -1094,6 +1104,9 @@ static int renderer_set_default (struct aud_block_info *block, unsigned int id)
             break;
 
         case 2:
+            /* Raw +0x178..+0x18c loads bypass srcbin +0x34 and sets ONLY
+             * out-channels=2. Main gain=0x800000 above targets uid_gain +0x44,
+             * not this converter. Converter gain/default is DSP-owned. */
             uid_rts_bypass = renderer->uid_rts_bypass;
             uid_pcmcvt_bypass = renderer->uid_pcmcvt_bypass;
 
@@ -1151,6 +1164,9 @@ struct renderer_param param_gain[] = {
     {"fadetime-ms"},
     {"target-gain"},
     {"fade-type"},
+    /* Shipped table +0x120 @0xffffffc0122cc4f8; common setter passes this
+     * grouped property name through unchanged, with no custom callback. */
+    {"{ease-volume}"},
     {NULL},
 };
 
@@ -1159,6 +1175,11 @@ struct renderer_param param_sola[] = {
     {NULL},
 };
 
+/* Shipped table: pcm_gain aliases gain, gain-enable is unchanged. Registry
+ * binds this table to MAIN srcbin +0x30, with uid2=-1; bypass creation never
+ * calls renderer_registry_bypass("src",...). Therefore these common property
+ * paths do not control the bypass converter +0x34. renderer_run_param uses the
+ * registered uid/uid2, not a global search for a module of the same type. */
 struct renderer_param param_src[] = {
     /* pcmcvt */
     {"in-sampling-rate"},
@@ -1552,6 +1573,9 @@ int renderer_add_queue (struct aud_block_info *block, bool forced)
  *    bypass lipsync, lowerbound/upperbound 150, idle_time 3, enableNoti 0.
  *  - in/out port BYPASS_PORT (0x100) of the renderer block forward to port 0 of
  *    this pipeline.
+ * These are static construction paths, not evidence of live TV connections,
+ * active gain state, sample flow or audibility. Existing tags were already
+ * counted at the 100% kernel baseline; this verification adds no coverage.
  */
 /* @0xffffffc010ca9894 */
 static void renderer_create_bypass_pipeline (struct aud_block_info *block, bool rtsPCM)
@@ -1635,7 +1659,9 @@ static void renderer_create_pipeline (struct aud_block_info *block)
 }
 
 
-/* @0xffffffc010cad1d0 */
+/* @0xffffffc010cad1d0: PCM head request reuses only existing PCM mode;
+ * requesting PCM after ES deletes/recreates the bypass, invalidating old UIDs.
+ * No reference increment, caller/processor check or independent fd lifetime. */
 int renderer_get_uid_pcm_bypass_head (struct aud_block_info *block)
 {
     struct aud_renderer_info *renderer = (struct aud_renderer_info *) block;
@@ -2013,7 +2039,8 @@ void renderer_initializer (void)
     bm_block_registry (&block_impl);
 }
 
-/* @0xffffffc010cad3f0 */
+/* @0xffffffc010cad3f0: shipped body is RET only; output notification does
+ * not itself schedule work, change properties or reconnect renderer topology. */
 void renderer_change_output (void)
 {
 

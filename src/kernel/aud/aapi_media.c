@@ -82,6 +82,8 @@ logm_define (amedia, log_level_noti);
 #define error(fmt,args...)  logm_error(amedia,fmt,##args)
 
 #define ADEC_MAX 2
+/* Shipped aren_open +0x10 / aren_get_uid +0x14: unsigned cmp w0,#9;
+ * b.hi rejects both negative indices and >=10. Slots are 0x58 bytes, not fds. */
 #define AREN_MAX 10
 
 #define DEFAULT_PRL_MIN (-31)
@@ -159,6 +161,10 @@ static ARENDERER_INFO_T arenderer_info[AREN_MAX] = {
         return -1; \
     }
 
+/* Shipped slot base 0xffffffc0122cded0: lock +8, is_open +0x28,
+ * pcm_info +0x30, proc_id +0x54. Range check precedes the slot mutex;
+ * unopened failure unlocks, success leaves it held for the caller. No fd,
+ * pid/proc_id, owner token, driver-global lock or renderer-global lock check. */
 #define ARENDERER_CHECK_INDEX_AND_OPENED_AND_LOCK(_index) \
     if (_index < 0 || _index >= AREN_MAX) \
     { \
@@ -1203,7 +1209,9 @@ int adecoder_set_sound_system (int index, unsigned int sound_system)
     return 0;
 }
 
-/* @0xffffffc010cbd5c4 */
+/* @0xffffffc010cbd5c4: exclusive Boolean slot, not a refcounted fd acquisition.
+ * +0x5c tests is_open; duplicate fails without calling bm_create_block.
+ * +0x70..+0x90 stores even a NULL bm result and marks open, as shipped. */
 int aren_open (int index)
 {
     ARENDERER_INFO_T *ren = NULL;
@@ -1237,7 +1245,11 @@ int aren_open (int index)
     return 0;
 }
 
-/* @0xffffffc010cbd790 */
+/* @0xffffffc010cbd790: any fd selecting this slot can destroy it.
+ * +0x78/+0x80 disconnect/destroy unconditionally, no decrement/reference test.
+ * bm_destroy_block -> _bm_destroy_block_locked @0xffffffc010c9ee80 invokes
+ * impl->destructor (+0x28) then frees the block. renderer_destroy deletes both
+ * pipelines. A second fd is therefore NOT a harmless query handle. */
 int aren_close (int index)
 {
     ARENDERER_INFO_T *ren = NULL;
@@ -1276,7 +1288,11 @@ int aren_add_queue (int index)
     return 0;
 }
 
-/* @0xffffffc010cbdab0 */
+/* @0xffffffc010cbdab0: GET_BYPASS_UID is a lazy construction request, not a
+ * read-only lookup or ownership acquisition. Slot lock stays held throughout.
+ * No proc_id/fd check and no reference increment. PCM can replace an existing
+ * ES bypass; ES reuses an existing PCM bypass (see renderer head helpers).
+ * Static construction/query semantics do not establish live audible routing. */
 int aren_get_uid (int index, unsigned int *uid, bool is_bypass)
 {
     ARENDERER_INFO_T *ren = NULL;

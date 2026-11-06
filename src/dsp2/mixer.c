@@ -12,7 +12,13 @@
  * mixerbin_event, mux_chain), FLIX branch targets from tools/flix_annot.py,
  * build/scratch/evidence/runtime/idle-state.txt (live graph).
  *
- * Where ES can and cannot go (observed):
+ * Static code and the saved idle graph below bound DSP-local routing only;
+ * they do not establish the current graph, physical mute/gates or audibility.
+ * Newly added partial sample-fetch wrappers deliberately lack coverage tags;
+ * existing tags can still contain explicit external [FLIX] gaps. Tagged-byte
+ * coverage is NOT complete arithmetic recovery.
+ *
+ * Where ES can and cannot go (static code / saved idle snapshot):
  *  - The kernel builds the ES bypass as separate pipelines "mixer_byin"
  *    (delay -> gain) and "mixer_bypass" (bypass), see src/kernel/aud/mixer.c.
  *    None of the code in this file is on that path: mixerbin only gets the PCM
@@ -177,6 +183,7 @@ extern struct aud_data *aud_data_adapter_dequeue(struct aud_adapter *);
 extern struct aud_data *aud_data_adapter_get_data(struct aud_adapter *, int bytes);
 extern void *aud_data_adapter_map(struct aud_adapter *, int bytes);
 extern void aud_data_adapter_flush(struct aud_adapter *, int bytes);
+extern void aud_data_adapter_unmap(struct aud_adapter *);
 extern int  aud_module_default_event(struct aud_module *, struct aud_port *, struct aud_event *);
 extern int  aud_module_default_command(struct aud_module *, unsigned, void *, unsigned);
 extern int  aud_module_push_data(struct aud_module *, int port, struct aud_data *);
@@ -739,8 +746,13 @@ struct lgmixer {
     unsigned first_info;                 /* +0x1bc */
 };
 
-extern void get_samples_default32(struct basemixer *, struct lgmix_input *, int32_t *); /* @0x600925b8 */
-extern void get_samples_default16(struct basemixer *, struct lgmix_input *, int32_t *); /* @0x60092660 */
+void get_samples_default32(struct basemixer *, struct lgmix_input *, int32_t *);
+void get_samples_default16(struct basemixer *, struct lgmix_input *, int32_t *);
+/* [FLIX] Only the scalar row traversal is recovered. These hooks include the
+ * accumulator, rounding and final store, NOT a guessed identity matrix/copy.
+ * 32-bit: @600925ef..6009262f; 16-bit: @6009268c..600926c9. */
+extern void lgmix_matrix_row32_flix(const void *, const int32_t *, int, int32_t *);
+extern void lgmix_matrix_row16_flix(const void *, const int32_t *, int, int32_t *);
 extern void build_transform_matrix(struct lgmixer *, struct lgmix_input *);           /* @0x60093134 */
 extern struct lgmix_input *lgmix_list_first(struct lgmixer *);
 extern struct lgmix_input *lgmix_list_next(struct lgmixer *, struct lgmix_input *);
@@ -749,12 +761,33 @@ extern void list_del_(void *node);
 int lgmix_toggle_first_event_info(struct basemixer *bm, unsigned bit);
 struct prop_desc { const char *n; int t; unsigned off; };
 
-/* @0x600925b8 get_samples_default32 ("lgmix_update_getsamples" in functions.tsv;
- * it is the 32-bit sample fetch installed as get_samples): [FLIX] body (copy loop is
- * FLIX-only, Ghidra: halt_baddata). */
+/* PARTIAL @0x600925b8 (not a coverage tag): matrix rows have 12-word stride,
+ * each rereads n_ch inputs from
+ * the SAME frame; advance by in_ch words only AFTER all output rows. This is
+ * multiply/round processing, not a copy loop. PARTIAL reconstruction: the
+ * helper is excluded from tagged-byte coverage; math remains [FLIX] above. */
+void get_samples_default32(struct basemixer *bm, struct lgmix_input *in, int32_t *dst)
+{
+    (void)bm;
+    const void *frame = in->samples;
+    for (int row = 0; row < in->out_ch; ++row)
+        lgmix_matrix_row32_flix(frame, in->matrix + row * 12, in->n_ch, dst + row);
+    in->samples = (int32_t *)((uint8_t *)in->samples + in->in_ch * 4);
+}
 
-/* @0x60092660 get_samples_default16: [FLIX] same, 16-bit input. When the input
- * has no output channels left (out_ch < 1) the read pointer is just advanced. */
+/* PARTIAL @0x60092660 (not a coverage tag): same row traversal for 16-bit
+ * input, input advance is 2*in_ch.
+ * The final AE_S16.0.IP slot writes at four-byte output stride; its exact
+ * fixed-point rounding/store semantics stay in the [FLIX] hook. PARTIAL
+ * reconstruction, excluded from tagged-byte coverage, not a complete kernel. */
+void get_samples_default16(struct basemixer *bm, struct lgmix_input *in, int32_t *dst)
+{
+    (void)bm;
+    const void *frame = in->samples;
+    for (int row = 0; row < in->out_ch; ++row)
+        lgmix_matrix_row16_flix(frame, in->matrix + row * 12, in->n_ch, dst + row);
+    in->samples = (int32_t *)((uint8_t *)in->samples + in->in_ch * 2);
+}
 
 /* @0x600926f4 lgmix_get_input */
 struct mix_input *lgmix_get_input(struct basemixer *bm, int port)
@@ -808,9 +841,10 @@ int lgmix_get_output_acmod(struct lgmixer *lm)
     }
 }
 
-/* @0x600928a4 do_bypass: copy one input straight through when its layout equals
- * the output layout and it is 32-bit. Called only when fewer than 3 inputs are
- * active. Not an ES bypass: the data is still taken as PCM frames. */
+/* @0x600928a4: return queued data of the first eligible input when layout
+ * matches and bps==32. The caller's todo<3 is NOT an active-input count.
+ * No matrix/clamp runs here. This proves DSP-local copying, not audibility
+ * or routing to a physical device. No ES-type test occurs in this function. */
 struct aud_data *do_bypass(struct lgmixer *lm, int todo)
 {
     struct lgmix_input *in;
@@ -852,9 +886,10 @@ struct aud_data *do_bypass(struct lgmixer *lm, int todo)
     return aud_data_new_zero(in->c.frame_bytes << 8);
 }
 
-/* @0x60092a98 mix_signals: sum all enabled inputs into a 32-bit buffer of the
- * output layout and saturate. Input mapping and the first frame of the outer
- * loop are observed; loop bounds/increments are FLIX [FLIX]. */
+/* @0x60092a98: recovered scalar frame/add/clamp loops @60092c00..60092d74;
+ * matrix sample arithmetic is delegated to the [FLIX] row hooks above. Inputs
+ * are unmapped before returning (@60092d8d), then flushed by lgmix_do_mix.
+ * This is DSP processing only: no physical output/mute/topology is selected. */
 struct aud_data *mix_signals(struct lgmixer *lm, int todo, int frames)
 {
     unsigned out_ch = LAYOUT_CH(lm->out_layout);
@@ -902,13 +937,13 @@ struct aud_data *mix_signals(struct lgmixer *lm, int todo, int frames)
             } else {
                 in->get_samples(&lm->bm, in, tmp);
                 for (unsigned c = 0; c < used_ch && c < out_ch; c++)
-                    o[c] += tmp[c];
+                    o[c] = (int32_t)((uint32_t)o[c] + (uint32_t)tmp[c]);
             }
         }
-        /* saturate the used channels (Q-format headroom: >0x7fff -> max,
-         * < -0x8000 -> min, else <<16) and zero the unused ones */
-        for (unsigned c = 0; c < used_ch; c++) {
-            if (o[c] > 0x7fff)
+        /* @60092d17..36: >=0x7fff -> max, <=-0x8000 -> min,
+         * else <<16; both endpoints matter. Zero remaining output channels. */
+        for (unsigned c = 0; c < used_ch && c < out_ch; c++) {
+            if (o[c] > 0x7ffe)
                 o[c] = 0x7fffffff;
             else if (o[c] > -0x8000)
                 o[c] = (int32_t)((uint32_t)o[c] << 16);
@@ -917,6 +952,12 @@ struct aud_data *mix_signals(struct lgmixer *lm, int todo, int frames)
         }
         for (unsigned c = used_ch; c < out_ch; c++)
             o[c] = 0;
+    }
+    for (struct lgmix_input *in = lgmix_list_first(lm); in; in = lgmix_list_next(lm, in)) {
+        if (in->c.enabled && in->mapped) {
+            aud_data_adapter_unmap(&in->c.fifo);
+            in->mapped = NULL;
+        }
     }
     return out;
 }
@@ -927,7 +968,12 @@ struct aud_data *lgmix_do_mix(struct basemixer *bm, uint32_t *layout, int todo, 
     struct lgmixer *lm = (struct lgmixer *)bm;
     struct aud_data *out = NULL;
 
-    lgmix_get_output_acmod(lm);
+    int acmod = lgmix_get_output_acmod(lm);
+    if (lm->out_channels == 2)
+        acmod = 2;
+    if ((unsigned)acmod != (lm->out_layout & 0xf))
+        *layout = (uint32_t)aud_basemixer_layout_from_acmod(acmod) |
+                  (lm->out_layout & 0xf0000000u);
     if (*layout == 0)
         *layout = lm->out_layout;
     else
@@ -938,9 +984,10 @@ struct aud_data *lgmix_do_mix(struct basemixer *bm, uint32_t *layout, int todo, 
         while (ADAPTER_AVAIL(&lm->md))
             aud_object_put(aud_data_adapter_dequeue(&lm->md));
     } else {
-        /* observed: +0xf8 (n_main_ready) != 0 && todo < 3 -> try do_bypass;
-         * the n_main_ready == 0 side is a FLIX bundle @0x60092e88 [FLIX] */
-        if (lm->bm.n_main_ready && todo < 3)
+        /* @60092e88: BEQI a4,1 ->60092fd9. todo is the call argument,
+         * not an input count: without main-ready, TODO_MIXING still bypasses. */
+        if ((lm->bm.n_main_ready && todo < 3) ||
+            (!lm->bm.n_main_ready && todo == TODO_MIXING))
             out = do_bypass(lm, todo);
         if (!out)
             out = mix_signals(lm, todo, frames);
@@ -964,12 +1011,12 @@ struct aud_data *lgmix_do_mix(struct basemixer *bm, uint32_t *layout, int todo, 
     return out;
 }
 
-/* @0x60092fe8 lgmix_can_mix: pending = wr - rd; the comparison against the
- * required frame count is a FLIX bundle @0x60092ff6 [FLIX] */
+/* @0x60092fe8: @60092ff6 is scalar SALTU a2,a2,a4, NOT a FLIX bundle.
+ * Tests unsigned pending!=0 after 32-bit subtraction; no frame threshold. */
 int lgmix_can_mix(struct basemixer *bm, struct mix_input *in)
 {
     (void)bm;
-    return ADAPTER_AVAIL(&in->fifo) > 0;               /* [FLIX] threshold unknown */
+    return (uint32_t)in->fifo.wr - (uint32_t)in->fifo.rd != 0;
 }
 
 /* @0x60092ffc lgmix_get_first_event: output FIRST of an LG mixer */

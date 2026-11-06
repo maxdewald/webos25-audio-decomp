@@ -73,8 +73,9 @@ int lowest_resource_index(const struct acquired *resources, int resource_count, 
  *   codec rules:  no audio track or reset -> "none"
  *                 caps "x-raw"            -> "pcm"
  *                 "mpeg-h"                -> "mpeg_h"
- *                 otherwise the stored codec string; a find("dts") runs first but how
- *                 its result is used is UNVERIFIED (decompiler lost it).
- * Open question: whether audio/x-dts caps ever produce codec "dts_hd_ma". If not, the
- * direct DTS-HD MA pass-through row in libumi cannot match from this path.
+ *                 otherwise the stored codec string, with nonempty codec-name override.
+ * Raw Thumb 0x48e88..0x48e9e proves find("dts")'s result is discarded; no subtype
+ * normalization occurs. See metadata.cpp for the recovered builder and host tests.
+ * Whether a particular player supplies dts_hd_ma is unknown; no custom hdbitstream
+ * artifact or runtime caps capture was available.
  */

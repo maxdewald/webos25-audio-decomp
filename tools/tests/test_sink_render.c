@@ -151,9 +151,13 @@ int lgao_get_mode_mixer(void *a, int *p) { *p = 0; return 0; }
 int lgao_get_port(void *a, int *p) { *p = port; return 0; }
 int lgao_get_drop_renderer(void *a) { return dropped; }
 int lgao_set_drop_renderer(void *a, int d) { record(d ? 'X' : 'x'); if (d != dropped) ++generation; dropped = d; return 0; }
+static int real_comparison;
+static lgao live_ao;
+#define LOGE(...) ((void)0)
+/* RECOVERED_COMPARISON */
 int lgao_get_audio_info(void *a, LGAO_AUDIO_INFO_T prop, unsigned *p) { *p = 0; return 0; }
-int lgao_set_audio_info(void *a, LGAO_AUDIO_START_INFO_T i) { saved_info = i; ++info_sets; record('A'); return -1; }
-int lgao_compare_audio_info(void *a, LGAO_AUDIO_START_INFO_T *i) { record('C'); return compare_result; }
+int lgao_set_audio_info(void *a, LGAO_AUDIO_START_INFO_T i) { saved_info = i; if (real_comparison) live_ao.audioStartInfo = i; ++info_sets; record('A'); return -1; }
+int lgao_compare_audio_info(void *a, LGAO_AUDIO_START_INFO_T *i) { record('C'); return real_comparison ? recovered_compare_audio_info(a, i) : compare_result; }
 #define ACTION(name, ch) int name(void *a) { record(ch); return -1; }
 ACTION(lgao_stop_renderer,'s')
 ACTION(lgao_disconnect_renderer,'d')
@@ -177,6 +181,8 @@ int lgao_feed(void *a, void *data, unsigned len, unsigned long long pts, LGAO_DA
 /* RECOVERED_FUNCTIONS */
 
 static GstLgAudioRender reset(void) {
+    real_comparison = 0;
+    memset(&live_ao, 0, sizeof(live_ao));
     warnings = mute = dropped = compare_result = feed_result = 0;
     feeds = copies = maps = unmaps = unrefs = copy_fail = map_fail = ui = dump_opens = 0;
     buffered = waits = parents = clock_updates = info_sets = caps_frees = first_pushes = generation = 0;
@@ -254,6 +260,53 @@ static void caps_tests(void) {
     r=reset(); s=(GstStructure){.name="video/x-raw"}; c=(GstCaps){&s}; changed=0;
     assert(!gst_lg_audio_render_set_caps(&r,&c,&changed) && r.pAudioCaps); clear_caps(&r);
 }
+static void consecutive_caps_tests(void) {
+    GstLgAudioRender r = reset();
+    real_comparison = 1;
+    r.ao = &live_ao;
+    live_ao.fd = -1;
+    GstStructure es = pcm();
+    number(&es, "es", 1);
+    number(&es, "codec", LGAO_CODEC_MAT);
+    number(&es, "data-rate", 192000);
+    string(&es, "codec-str", "mat\0padding-byte");
+    GstCaps c = {&es};
+    gboolean changed = 0;
+    assert(gst_lg_audio_render_set_caps(&r, &c, &changed) && changed);
+    assert(strstr(calls, "oAfjpb") && saved_info.es == 1);
+    live_ao.fd = 7;
+    GstStructure decoded = pcm();
+    c.s = &decoded;
+    changed = 0;
+    ncalls = 0; calls[0] = 0;
+    assert(gst_lg_audio_render_set_caps(&r, &c, &changed) && !changed);
+    assert(!strpbrk(calls, "sdcofjpb") && saved_info.es == 0);
+    assert(saved_info.codecType == LGAO_CODEC_PCM && saved_info.data_rate == 0);
+    number(&decoded, "restart", 1);
+    ncalls = 0; calls[0] = 0;
+    assert(gst_lg_audio_render_set_caps(&r, &c, &changed) && !changed);
+    assert(!strpbrk(calls, "sdcofjpb"));
+    decoded.fields[1].value = 96000;
+    ncalls = 0; calls[0] = 0;
+    assert(gst_lg_audio_render_set_caps(&r, &c, &changed) && changed);
+    assert(strstr(calls, "sdcoAfjpb"));
+    assert(saved_info.freq == 96000 && !saved_info.es);
+    clear_caps(&r);
+
+    r = reset();
+    real_comparison = 1;
+    r.ao = &live_ao;
+    live_ao.fd = 7;
+    live_ao.audioStartInfo = (LGAO_AUDIO_START_INFO_T){
+        .codecType = LGAO_CODEC_MAT, .freq = 192000,
+        .numberOfChannel = 8, .bitsPerSample = 16, .es = 1
+    };
+    decoded = pcm(); c.s = &decoded; changed = 0;
+    assert(gst_lg_audio_render_set_caps(&r, &c, &changed) && changed);
+    assert(strstr(calls, "sdcoAfjpb") && saved_info.freq == 48000);
+    assert(saved_info.numberOfChannel == 2 && saved_info.bitsPerSample == 16);
+    clear_caps(&r);
+}
 static void event_tests(void) {
     GstLgAudioRender r=reset(); GstEvent e={.type=GST_EVENT_FLUSH_START}; r.bSeamlessSeek=1;
     ring_pending=1;
@@ -280,4 +333,4 @@ static void event_tests(void) {
     assert(gst_lg_audio_render_event(&r,&e) && e.unrefs==1 && !parents);
     r=reset(); e.type=GST_EVENT_GAP; parent_result=0; assert(!gst_lg_audio_render_event(&r,&e) && parents==1);
 }
-int main(void) { chain_tests(); caps_tests(); event_tests(); puts("sink render: source-extracted chain/caps/event lifecycle tests passed"); return 0; }
+int main(void) { chain_tests(); caps_tests(); consecutive_caps_tests(); event_tests(); puts("sink render: source-extracted chain/caps/event lifecycle tests passed"); return 0; }

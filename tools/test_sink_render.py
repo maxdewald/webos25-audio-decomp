@@ -36,19 +36,27 @@ def main():
     flags = text[text.index('#define LG_BUFFER_FLAG_METADATA '):
                  text.index('static const char *\nout_type_name')]
     bodies = '\n\n'.join(extract(text, name) for name in FUNCTIONS)
+    from test_output import extract as extract_lgao
+    comparison = extract_lgao((ROOT / 'src/libgstlgaudiosink/lgao.c').read_text(),
+                              'lgao_compare_audio_info')
+    comparison = comparison.replace('int lgao_compare_audio_info(',
+                                    'static int recovered_compare_audio_info(', 1)
     fixture = (ROOT / 'tools/tests/test_sink_render.c').read_text()
+    fixture = fixture.replace('/* RECOVERED_COMPARISON */', comparison)
     scratch = ROOT / 'build/scratch/sink-render-tests'
     scratch.mkdir(parents=True, exist_ok=True)
     source, binary = scratch / 'test_sink_render.c', scratch / 'test_sink_render'
     source.write_text(fixture.replace('/* RECOVERED_FUNCTIONS */', flags + bodies))
     try:
-        command = [cc, '-std=c11', '-Wall', '-Wextra', '-Werror',
-                   '-Wno-unused-parameter', '-Wno-unused-variable',
-                   '-Wno-unused-function', '-I', str(ROOT / 'src'),
-                   str(source), '-o', str(binary), '-lm']
-        print('+', ' '.join(command), flush=True)
-        subprocess.run(command, cwd=ROOT, check=True)
-        subprocess.run([str(binary)], cwd=ROOT, check=True, timeout=15)
+        for flags in (['-O2'], ['-O1', '-fsanitize=address,undefined',
+                               '-fno-sanitize-recover=all']):
+            command = [cc, '-std=c11', '-Wall', '-Wextra', '-Werror',
+                       '-Wno-unused-parameter', '-Wno-unused-variable',
+                       '-Wno-unused-function', *flags, '-I', str(ROOT / 'src'),
+                       str(source), '-o', str(binary), '-lm']
+            print('+', ' '.join(command), flush=True)
+            subprocess.run(command, cwd=ROOT, check=True)
+            subprocess.run([str(binary)], cwd=ROOT, check=True, timeout=15)
     finally:
         source.unlink(missing_ok=True)
         binary.unlink(missing_ok=True)

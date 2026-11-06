@@ -554,7 +554,9 @@ long driver_adec_ioctl_compat (struct file *filp, unsigned int cmd, unsigned lon
  * open handler for audio render device
  *
  */
-/* @0xffffffc010cb7604 */
+/* @0xffffffc010cb7604: allocates 0x18 zeroed bytes (flags 0xdc0), so index
+ * +0x10 defaults to zero. Does NOT call aren_open or initialize index to -1.
+ * Merely opening then closing a second fd can tear down active renderer 0. */
 SINT32 driver_aren_open (struct inode * inode, struct file * filp)
 {
     struct audio_renderer_info *info;
@@ -576,7 +578,11 @@ SINT32 driver_aren_open (struct inode * inode, struct file * filp)
  * close handler for audio render device
 *
  */
-/* @0xffffffc010cb7400 */
+/* @0xffffffc010cb7400: calls aren_close(index) BEFORE DRIVER_LOCK, ignores
+ * its return and always returns zero after freeing fd-private data. No owned /
+ * successfully-opened flag. A failed duplicate SET_INDEX still selects the
+ * live slot, which this release then destroys. VFS release is final file put,
+ * not each close of duplicated descriptors; there is no renderer fd refcount. */
 SINT32 driver_aren_close (struct inode * inode, struct file * filp)
 {
     SINT32 retVal = 0;
@@ -659,6 +665,11 @@ long driver_aren_ioctl (struct file *filp, unsigned int cmd, unsigned long arg)
                 noti ("try to use renderer index 0\n");
                 args.index = 0;
             }
+            /* Raw @0xffffffc010cb8b18..24: always store after aren_open,
+             * including -1 result for an already-open or out-of-range slot.
+             * Sink _lgao_open_renderer @0x24924 passes port+(isMixer?4:0);
+             * this driver applies no additional mapping (negative -> 0 only).
+             * Repeated SET_INDEX also does not close the previous slot. */
             ret = aren_open (args.index);
             info->index = args.index;
             break;

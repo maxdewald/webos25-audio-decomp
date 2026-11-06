@@ -89,7 +89,12 @@ void ModuleRegistry_RegisterNamef(struct aud_module_impl *templ, void *priv,
     ModuleRegistry_Register(impl);
 }
 
-/* @0x275b4 */
+/* @0x275b4: borrowed instance, not an aud_object reference. ARM @0x275b4..0x27644
+ * walks plain lists without a lock/ref increment; class_get only lazily creates
+ * the implementation class, not a module lifetime lease. Caller must serialize
+ * lookup AND use against create/destroy (LG source specifies the main thread).
+ * UID equality has no generation check: a later lookup may find a replacement.
+ */
 struct aud_module *ModuleRegistry_SearchInstByUid(unsigned int uid)
 {
     struct link *i, *l;
@@ -111,7 +116,7 @@ struct aud_module *ModuleRegistry_SearchInstByUid(unsigned int uid)
     return NULL;
 }
 
-/* @0x27658 */
+/* @0x27658: same borrowed, unsynchronized lifetime as SearchInstByUid. */
 struct aud_module *ModuleRegistry_SearchInstByName(const char *name)
 {
     struct link *i, *l;
@@ -147,7 +152,11 @@ struct aud_module_impl *ModuleRegistry_SearchModuleImpl(const char *name)
     return NULL;
 }
 
-/* inlined: next free internal index, 1..0xfff, 0 when exhausted */
+/* Inlined @0x278f0..0x2792e: next free internal index, 1..0xfff.
+ * Preserve shipped exhaustion behavior: a full list normally returns 0, but
+ * last=1 loops forever (wrap to occupied 1, increment to 2 before loop test).
+ * No generation/retirement state distinguishes a reused slot from an old UID.
+ */
 static inline int get_empty_internal_index(void)
 {
     int idx = internal_index_last + 1;
@@ -175,6 +184,11 @@ static inline int get_empty_internal_index(void)
 
 /* @0x27848: instantiate impl_name on this processor. uid 0 = allocate an internal uid.
  * The new instance also becomes the aimc command handler for its uid.
+ * @0x278b8 and @0x27978..0x279a4: constructor NULL still reaches handler
+ * registration and (internal UID) hold allocation. Hold allocation/registration
+ * failures do not roll back the module or last index; registration status is
+ * ignored. Explicit UIDs are not checked for duplicates. The rotating local
+ * index is only occupancy, not a generation, and can be reused after removal.
  */
 struct aud_module *aud_registry_create_instance_param(struct aimc *imc, const char *impl_name,
                                                       unsigned int uid, const char *param)
@@ -209,7 +223,7 @@ struct aud_module *aud_registry_create_instance_param(struct aimc *imc, const ch
         } else {
             ii->iindex = idx;
             ii->module = m;
-            link_add(&internal_instances, &ii->list);
+            link_add_tail(&internal_instances, &ii->list);
         }
     }
     aimc_register_command_handler(imc, uid, impl->cmd, m);
@@ -223,7 +237,9 @@ struct aud_module *aud_registry_create_instance(struct aimc *imc, const char *im
     return aud_registry_create_instance_param(imc, impl_name, uid, NULL);
 }
 
-/* @0x27b34: "impl?param" */
+/* @0x27b34: "impl?param". Success tests only the constructor's non-NULL
+ * module result; it does not report impl constructor/handler registration status.
+ */
 int regcmd_create_module(struct registry *r, const char *name, unsigned int uid)
 {
     const char *q = strchr(name, '?');
@@ -251,7 +267,14 @@ fail:
     return -1;
 }
 
-/* @0x27c08: aud_module_destructor is inlined in the binary */
+/* @0x27c08: unregister handler, remove/free internal UID hold, then tail-call
+ * aud_module_destructor via PLT (@0x27c40; relocation to aud_module_destructor).
+ * The hold is NOT impl->instances membership: destructor @0x2d14c disconnects
+ * ports/calls impl destructor before unlinking instance_link and freeing m.
+ * Thus lookup can still see m during teardown; no registry lock/ref or process
+ * barrier is acquired here. Unregister failure is ignored, not a teardown veto.
+ * A mismatched hold is logged but still removed by index, not pointer identity.
+ */
 void aud_registry_destroy_instance(struct aimc *imc, struct aud_module *m)
 {
     unsigned int uid;
@@ -346,6 +369,9 @@ int ModuleRegistry_ProcessCmd(void *arg, unsigned int cmd, void *param, unsigned
         }
         LOGI(man_registry, 0x22a, "destroy %s(%08x)\n", m->impl->name, m->uid);
         aud_registry_destroy_instance(r->imc, m);
+        /* @0x27dea..0x27df2: success follows synchronous destructor/free; m is
+         * already invalid. This acknowledges execution, not a retained lease
+         * or quiescence of arbitrary callers holding a borrowed pointer. */
         return 0;
     case REGCMD_CREATE_NAMED:
         /* {uid, name_len, name[name_len]} */
@@ -366,7 +392,9 @@ int ModuleRegistry_ProcessCmd(void *arg, unsigned int cmd, void *param, unsigned
     }
 }
 
-/* @0x27ecc */
+/* @0x27ecc: malloc result is used unchecked in the shipped code. Handler
+ * registration failure is logged but the registry allocation is still returned.
+ */
 struct registry *ModuleRegistry_Init(struct aimc *imc)
 {
     struct registry *r = malloc(sizeof(*r));
@@ -386,7 +414,10 @@ struct registry *ModuleRegistry_Init(struct aimc *imc)
     return r;
 }
 
-/* @0x27fb8 */
+/* @0x27fb8: removes only the registry handler, waits for ProcessHeader, and
+ * frees r. Does not destroy instances or invalidate borrowed module pointers.
+ * Unlike this registry-handle cleanup, destroy_instance has no such barrier.
+ */
 void ModuleRegistry_Cleanup(struct registry *r)
 {
     struct aimc *imc;
@@ -405,7 +436,11 @@ void ModuleRegistry_Cleanup(struct registry *r)
 /* connector                                                                 */
 /* ------------------------------------------------------------------------- */
 
-/* @0x28150: same-processor connect; the input port must not exist yet */
+/* @0x28150: same-processor connect; the input port must not exist yet.
+ * Input allocation failure leaves the output port in place. @0x28190..0x28196
+ * ignores aud_module_connect's result: 0 means both ports existed and the call
+ * was made, not that the downstream connection succeeded or modules are leased.
+ */
 int aud_connector_connect(struct aud_module *out, int port_out, struct aud_module *in,
                           int port_in)
 {
@@ -455,7 +490,12 @@ int aud_connector_disconnect(struct aud_module *out, int port_out, struct aud_mo
     return -1;
 }
 
-/* @0x283bc: aimc command handler for uid (proc << 24 | 2) */
+/* @0x283bc: aimc command handler for uid (proc << 24 | 2).
+ * @0x283e8..0x2840c / @0x28450..0x28472 resolve out, then in, and tail-call
+ * the connector with borrowed pointers. No module reference, generation token,
+ * registry lock or lifetime barrier spans either lookup and subsequent use.
+ * Disconnect success only means both ports were found and disconnect called.
+ */
 int Connector_Cmd(void *arg, unsigned int cmd, void *param, unsigned int len)
 {
     unsigned int *p = param;
@@ -496,7 +536,7 @@ int Connector_Cmd(void *arg, unsigned int cmd, void *param, unsigned int len)
     return -18;
 }
 
-/* @0x2859c */
+/* @0x2859c: allocation failure returns NULL; registration failure is ignored. */
 struct aud_connector *Connector_Create(int processor_id, struct aimc *imc)
 {
     struct aud_connector *c = calloc(sizeof(*c), 1);
@@ -511,7 +551,7 @@ struct aud_connector *Connector_Create(int processor_id, struct aimc *imc)
     return c;
 }
 
-/* @0x2860c */
+/* @0x2860c: unregister/free connector only; no module teardown or barrier. */
 void Connector_Destroy(struct aud_connector *c)
 {
     aimc_unregister_command_handler(c->imc, c->handler_uid);

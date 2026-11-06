@@ -367,6 +367,10 @@ static AUDIO_DATA_TYPE_T legacy_data_type(struct aud_port *out, struct aud_data 
  * 2) if the port is bound to a legacy ADEC buffer, the same objects are written there,
  *    blocking on check_free_cond until enough space is free (or a flush starts),
  * 3) the pending references are dropped.
+ * The caller's stream_lock remains held across peer chain calls and the legacy
+ * cond wait. That wait releases ONLY check_free_mutex. Async output FLUSH can
+ * set flushing under that mutex, wake it, and make it discard remaining legacy
+ * writes; it cannot roll back data already delivered to peers or the ring.
  */
 int aud_port_sync_locked(struct aud_port *out)
 {
@@ -484,7 +488,10 @@ int aud_port_sync(struct aud_port *port)
     return ret;
 }
 
-/* @0x2d01c: wake a writer blocked on a full legacy buffer */
+/* @0x2d01c: recheck a legacy writer (check_free_mutex only, no port/stream lock).
+ * Does not set flushing or supply space: an unchanged full ring waits again.
+ * Caller must keep the raw port alive; this is not a cancellation/lifetime barrier.
+ */
 int aud_port_check_legacy(struct aud_port *port)
 {
     pthread_mutex_lock(&port->check_free_mutex);
@@ -1004,7 +1011,9 @@ void del_output_port(struct aud_port *out)
     if (out->starter)
         aud_starter_del_port(out->starter, out);
 
-    /* wait for every user of the port to leave */
+    /* Drain these lock-protected users only; no new admission/lifetime lease is
+     * established. In particular this does not wake a full legacy ring writer.
+     * External producers must already be stopped before the port is freed. */
     pthread_mutex_lock(&out->module_node.lock);
     pthread_mutex_lock(&out->stream_lock);
     pthread_mutex_lock(&out->async_down_lock);
@@ -1180,7 +1189,10 @@ struct aud_port *aud_module_get_output_port(struct aud_module *m, unsigned int n
     return port;
 }
 
-/* @0x2d5d8 */
+/* @0x2d5d8: node lookup + check_free_mutex wake only, never stream_lock.
+ * Unlike aud_port_check_legacy, lookup can wait behind a node-lock holder.
+ * Neither form changes flushing or guarantees progress on an unchanged ring.
+ */
 int aud_module_check_legacy_output(struct aud_module *m, unsigned int number)
 {
     struct aud_port *port = aud_module_get_output(m, number);
@@ -1393,7 +1405,9 @@ int aud_module_connect(struct aud_port *out, struct aud_port *in)
     return 0;
 }
 
-/* @0x2ce44 */
+/* @0x2ce44: clear block-module and signal block_cond using block_mutex only.
+ * This does not cancel an impl->chain wait or acquire any port/stream lock.
+ */
 void aud_module_unblock_locked(struct aud_module *m)
 {
     pthread_mutex_lock(&m->block_mutex);
@@ -1459,6 +1473,9 @@ void adjust_thread_priority(struct aud_module *m)
 /* @0x2c9c8: hand one data object to the module owning input port `in` (stream_lock held).
  * Consumes `data`. Data is DROPPED (return -1) when the input port is disconnecting
  * (AUD_PORT_DISABLED) or throwing (between async and sync FLUSH).
+ * block-module is checked BEFORE those drop flags, using a single cond wait
+ * (not a predicate loop in the binary). Setting throwing/disabled alone cannot
+ * wake it: block_cond must be signalled, e.g. unblock_locked or property false.
  */
 int aud_module_chain_locked(struct aud_port *in, struct aud_data *data)
 {
@@ -1780,6 +1797,20 @@ int aud_port_push_event(struct aud_port *port, struct aud_event *e)
 
 /* @0x2de18: aud_link_foreach_node callback over a module's port roots
  * (port->module_node.lock held on entry).
+ * ASYNC output FLUSH/DISCONNECT sets flushing + signals check_free_cond, then
+ * unblocks THIS module before taking async_down_lock; it never takes stream_lock.
+ * Thus another thread can interrupt this output's legacy ring wait, provided it
+ * can first obtain module_node.lock. Propagation takes each peer's node lock and
+ * async_down_lock, not its stream_lock, but runs impl event handlers inline.
+ * Async does NOT mean nonblocking: earlier get/new-output or foreach_sync can
+ * hold a node lock while waiting for stream_lock; callbacks/async locks may wait.
+ * An arbitrary impl->chain wait, or block-module on a terminal downstream module,
+ * is not woken by this local output helper. Default propagation only unblocks
+ * modules for which an output is actually walked.
+ * SYNC FLUSH clears flushing BEFORE waiting for stream_lock. Do not send it
+ * until the cancelled producer has exited: resetting early can let that writer
+ * see false and go back to sleep. Drain the in-flight call without holding its
+ * port/stream locks; only then finish the sync phase or destroy the graph.
  */
 int foreach_push_event(void *arg, void *node_data)
 {
@@ -1869,7 +1900,13 @@ int foreach_push_event(void *arg, void *node_data)
     return 0;
 }
 
-/* @0x2e138: note it CREATES output port n if missing */
+/* @0x2e138: consumes e, CREATES output n if missing, then calls foreach_push_event.
+ * There is no trailing aud_module_sync here: a plain async event is the separate
+ * cancellation phase (unlike module_appsrc_push_event @libaabase:0x10c98, which
+ * always calls aud_module_sync afterward and can block on stream_lock).
+ * This still takes output-root/node locks and calls peers inline; no wait-free
+ * guarantee, producer quiescence, peer lifetime reference, or worker join.
+ */
 int aud_module_push_event(struct aud_module *m, int out_port_num, struct aud_event *e)
 {
     struct aud_port *out;

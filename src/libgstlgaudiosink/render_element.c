@@ -237,11 +237,11 @@ gboolean gst_lg_audio_render_prepare_seamless_seek (GstBaseSink *sink, GstSegmen
 
     {
         GstClockTimeDiff diff = (GstClockTimeDiff) (pAudioRen->currentPTS - segment->start);
-        GstClockTime adiff = diff < 0 ? (GstClockTime) -diff : (GstClockTime) diff;
+        GstClockTime absolute_diff = diff < 0 ? (GstClockTime) -diff : (GstClockTime) diff;
         SINK_LOG (4, GST_LEVEL_DEBUG, 638, pAudioRen,
                   "rate: %f, segment.start: %u:%02u:%02u.%09u, pts: %u:%02u:%02u.%09u, "
                   "diff: %c%u:%02u:%02u.%09u", segment->rate, GST_TIME_ARGS (segment->start),
-                  GST_TIME_ARGS (pAudioRen->currentPTS), diff < 0 ? '-' : '+', GST_TIME_ARGS (adiff));
+                  GST_TIME_ARGS (pAudioRen->currentPTS), diff < 0 ? '-' : '+', GST_TIME_ARGS (absolute_diff));
     }
     SINK_LOG (4, GST_LEVEL_DEBUG, 643, pAudioRen,
               "now: %u:%02u:%02u.%09u, new_base_time: %u:%02u:%02u.%09u",
@@ -290,7 +290,13 @@ GstFlowReturn gst_lg_audio_render_preroll (GstBaseSink *sink, GstBuffer *buffer)
 
 /* gst_lg_audio_render_set_caps (gstlgaudiosink.c:~1130): always inlined into event(),
  * no symbol. Parses the caps into LGAO_AUDIO_START_INFO_T and (re)opens the renderer.
- * Returns FALSE only for caps without structure/name or a non-audio mime. */
+ * Returns FALSE only for caps without structure/name or a non-audio mime.
+ * Shipped Thumb: 0x88f6/0x8952 BYPASS closes via drop before returning;
+ * 0x915c..0x91e6 requires format but unknown/float formats continue with zero
+ * PCM fields. 0xa60a..0xa620 dispatches compare {-1,0,1,2}; only 1 tears down
+ * (0xa8ca..0xa8da), -1 checks port (0xa956), all other values open without
+ * teardown. 0xa8e2 suppresses open while dropped, not the final info/FIRST.
+ * Caps are copied before validation; acceptance is not proof of configuration. */
 static inline gboolean
 gst_lg_audio_render_set_caps (GstLgAudioRender *pAudioRen, GstCaps *caps, gboolean *caps_changed)
 {
@@ -404,8 +410,9 @@ gst_lg_audio_render_set_caps (GstLgAudioRender *pAudioRen, GstCaps *caps, gboole
         SINK_LOG (4, GST_LEVEL_LOG, 1232, pAudioRen, "channel = %d, acmod = %d",
                   AudioInfo.numberOfChannel, AudioInfo.acmod);
     } else if (gst_structure_get (structure, "channel-mask", GST_TYPE_BITMASK, &channel_mask, NULL)) {
-        /* mono (front-center) -> 1/0, stereo-ish -> 2/0, anything else -> 3/2 */
-        AudioInfo.acmod = channel_mask == 2 ? 1 : channel_mask == 1 ? 2 : 7;
+        /* 0xaf4e..0xaf5e compares ONLY the low 32 bits of the 64-bit mask.
+         * Preserve that shipped truncation (not a normal GStreamer mask map). */
+        AudioInfo.acmod = (guint) channel_mask == 2 ? 1 : (guint) channel_mask == 1 ? 2 : 7;
         SINK_LOG (4, GST_LEVEL_LOG, 1245, pAudioRen, "channel-mask = %d, acmod = %d",
                   (gint) channel_mask, AudioInfo.acmod);
     } else {
@@ -545,7 +552,7 @@ gst_lg_audio_render_set_caps (GstLgAudioRender *pAudioRen, GstCaps *caps, gboole
     case 0:     /* same PCM format, no restart */
         SINK_LOG (3, GST_LEVEL_INFO, 1453, pAudioRen, "same caps for normal play received. ignore");
         break;
-    case 2:     /* same PCM format, restart=TRUE */
+    case 2:     /* same PCM format, restart=TRUE: log only, NO connect call (0xa624) */
         SINK_LOG (2, GST_LEVEL_INFO, 1458, pAudioRen, "Connect ES Renderer Only");
         break;
     case -1: {  /* nothing configured yet: only with a valid audio port */
@@ -597,7 +604,16 @@ gst_lg_audio_render_set_caps (GstLgAudioRender *pAudioRen, GstCaps *caps, gboole
 }
 
 /* @0x8240 gst_lg_audio_render_event: GstBaseSink::event; everything except an upstream
- * mpegh-object-ui OOB event and a failed CAPS is chained to GstBaseSink. */
+ * mpegh-object-ui OOB event and a failed CAPS is chained to GstBaseSink.
+ * Shipped Thumb 0x87fa..0x8802: FLUSH_STOP sets speed 0 then flushes;
+ * FLUSH_START 0x8884..0x888c only stores {isFlushing=1,bSeamlessSeek=0}
+ * then chains to the parent: it makes NO lgao cancellation/flush call. A public
+ * flush-start alone cannot guarantee cancellation of a synchronous ring push;
+ * chain() does not test isFlushing either. EOS 0x8dae..0x8dc4 skips an untouched PCM FIRST,
+ * otherwise waits once (including lgao_eos errors <=0), never a predicate loop.
+ * STREAM_START 0x8ac8..0x8b08 unconditionally rebuilds and plays on a changed
+ * nonseamless ID: no currentState/drop check, no set_audio_info in this path.
+ * These events can invalidate borrowed appsrcs even without a render call. */
 gboolean gst_lg_audio_render_event (GstBaseSink *sink, GstEvent *event)
 {
     GstLgAudioRender *pAudioRen = GST_LG_AUDIO_RENDER (sink);
@@ -839,7 +855,21 @@ gst_lg_audio_render_log_timestamp (GstLgAudioRender *pAudioRen, GstBuffer *buffe
 }
 
 /* @0xbbf4 gst_lg_audio_render_chain: GstBaseSink::render. Feeds the buffer to lgao in
- * <= 64 KiB sub-buffers; the data type (PCM / ES / metadata) comes from LG buffer flags. */
+ * <= 64 KiB sub-buffers; the data type (PCM / ES / metadata) comes from LG buffer flags.
+ * Shipped Thumb 0xbd5a..0xbd86: speed 250..2000 inclusive, mute exactly 1,
+ * CORRUPTED before UI/drop flags. Clock calibration happens before all gates.
+ * 0xbe78 / 0xcaee calls drop/UNDROP before UI, dump, state, PTS or unsupported
+ * checks: even an ultimately discarded buffer can destroy/rebuild appsrcs.
+ * A render-scoped producer could suppress stock feed, but render is not an
+ * exclusive lifecycle boundary (CAPS/STREAM_START/stop/properties also act).
+ * Captured bypass pointers must not survive these calls or a generation change.
+ * 0xbfb6..0xc01c caps chunks at 65536; 0xc152 retries the same offset forever
+ * on copy failure, resetting the remainder to zero after the first failure.
+ * 0xc06a map failure skips a chunk; 0xc696 feed failure is log-only. Every exit
+ * returns GST_FLOW_OK, including muted/trick/corrupt/READY/unsupported/drop,
+ * empty buffers and failed feeds; normal feeding does NOT add decodedSize.
+ * PTS is updated only past the state gate; each chunk receives the ORIGINAL
+ * PTS (even NONE). Host tests exercise recovered source, not shipped execution. */
 GstFlowReturn gst_lg_audio_render_chain (GstBaseSink *sink, GstBuffer *buffer)
 {
     GstLgAudioRender *pAudioRen = GST_LG_AUDIO_RENDER (sink);
@@ -948,31 +978,31 @@ GstFlowReturn gst_lg_audio_render_chain (GstBaseSink *sink, GstBuffer *buffer)
 
     SINK_LOG (4, GST_LEVEL_LOG, 2605, pAudioRen, "map buffer");
     {
-        gsize offset = 0, remain;
+        gsize offset = 0, remaining_size;
 
         while (bufSize != 0) {
-            GstBuffer *sub;
+            GstBuffer *chunk;
             gsize len;
 
-            /* [note] on copy failure the same chunk is retried and the remainder is lost */
+            /* On copy failure the same chunk is retried and the remainder is lost. */
             do {
-                remain = 0;
+                remaining_size = 0;
                 if (bufSize > CHAIN_MAX_FEED_SIZE) {
                     SINK_LOG (4, GST_LEVEL_LOG, 2609, pAudioRen, "bufSize = %d, limitSize = %d\n",
                               (gint) bufSize, CHAIN_MAX_FEED_SIZE);
-                    remain = bufSize - CHAIN_MAX_FEED_SIZE;
+                    remaining_size = bufSize - CHAIN_MAX_FEED_SIZE;
                     bufSize = CHAIN_MAX_FEED_SIZE;
                 }
-                sub = gst_buffer_copy_region (buffer, GST_BUFFER_COPY_ALL, offset, bufSize);
-                if (sub == NULL)
+                chunk = gst_buffer_copy_region (buffer, GST_BUFFER_COPY_ALL, offset, bufSize);
+                if (chunk == NULL)
                     SINK_GST (GST_LEVEL_ERROR, 2619, pAudioRen, "gst_buffer_copy_region() Error");
-            } while (sub == NULL);
+            } while (chunk == NULL);
 
             SINK_LOG (4, GST_LEVEL_LOG, 2621, pAudioRen,
                       "offset = %d, bufSize = %d, remainBufSize = %d\n",
-                      (gint) offset, (gint) bufSize, (gint) remain);
+                      (gint) offset, (gint) bufSize, (gint) remaining_size);
 
-            if (!gst_buffer_map (sub, &bufMapInfo, GST_MAP_READ)) {
+            if (!gst_buffer_map (chunk, &bufMapInfo, GST_MAP_READ)) {
                 SINK_GST (GST_LEVEL_ERROR, 2625, pAudioRen, "gst_buffer_map() Error");
                 len = bufSize;
             } else {
@@ -984,12 +1014,12 @@ GstFlowReturn gst_lg_audio_render_chain (GstBaseSink *sink, GstBuffer *buffer)
                                outType) < 0)
                     SINK_LOG (0, GST_LEVEL_ERROR, 2637, pAudioRen, "lgao_feed() is FAILED!!!");
                 SINK_LOG (4, GST_LEVEL_LOG, 2640, pAudioRen, "RENDER %" GST_PTR_FORMAT " out=%s",
-                          sub, out_type_name (outType));
-                gst_buffer_unmap (sub, &bufMapInfo);
+                          chunk, out_type_name (outType));
+                gst_buffer_unmap (chunk, &bufMapInfo);
             }
             offset += len;
-            gst_buffer_unref (sub);
-            bufSize = remain;
+            gst_buffer_unref (chunk);
+            bufSize = remaining_size;
         }
     }
 
@@ -1005,8 +1035,9 @@ done:
  * A pad probe/stream lock alone cannot pin ao here. Any private producer hook
  * must cover stop/close as well as caps/STREAM_START/drop/undrop rebuilds, and
  * reject new work BEFORE module destruction. A blocked synchronous push must
- * be cancelled via the live flush path before waiting for in-flight drain;
- * holding a private lifecycle mutex across both push and teardown can deadlock. */
+ * be cancelled before waiting for in-flight drain; public FLUSH_START alone
+ * is NOT that cancellation (lgao_flush is only in FLUSH_STOP above). Holding a
+ * private lifecycle mutex across both push and teardown can deadlock. */
 gboolean gst_lg_audio_render_stop (GstBaseSink *sink)
 {
     GstLgAudioRender *pAudioRen = GST_LG_AUDIO_RENDER (sink);

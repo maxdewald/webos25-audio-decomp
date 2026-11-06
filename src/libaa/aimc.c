@@ -189,7 +189,11 @@ fail:
     return NULL;
 }
 
-/* @0x1d34c */
+/* @0x1d34c: IMC_Finalize precedes stopping/joining the handler, not vice versa.
+ * No pending-command drain, sync-waiter cancellation or process-lock acquisition
+ * occurs here. The caller must already have quiesced users; join only waits for
+ * this handler's exit (aud_thread_destroy @0x20d04 = pthread_join + free).
+ */
 void aimc_finalize(struct aimc *imc)
 {
     IMC_Finalize(&imc->imc_info);
@@ -307,7 +311,16 @@ int aimc_create_handler(struct aimc *imc)
     return aimc_handler_create(imc);
 }
 
-/* @0x1d1dc: wait until the handler thread has drained everything queued so far */
+/* @0x1d1dc: request a zero-timeout poll, then wait once for its idle broadcast.
+ * @0x1d5c8/0x1d548: completion means no currently ready fd, not a per-command
+ * acknowledgement, remote-worker flush, or module lifetime pin. Continually
+ * ready fds can postpone it. There is no predicate, generation, running-thread
+ * check or error propagation: even write failure still waits and returns 0.
+ * Multiple four-byte requests can coalesce into "syncsync" in the pipe read;
+ * exact strcmp then misses them. Spurious/shared broadcasts can return early.
+ * Called from this handler's command/event callback it waits on itself: the
+ * handler cannot reach poll/broadcast until that callback returns.
+ */
 int aimc_handler_sync(struct aimc *imc)
 {
     pthread_mutex_lock(&imc->handler_sync_lock);
@@ -320,7 +333,12 @@ int aimc_handler_sync(struct aimc *imc)
     return 0;
 }
 
-/* @0x1d2bc */
+/* @0x1d2bc: clear running, write stop, join, then close both pipe ends.
+ * A stop read skips other ready fds in that iteration; pending messages need
+ * not run. No sync broadcast occurs on this path (or poll/process failure).
+ * Self-destruction attempts pthread_join on the current handler; the thread
+ * helper ignores join errors, so it is not a supported callback teardown.
+ */
 void aimc_handler_destory(struct aimc *imc)
 {
     if (!imc->handler_thread)
@@ -406,7 +424,10 @@ int aimc_process(struct aimc *imc)
     return 0;
 }
 
-/* @0x1d750: fire-and-forget IMC command (no response requested) */
+/* @0x1d750: no response requested, not necessarily asynchronous execution.
+ * IMC_SendCommand @0x21034 dispatches same-core commands inline (and returns
+ * success independently of that handler's return); other cores use transport.
+ */
 int aimc_send_command(struct aimc *imc, unsigned int cmd, unsigned int source,
                       unsigned int target, void *param, unsigned int param_size)
 {
@@ -667,7 +688,11 @@ int aimc_unregister_command_handler(struct aimc *imc, unsigned int uid)
     return 0;
 }
 
-/* @0x1dd50: barrier against a concurrently running IMC_ProcessHeader */
+/* @0x1dd50: lock/unlock only, not a module reference or pending-work drain.
+ * Transport receive paths hold this nonrecursive lock across IMC_ProcessHeader
+ * and its inline callbacks; calling this there deadlocks. Direct local dispatch
+ * through IMC_SendCommand @0x21034 does not acquire this lock.
+ */
 void aimc_wait_until_process_header(struct aimc *imc)
 {
     pthread_mutex_lock(&imc->imc_process_lock);
@@ -687,7 +712,16 @@ void aimc__unregister_command_handler(ImcInfo *info, unsigned int target)
     aimc_unregister_command_handler(aimc_of_info(info), target);
 }
 
-/* @0x1dd84: call the handler registered for target */
+/* @0x1dd84: lookup under command_lock, then invoke inline after unlocking.
+ * This list is a handler registry, not a command queue/worker. No refcount pins
+ * arg after lookup; unregister alone cannot wait for an already copied handler.
+ * Automatic response follows handler return (@0x1de9c..0x1deb2), but an explicit
+ * aimc_command_response can acknowledge before the handler's remaining work
+ * (including an external registry receiver's destructor). Receiver ordering
+ * must be established separately: this dispatcher imposes no destructor fence.
+ * One response slot per aimc, not a stack: recursive aimc-style dispatch can
+ * clear/overwrite the outer response, even for a nested no-response command.
+ */
 int aimc_dispatch_command(ImcInfo *info, unsigned int target, unsigned int cmd, void *param,
                           unsigned int param_len, unsigned int sender, unsigned int message_id,
                           unsigned int flags)
@@ -733,6 +767,7 @@ int aimc_dispatch_command(ImcInfo *info, unsigned int target, unsigned int cmd, 
         }
         r = ((aimc_cmd_handler_fn)handler)(arg, cmd, param, param_len);
         if (imc->command_need_response) {
+            /* Observed: ignores response errors and leaves need_response set. */
             imc->command_response.result = r;
             IMC_Response(info, &imc->command_response);
         }
@@ -752,7 +787,9 @@ int aimc_dispatch_command(ImcInfo *info, unsigned int target, unsigned int cmd, 
         }
         if (!arg)
             return -((PFN_ImcCmdProc)handler)(NULL, cmd, &si, param, param_len);
-        /* module mutex at +0x84 of the legacy module object */
+        /* Legacy module mutex +0x84: same-module recursive dispatch attempts
+         * to reacquire it; unlike the aimc-style branch, it is held in handler.
+         */
         pthread_mutex_lock((pthread_mutex_t *)((char *)arg + 0x84));
         r = ((PFN_ImcCmdProc)handler)(arg, cmd, &si, param, param_len);
         pthread_mutex_unlock((pthread_mutex_t *)((char *)arg + 0x84));
@@ -760,7 +797,10 @@ int aimc_dispatch_command(ImcInfo *info, unsigned int target, unsigned int cmd, 
     }
 }
 
-/* @0x1df68: explicit answer from inside an aimc-style command handler */
+/* @0x1df68: explicit answer now, not on handler return; ignores send errors.
+ * need_response clears AFTER IMC_Response returns. A local response callback
+ * runs inline (IMC_Response @0x211fc), so reentry sees/may overwrite this slot.
+ */
 int aimc_command_response(struct aimc *imc, int result, void *param, unsigned int param_size)
 {
     if (!imc->command_need_response) {
@@ -797,6 +837,10 @@ void aimc_munmap(struct aimc *imc, unsigned int offset, void *addr, unsigned int
 
 /* @0x1e084: instantiate module type `module_name` on a processor; returns its uid
  * (top byte = processor id) or 0. preferred_processor 0 means "this process".
+ * AIPC uses call (reply), unlike destroy/connect/disconnect below, which use
+ * send (write only: aipc_send_to @0x1f718). None calls aimc_handler_sync or pins
+ * a module. Driver wrappers wait only for ioctl return; remote receiver work
+ * and acknowledgement vs destructor ordering are outside these wrappers.
  */
 unsigned int aimc_module_create(struct aimc *imc, const char *module_name,
                                 int preferred_processor)
@@ -825,7 +869,9 @@ unsigned int aimc_module_create(struct aimc *imc, const char *module_name,
     return 0;
 }
 
-/* @0x1e15c */
+/* @0x1e15c: AIPC returns send status, not a registry/destructor result.
+ * Driver success is normalized to 0, any negative ioctl result to -1.
+ */
 int aimc_module_destroy(struct aimc *imc, unsigned int module_uid)
 {
     if (imc->aipc)

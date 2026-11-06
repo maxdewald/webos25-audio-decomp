@@ -303,7 +303,11 @@ void gst_lg_audio_render_class_intern_init (gpointer klass)
     gst_lg_audio_render_class_init ((GstLgAudioRenderClass *) klass);
 }
 
-/* @0x74f0 gst_lg_audio_render_finalize */
+/* @0x74f0 gst_lg_audio_render_finalize
+ * Exact ARM body only clears eos_cond/eos_mutex/task_mutex and logs. It does
+ * NOT close ao, join its event task, or chain to parent finalize. Teardown
+ * must already have happened through BaseSink::stop; finalize is not a fallback
+ * cancellation/lifetime barrier for an injected producer. */
 void gst_lg_audio_render_finalize (GObject *obj)
 {
     GstLgAudioRender *pAudioRen = (GstLgAudioRender *) obj;
@@ -332,8 +336,11 @@ extern void gst_lxlog_deinit (void);
 
 /*
  * Inlined into change_state (NULL_TO_READY), no symbol; name from the
- * logm __func__ string.  Replays every property whose lgao setter failed
- * (or was skipped) because no lgao handle existed yet.
+ * logm __func__ string. Replays every marked property in ascending property ID;
+ * a bit means a setter failed (or was skipped), not that replay succeeded.
+ * Setter results are ignored and the mask is NOT cleared here. Later opens can
+ * therefore replay old marked values, including both PCM transport flags; a
+ * failed parent transition does not roll this replay/context creation back.
  */
 static void
 _gst_lg_audio_render_set_preconditions (GstLgAudioRender *pAudioRen)
@@ -527,7 +534,14 @@ _gst_lg_audio_render_set_preconditions (GstLgAudioRender *pAudioRen)
  * downward transitions chain first, allowing BaseSink::stop to free ao.
  * Neither this override nor the matching READY_TO_NULL BaseSink stop call uses
  * this sink pad's stream mutex as a universal producer lease. State transition
- * exclusion is not exclusion against arbitrary external appsrc submissions. */
+ * exclusion is not exclusion against arbitrary external appsrc submissions.
+ * Renderer/state setters are applied BEFORE upward parent transition; lower
+ * return codes only log. A failed parent PLAYING transition can therefore
+ * leave currentState=PLAYING and the renderer already started. NULL_TO_READY
+ * similarly keeps its freshly opened ao if parent start fails. Downward parent
+ * failure does not skip this override's flush/pause/deinit. Readiness for a
+ * private producer must follow actual context/configuration, not state enum or
+ * transition return alone. Source-extracted tests preserve these failure paths. */
 GstStateChangeReturn gst_lg_audio_render_change_state (GstElement *element,
                                                        GstStateChange transition)
 {

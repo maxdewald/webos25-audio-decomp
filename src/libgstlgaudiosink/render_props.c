@@ -145,7 +145,10 @@ gst_lg_audio_render_class_init (GstLgAudioRenderClass *klass)
     /* "audio-underrun": emitted from the event task on LGAO_EVENT_UNDERRUN
      * unless the sink is "seamless"; "clock-calibrated" is an action signal
      * whose class handler is gst_lg_audio_render_clock_calibrated;
-     * "es-bypass-done" has no id slot (never emitted from this library). */
+     * "es-bypass-done" has no id slot (emitted by name from the callback task).
+     * All three signals return void and have zero payload arguments: handlers
+     * identify the emitting sink, not a retained ao/appsrc submission capability.
+     * Properties below are scalar/string/resource configuration, no ao accessor. */
     gst_lg_audio_render_signals[SIGNAL_UNDERRUN] =
         g_signal_new ("audio-underrun", G_TYPE_FROM_CLASS (klass), G_SIGNAL_RUN_FIRST,
                       G_STRUCT_OFFSET (GstLgAudioRenderClass, underrun), NULL, NULL,
@@ -519,7 +522,12 @@ _gst_lg_audio_render_set_preconditions (GstLgAudioRender *pAudioRen)
     }
 }
 
-/* @0xd7c0 gst_lg_audio_render_change_state */
+/* @0xd7c0 gst_lg_audio_render_change_state
+ * NULL_TO_READY obtains this instance's ao before chaining to BaseSink::start;
+ * downward transitions chain first, allowing BaseSink::stop to free ao.
+ * Neither this override nor the matching READY_TO_NULL BaseSink stop call uses
+ * this sink pad's stream mutex as a universal producer lease. State transition
+ * exclusion is not exclusion against arbitrary external appsrc submissions. */
 GstStateChangeReturn gst_lg_audio_render_change_state (GstElement *element,
                                                        GstStateChange transition)
 {

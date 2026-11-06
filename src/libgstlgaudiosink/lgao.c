@@ -259,6 +259,13 @@ enum appsink_event_return lgao_appsink_handle_event(void *priv, int port_num,
 int lgao_appsink_handle_data(void *priv, int input_port_num, struct aud_data *data);
 void _sig_handle(int sig, siginfo_t *info, void *context);
 
+/* Exported mutable callback TABLE, not a registration/access API for producers.
+ * Connect installs it on the main tail appsink with priv=ao. Replacing it affects
+ * every instance sharing the table, can steal EOS/data ownership, and may run
+ * while an upstream sync holds stream locks: reentrant bypass submission risks
+ * a lock cycle. It supplies no lease against disconnect/close; not a safe hook.
+ * pFnCallbackFn/pCallbackFnParam below are initialized NULL but never dispatched
+ * by this shipped library. Event MQ getter returns an ID, not ao ownership. */
 struct module_appsink_callback lgao_appsink_cb = {
     lgao_appsink_handle_data,
     lgao_appsink_handle_event,

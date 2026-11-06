@@ -999,7 +999,14 @@ done:
 }
 
 /* @0xd040 gst_lg_audio_render_stop: GstBaseSink::stop - kick and join the event task,
- * tear the renderer down and close lgao. */
+ * tear the renderer down and close lgao. task_mutex belongs to GstTask execution;
+ * joining excludes that callback task only, NOT external submission threads.
+ * eos_mutex/flush_mutex protect notification waits, not ao/appsrc lifetime.
+ * A pad probe/stream lock alone cannot pin ao here. Any private producer hook
+ * must cover stop/close as well as caps/STREAM_START/drop/undrop rebuilds, and
+ * reject new work BEFORE module destruction. A blocked synchronous push must
+ * be cancelled via the live flush path before waiting for in-flight drain;
+ * holding a private lifecycle mutex across both push and teardown can deadlock. */
 gboolean gst_lg_audio_render_stop (GstBaseSink *sink)
 {
     GstLgAudioRender *pAudioRen = GST_LG_AUDIO_RENDER (sink);

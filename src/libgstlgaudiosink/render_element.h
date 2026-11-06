@@ -47,6 +47,16 @@ struct _GstLgAudioRender {
         guint8      _lg_parent[LG_BASE_SINK_SIZE];
     };
 
+    /* Per-instance association: NULL_TO_READY stores lgao_open's result here;
+     * stop closes it and writes NULL. Object refs keep the sink, NOT ao or its
+     * modules, alive. No public property/signal returns this private pointer.
+     * Identify the actual pipeline-selected audiosink object, hold its GObject
+     * reference, check GstLgAudioRender type and originating plugin/module;
+     * matching type/version/name alone cannot distinguish concurrent instances.
+     * Validated ARM0x200 is corroborating layout, never standalone discovery.
+     * A private render-vfunc scope can associate its actual sink argument with
+     * the ao passed to lgao_feed (raw0xc686..c696); another thread/context or a
+     * generation surviving stop/rebuild must not inherit that association. */
     void       *ao;                    /* lgao handle (lgao_open) */
     gboolean    isSeamless;            /* "seamless": suppress underrun signal */
     guint64     decodedSize;

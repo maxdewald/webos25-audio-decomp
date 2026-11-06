@@ -283,7 +283,19 @@ struct aud_module;
  * Registry module pointers below are borrowed, not aud_object references;
  * disconnect destroys their UIDs and clears them. No context lifetime lock is
  * held by feed/FIRST/connect/disconnect: producers must be quiesced externally.
- * flush_mutex coordinates flush notifications only; it does not pin modules. */
+ * flush_mutex coordinates flush notifications only; it does not pin modules.
+ * PRIVATE-HOOK DECISION: no existing supported acquisition+submit+release API.
+ * A sink ref, pad stream lock, registry lookup or callback with priv=ao is not a
+ * module lease. Offset-only/late-attach injection is unacceptable. A private
+ * hook is only a candidate if explicitly authorized, exact loaded binaries and
+ * ARM ABI/entry bindings are gated, and association/lifecycle interception is
+ * installed BEFORE use with generation/in-flight accounting and cancellation.
+ * A validated render scope can capture lgao_feed's real ao argument per sink;
+ * it must not guess the context from global UIDs or keep it across a rebuild.
+ * Dynamic JUMP_SLOT entries for lgao_feed/open/close/connect/disconnect/drop
+ * exist in this build (BIND_NOW); that is a hook surface, not proof LD_PRELOAD
+ * or late symbol replacement intercepts the already-resolved internal calls.
+ * No hook, lifetime gate or public capability is implemented by this model. */
 typedef struct {
     int                     fd;              /* /dev/lg/aren0, -1 when closed */
     bool                    isMixer;

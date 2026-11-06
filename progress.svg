@@ -22,7 +22,7 @@
 </style>
 <rect class="card" x="0.5" y="0.5" width="819" height="1063" rx="10"/>
 <text class="title" x="24" y="38">Decompilation progress</text>
-<text class="sub" x="24" y="60">20 original files · 610 of 7,675 KiB of their code reconstructed (7.9%)</text>
+<text class="sub" x="24" y="60">20 original files · 616 of 7,675 KiB of their code reconstructed (8.0%)</text>
 <text class="name" x="24" y="108">libgstdecproxy</text>
 <text class="path" x="24" y="125">/usr/lib/gstreamer-1.0/libgstdecproxy.so</text>
 <rect class="track" x="330" y="102" width="340" height="14" rx="7"/>
@@ -149,8 +149,8 @@
 <text class="name" x="24" y="936">dsp1</text>
 <text class="path" x="24" y="953">/lib/firmware/audio_a0_dsp1.bin</text>
 <rect class="track" x="330" y="930" width="340" height="14" rx="7"/>
-<rect class="dsp" x="330" y="930" width="3.0" height="14" rx="7"/>
-<text class="pct" x="686" y="942">0.7%</text>
+<rect class="dsp" x="330" y="930" width="3.9" height="14" rx="7"/>
+<text class="pct" x="686" y="942">1.1%</text>
 <text class="path" x="686" y="958">xtensa</text>
 <text class="name" x="24" y="982">audiod</text>
 <text class="path" x="24" y="999">/usr/sbin/audiod</text>

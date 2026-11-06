@@ -552,7 +552,8 @@ void *lgao_open(void)
     return ao;
 }
 
-/* @0x14e00 */
+/* @0x14e00: final context release, not a stop/disconnect/close_renderer wrapper.
+ * Caller must finish producers and renderer teardown before this frees ao. */
 int lgao_close(void *a)
 {
     lgao *ao = a;
@@ -1313,7 +1314,11 @@ int lgao_set_ease_volume(void *a)
     return 0;
 }
 
-/* @0x16b28 */
+/* @0x16b28: borrowed registry pointers are invalid after module destruction.
+ * No producer/lifetime lock or FIRST rearm here. The element stops its callback
+ * task before final stop -> disconnect -> close_renderer -> close; caps changes,
+ * non-seamless track changes and drop also destroy/recreate these appsrcs.
+ * Cached module pointers/UIDs must not be reused across that transition. */
 int lgao_disconnect_renderer(void *a)
 {
     lgao *ao = a;
@@ -1909,8 +1914,18 @@ int lgao_play(void *a)
  * returns are ignored and ALL type latches are then cleared. Switching data type
  * or either cached PCM transport flag does not itself resend FIRST. lgao_open,
  * close_renderer (PCM through METADATA only), EOS (PCM only), or set_first_render
- * can rearm it; flush/set_audio_info do not. Caps acmod/downmix changes and undrop call here
- * explicitly. Saved export @0x282d0; no kernel head is created by this call. */
+ * can rearm it (set_first_render is exported, with no internal callsite).
+ * flush/set_audio_info/mute do not. EOS skips rearming for mute,
+ * trick rates or drop. FLUSH_STOP/SEGMENT and seamless seeks do not rearm FIRST;
+ * format-changing caps and non-seamless track changes close/reopen (rearming).
+ * Same-PCM caps with restart=1 take case 2 without reopening; codec/data_* alone
+ * are not compared. Caps acmod/downmix changes and undrop call here explicitly,
+ * ignoring latches.
+ * Therefore preserving a previous MAT FIRST while a PCM flag is set cannot be
+ * guaranteed: any such call replaces it with a codec-less PCM FIRST. With both
+ * flags clear a replay is ES again, but uses CURRENT codec_str/data_*; changed
+ * caps can replace MAT too. No preservation guard exists in the shipped code.
+ * Saved export @0x282d0; no kernel head is created by this call. */
 int lgao_push_first_event(void *a)
 {
     lgao *ao = a;
@@ -2040,6 +2055,15 @@ static inline void _lgao_write_dump(lgao *ao, void *buff, unsigned int buffLengt
  * store @0x600a257e..2589 when dataType==1, NOT demonstrated playback: PCM-mode FIRST
  * (no codec) resets dataType=0. Enabling duplication after an ES FIRST also sends
  * those bytes into the main PCM chain; it is not a bypass-only carrier API.
+ * The lower-level module_appsrc_push_data can submit a separately allocated
+ * type_pcm object straight to an already connected bypass_appsrc without this
+ * feed/FIRST logic or graph edits. That is conditional on a still-valid borrowed
+ * module, a still-effective matching ES/MAT FIRST and external serialization
+ * against feed, FIRST and teardown; the sink exports no getter/direct route.
+ * lgao hands one extra aud_data reference to each push and releases its local
+ * reference afterwards (raw 0x1893e..18958, 0x18a4c..18a56, 0x18ab8..18ac2).
+ * A new direct object would hand off its initial reference, or get once first
+ * if retaining a local reference; module pointers are NOT aud_objects.
  * Saved runtime/idle-state.txt:1533 shows only dataType=0, not this transport.
  * Feed's byte-count return is not delivery proof (drops/push errors are hidden). */
 int lgao_feed(void *a, void *buff, unsigned int buffLength, unsigned long long timestamp,
@@ -2180,8 +2204,11 @@ int lgao_get_drop_renderer(void *a)
 
 /* @0x18e50: "ES bypass & drop" handover. Dropping tears the whole renderer
  * down (stop, disconnect, close fd) and posts BYPASS_DONE; while dropped,
- * feed/first-event/eos/mute/speed/lipsync all become no-ops. Un-dropping
- * rebuilds the renderer and replays PLAY + first events. */
+ * feed still clears its type latch and counts dropped bytes; explicit FIRST
+ * constructs/releases events without clearing latches; EOS returns 1. Mute and
+ * speed still cache values but skip their ioctls. Un-dropping rebuilds appsrcs,
+ * replays PLAY only for a saved PLAY state, and ALWAYS pushes both FIRSTs even
+ * if no latch is armed. Rebuild return codes are ignored in the shipped code. */
 int lgao_set_drop_renderer(void *a, int is_drop)
 {
     lgao *ao = a;

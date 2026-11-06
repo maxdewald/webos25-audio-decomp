@@ -21,7 +21,9 @@
 #define AOC_REGS   0xc1000600u   /* +0x24 ARC ctrl, +0x28 eARC ctrl, +0x80/+0x84 clocks */
 #define CHIP_REGS  0xc100fe00u
 #define CHIP_ID    0xc1010200u   /* +0xe8 chip revision (0x26a0, > 0x179f checks)        */
+#ifndef REG
 #define REG(base, off) (*(volatile uint32_t *)(uintptr_t)((base) + (off)))
+#endif
 
 /* ---- framework types (only the fields this code touches) ---------------------------- */
 enum { AUD_DATA_PCM = 0, AUD_DATA_ES = 1, AUD_DATA_META = 2, AUD_DATA_META_EXT = 3 };
@@ -183,6 +185,9 @@ void     HAL_CacheRegionWriteback(void *p, unsigned len);
 int  out_start(struct out_module *m);
 int  out_stop(struct out_module *m);
 int  out_chain(struct aud_port *port, struct aud_data *d);
+int  out_chain_bc(struct out_module *m, struct aud_port *port, struct aud_data *d);
+int  out_event(struct out_module *m, struct aud_port *port, struct aud_event *ev);
+void irq_handle_bc(struct out_module *m);
 int  fill_bc(struct out_module *m, const uint8_t *src, unsigned bytes);
 
 int  cpy_es(struct out_module *m, void *dst, const void *src, unsigned dst_bytes);

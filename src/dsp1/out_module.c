@@ -5,11 +5,11 @@
  * and _init. out_event and the lane writers live in output_arc.c.
  * RECONSTRUCTION from lib/firmware/audio_a0_dsp1.bin
  *   sha256 8f4e6d88a21b8486f3e15a866a989281f5f9cea564b5767cee24ca01277ae2f4
- * Main segment linked at 0x60000000. FLIX bundles are 8 bytes. Branch bundles were
- * decoded with tools/flix_annot.py (18-bit target form). A few kind-B bundles
- * (t=0xa/0xc, e.g. 0x6012416e, 0x601241ee, 0x6012429a) decode to targets outside the
- * function. Their conditions are inferred from the surrounding code and marked [FLIX]. Log-guard bundles (mask word 0x4ff900cc, or module +0x8) are dropped. Log strings are
- * quoted in comments.
+ * Main segment linked at 0x60000000. BC fill/IRQ/start/stop/chain control flow was
+ * rechecked with tools/xtobjdump.sh on the saved main image; validated .w18 branch
+ * slots supersede flix_annot.py guesses. Unchecked branches elsewhere remain marked
+ * [FLIX]; SIMD/float slots are not recovered. Log guards are omitted; short log
+ * strings are quoted in comments.
  * Evidence: build/decomp/audio_a0_dsp1.main_60000000.bin.c (0x60121754..0x60125208),
  *           build/scratch/evidence/dsp1-out-event/, build/scratch/evidence/earc-dsp1/.
  * Names: firmware symbol table at 0x602bfb08. functions.tsv calls 0x60121a0c "out_stop"
@@ -195,9 +195,12 @@ void irq_handle(struct out_module *m)
  * starts at bc_virt + k * bc_size and has its own descriptor at bc_desc + 0x20 * k.
  * ================================================================================== */
 
-/* @0x60121edc: write `bytes` (per-lane, BC side) at bc_wr via m->bc_writer, or zeros
- * when src == NULL. 4 lanes only when m->channels == 8 ([FLIX] 0x60121efd beqi 8), so
- * cpy_es8 with any other channel count writes 4 lanes but only lane 0 is advanced. */
+/* @0x60121edc: write `bytes` PER LANE at bc_wr; return SOURCE bytes consumed.
+ * xtobjdump 0x60121efd beqi.w18 8 selects four zero/writeback/descriptor lanes;
+ * 0x60121f76/1fd3 commits silence even though its return is zero, but does not
+ * commit a source writer returning zero. Wrapped source resumes at src + used.
+ * Thus cpy_es8 consumes twice the lane-byte count (cpy_8 consumes four times).
+ * cpy_es8 with channels != 8 still writes four lanes but commits only lane 0. */
 int fill_bc(struct out_module *m, const uint8_t *src, unsigned bytes)
 {
     struct out_cfg *cfg = m->cfg;
@@ -238,8 +241,13 @@ int fill_bc(struct out_module *m, const uint8_t *src, unsigned bytes)
     return used;
 }
 
-/* @0x60122098: BC IRQ, once per bc_unit. Tracks the hardware read pointer, refills
- * zeros on underflow, and runs the post-start mute countdown. */
+/* @0x60122098: BC IRQ tracks lane-0 read delta modulo bc_size; larger deltas
+ * count whole units, smaller ones do not increment irq_count (0x6012219f..22224).
+ * 0x601221c1 blti.w18 1 includes exactly empty; only a NEGATIVE fill resets wr=rd
+ * (0x60122403..11). Add one silent unit, flag re-prime, clear latency, wake writer.
+ * 0x601221d1 beqi.w18 16 mutes before decrement; zero unmutes. eARC mute is a no-op.
+ * Timing carry/borrow instructions in this region are not fully decoded by the
+ * objdump profile; the 64-bit expressions retain the existing reconstruction. */
 void irq_handle_bc(struct out_module *m)
 {
     struct out_cfg *cfg = m->cfg;
@@ -276,7 +284,7 @@ void irq_handle_bc(struct out_module *m)
     /* else "process size is less than unit-size" */
 
     m->bc_filled -= consumed;
-    if (m->bc_filled < 1) {                           /* [FLIX] 0x601221c1 blti 1 */
+    if (m->bc_filled < 1) {                           /* 0x601221c1 blti.w18 1 */
         /* "underflow. fill zero" */
         if (m->bc_filled < 0) {
             /* "overrun. rd %08x, wr %08x, bc_filled %d": hardware read past wr */
@@ -290,7 +298,7 @@ void irq_handle_bc(struct out_module *m)
     }
 
     if (m->mute_countdown) {
-        if (m->mute_countdown == 16)                  /* [FLIX] 0x601221d1 beqi 16 */
+        if (m->mute_countdown == 16)                  /* 0x601221d1 beqi.w18 16 */
             cfg->mute(m, 1);                          /* "mute." */
         if (--m->mute_countdown == 0)
             cfg->mute(m, 0);                          /* "unmute." */
@@ -443,7 +451,12 @@ int _set_format_soundbar(struct out_module *m, const uint32_t *p)
 
 void irq_handle_bc(struct out_module *m);
 
-/* @0x601226f8 */
+/* @0x601226f8: xtobjdump 0x60122721 bbci.w18 0 selects MAOC setup, not
+ * a stride change. BC reads base/end/unit and sets hardware wr to raw hw rd;
+ * the range check clamps only software rd (0x6012276b..7aa). Restart discards
+ * previously committed BC data, but does NOT flush the software FIFO queue.
+ * Priming is deferred to the next payload: unit * floor((0x800/unit)*rate/48000),
+ * with stride_ch/2 scaling for speaker (0x601228c5..db). */
 int out_start(struct out_module *m)
 {
     struct out_cfg *cfg = m->cfg;
@@ -451,7 +464,7 @@ int out_start(struct out_module *m)
     m->started = 1;
     if (cfg->flags & 1)                               /* hp, spdif: 2-slot FIFO */
         m->stride_ch = 2;
-    else                                              /* speaker, arc: [FLIX] bbci 0 */
+    else                                              /* speaker, arc: 0x60122721 bbci.w18 0 */
         HAL_SetMAOCChannelSet_BufferController(4);
 
     if (cfg->bc_desc[0] == 0) {
@@ -507,7 +520,9 @@ int out_start(struct out_module *m)
     return 0;
 }
 
-/* @0x60122940 */
+/* @0x60122940: hardware stop -> IRQ disable/clear/unregister -> started=0 ->
+ * complete (0x60122951..87). No queue unlink, release, or ring clearing occurs;
+ * FIRST format changes therefore preserve old FIFO nodes and their saved strides. */
 int out_stop(struct out_module *m)
 {
     /* "%8s: stop.." */
@@ -528,7 +543,13 @@ int out_stop(struct out_module *m)
 /* @0x60122fa4: copy one buffer into the BC ring, waiting for room. Data is always
  * forwarded to output port 0 afterwards (nothing is connected there, so this is the
  * release). Partial writes happen on "port disabled", a new underflow, or a writer
- * returning 0. There is no rate/format check. */
+ * returning 0. There is no rate/format or started check. Validated 0x6012310f
+ * bge.w18 reserves one unit; 0x60123130 bgeu.w18 chooses all room on frame-count
+ * equality too, including a partial source frame. Completion is reinitialized
+ * BEFORE disable/underflow/room checks and waits occur with IRQs restored.
+ * Priming resets wr=rd and filled=0; it is not appended to stale queued bytes.
+ * The strided scalar copy and control flow are checked; timing carry/borrow
+ * instructions still have undecoded slots, not covered as exact firmware timing. */
 int out_chain_bc(struct out_module *m, struct aud_port *port, struct aud_data *d)
 {
     struct out_cfg *cfg = m->cfg;
@@ -542,7 +563,7 @@ int out_chain_bc(struct out_module *m, struct aud_port *port, struct aud_data *d
         m->bc_need_fill = false;
     }
 
-    if (d->ts != 0xffffffffu) {                       /* [FLIX] 0x60122fe8 beqi -1 */
+    if (d->ts != 0xffffffffu) {                       /* 0x60122fe8 beqi.w18 -1 */
         uint32_t now = REG(AOC_REGS, 0x84);           /* 90 kHz */
         uint32_t diff_us = now >= d->ts ? (now - d->ts) * 100 / 9
                                         : ((now - d->ts) * 100 - 100) / 9;
@@ -558,7 +579,7 @@ int out_chain_bc(struct out_module *m, struct aud_port *port, struct aud_data *d
     }
 
     unsigned written = 0;
-    while (written < d->size) {                       /* [FLIX] 0x601233a5 */
+    while (written < d->size) {                       /* 0x601233a5 bltu.w18 */
         aud_reinit_completion(&m->done);
         if (port->flags & PORT_DISABLED) {
             /* "port disabled." */
@@ -580,7 +601,7 @@ int out_chain_bc(struct out_module *m, struct aud_port *port, struct aud_data *d
             aud_wait_for_completion(&m->done);
             continue;
         }
-        if (cfg->bc_unit >= free_sz) {                /* [FLIX] 0x6012310f bge */
+        if (cfg->bc_unit >= free_sz) {                /* 0x6012310f bge.w18 */
             irq_restore(ps);
             /* "%8s: wait.. free_size %d bc_unit_size %d." */
             aud_wait_for_completion(&m->done);
@@ -592,7 +613,7 @@ int out_chain_bc(struct out_module *m, struct aud_port *port, struct aud_data *d
         unsigned room = (unsigned)(free_sz - cfg->bc_unit);
         unsigned rest = d->size - written;
         unsigned want;
-        if ((rest >> m->stride_shift) > (room >> m->output_stride_shift)) /* [FLIX] 0x60123130 */
+        if ((rest >> m->stride_shift) >= (room >> m->output_stride_shift)) /* 0x60123130 bgeu.w18 */
             want = room;
         else if (m->output_stride_shift >= m->stride_shift)
             want = rest << (m->output_stride_shift - m->stride_shift);
@@ -603,16 +624,19 @@ int out_chain_bc(struct out_module *m, struct aud_port *port, struct aud_data *d
             uint64_t now = (uint64_t)HAL_GetCurrentStch() << 32 | REG(AOC_REGS, 0x84);
             uint64_t since = m->irq_time ? now - m->irq_time : 0;
             m->write_time = now;
-            m->first_data = false;
             uint64_t bc_ticks = (uint64_t)((uint32_t)(m->bc_filled >> m->output_stride_shift)
                                            * 90000u / (uint32_t)m->data_rate);
             uint64_t unit_ticks = (uint64_t)(cfg->bc_unit >> m->output_stride_shift)
-                                  * 180000u / (uint32_t)m->data_rate;
+                                  * (m->irq_time ? 180000u : 90000u) / (uint32_t)m->data_rate;
             uint64_t t = now + bc_ticks + unit_ticks - since;
-            if (m->irq_time)
+            if (m->irq_time) {
+                m->first_data = false;   /* 0x60123274..7a; no-IRQ path bypasses this */
                 m->first_out_time = t;   /* "%8s: bc_write_time : %llu, ..." */
-            else
+            } else {
+                /* 0x601233c6 -> 0x6012327d, 0x601233d9: one unit, not two.
+                 * Keep first_data set so the first IRQ can resolve deferred time. */
                 m->first_write_time = t; /* "%8s: bc_write_time_wo_diff : %llu, ..." */
+            }
         }
 
         int used = fill_bc(m, d->ptr + written, want);
@@ -635,12 +659,12 @@ int out_chain(struct aud_port *port, struct aud_data *d)
 {
     struct out_module *m = port->owner;
 
-    if (d->type == AUD_DATA_META) {                   /* [FLIX] 0x60123644 beqi 2 */
+    if (d->type == AUD_DATA_META) {                   /* 0x60123644 beqi.w18 2 */
         /* "%8s: drop metadata." */
         aud_object_put(d);
         return 0;
     }
-    if (d->type == AUD_DATA_META_EXT) {               /* [FLIX] 0x6012364c beqi 3 */
+    if (d->type == AUD_DATA_META_EXT) {               /* 0x6012364c beqi.w18 3 */
         /* "%8s: drop meta ext." */
         aud_object_put(d);
         return 0;

@@ -89,7 +89,11 @@ int outctrlbin_set_property(void *child, const char *key, int value)
     return 0;
 }
 
-/* @0x60125268: (re)build the children. with_pcmcvt is true only for 10-channel PCM. */
+/* @0x60125268: (re)build the children. with_pcmcvt is true only for 10-channel
+ * PCM. Aligned branch evidence @60125399..3ce: cached gain<0 skips ALL four
+ * gain/fade/mute-input/mute-output assignments. Constructor's mute-output=true
+ * alone does not get propagated here. Child creation errors return -1 but the
+ * FIRST caller ignores them. Cached channels/es already changed before rebuild. */
 int outctrlbin_init(struct outctrlbin *b, bool with_pcmcvt)
 {
     if (b->gain || b->delay) {

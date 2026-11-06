@@ -7,9 +7,9 @@
  * Cadence HiFi (RG-2018.9), main segment linked at 0x60000000 (file offset 0x5b0).
  * Symbol table pairs are (func_ptr, name_ptr) at 0x602bfb08. Each was checked against
  * the function's own logmm "__func__" string. Every op0=0xE/0xF FLIX bundle is 8 bytes.
- * Branch bundles were decoded with tools/flix_annot.py (18-bit target form; 226/227
- * targets land on instruction starts).
- * Conditions that depend on it are tagged [FLIX] with the bundle address.
+ * Control-flow slots rechecked with tools/xtobjdump.sh on the saved main image;
+ * validated .w18 branches supersede the earlier flix_annot.py guesses. SIMD/float
+ * slots remain unrecovered; these scalar lane writers contain no such slots.
  * Evidence: build/decomp/audio_a0_dsp1.main_60000000.bin.c,
  *           build/scratch/evidence/dsp1-out-event/out_event.lin.asm
  * Corrections to the earlier version of this file: the ES writer test is
@@ -56,7 +56,10 @@ int cpy_es(struct out_module *m, void *dst, const void *src, unsigned dst_bytes)
 }
 
 /* @0x60122a38 cpy_es8 (functions.tsv: "output_spdif"): 8-channel HBR ES. Each 8-word
- * frame goes to 4 lanes x 2 slots (words 0-1 lane 0, 2-3 lane 1, 4-5 lane 2, 6-7 lane 3). */
+ * frame goes to 4 lanes x 2 slots (words 0-1 lane 0, 2-3 lane 1, 4-5 lane 2, 6-7 lane 3).
+ * xtobjdump 0x60122a46: frames=dst_bytes>>3; 0x60122acd advances source by 16;
+ * 0x60122aec returns frames<<4. A lane byte is NOT a source byte (ratio 1:2).
+ * These are scalar loads/stores; neither Pa/Pb synthesis nor SIMD is hidden here. */
 int cpy_es8(struct out_module *m, void *dst, const void *src, unsigned dst_bytes)
 {
     uint32_t *l0 = lane(m, dst, 0), *l1 = lane(m, dst, 1);
@@ -195,14 +198,17 @@ struct out_status_msg {
 
 /* @0x60123814 out_event. Event types: 1 = FIRST, 2 = LAST, 0xd = custom ("is_first_data").
  * FIRST and LAST are also passed on to aud_module_default_event. Custom events are
- * consumed. */
+ * consumed. xtobjdump 0x60123aa4..abf compares OLD codec/rate/channels and PCM acmod;
+ * bps, ES flag and C/LFE mapping alone do not trigger restart. Writer changes before
+ * stop/start (0x60123b11); neither this handler nor stop clears old FIFO nodes.
+ * 0x60123d23 is beq.w18 output slots, not the old inferred bany table match. */
 int out_event(struct out_module *m, struct aud_port *port, struct aud_event *ev)
 {
     int old_codec = m->codec, old_rate = m->data_rate;
     int old_ch = m->channels, old_acmod = m->acmod;
     int type = ev->type;
 
-    if (type == AUD_EVENT_FIRST) {                    /* [FLIX] 0x60123830 beqi 1 */
+    if (type == AUD_EVENT_FIRST) {                    /* 0x60123830 beqi.w18 1 */
         struct out_status_msg st = { OUT_CODEC_PCM, 0, 0, 0 };
         const char *codec = aud_event_value_get_str(ev, "codec", "pcm");
         st.channels  = aud_event_value_get_int(ev, "channels", 2);
@@ -218,7 +224,7 @@ int out_event(struct out_module *m, struct aud_port *port, struct aud_event *ev)
         if (m->es) {
             /* Codec is only parsed for ES. */
             st.codec = out_codec_from_str(codec);
-            /* [FLIX] 0x6012399b beqi channels, 2: 2 -> one lane, anything else -> 4 lanes. */
+            /* 0x6012399b beqi.w18 channels, 2: 2 -> one lane, anything else -> 4 lanes. */
             m->bc_writer = m->channels == 2 ? cpy_es : cpy_es8;
             if (strncmp(m->name, "output_spdif", 12) == 0) {
                 REG(AUD_REGS, 0x324) |= 1;            /* S/PDIF validity = non-audio */
@@ -245,7 +251,7 @@ int out_event(struct out_module *m, struct aud_port *port, struct aud_event *ev)
             is_arc = strncmp(m->name, "output_arc", 10) == 0;
 
             if (is_arc) {
-                if (m->channels == 2) {               /* [FLIX] 0x60123c25 beqi 2 */
+                if (m->channels == 2) {               /* 0x60123c25 beqi.w18 2 */
                     m->bc_writer = cpy_00;
                 } else if (m->ch_mapping_lfe_c) {
                     m->bc_writer = cpy_8;
@@ -257,7 +263,7 @@ int out_event(struct out_module *m, struct aud_port *port, struct aud_event *ev)
                 m->bc_writer = NULL;
                 for (int i = 0; i < 9; i++) {
                     if (out_pcm_map[i].in_ch == m->channels &&
-                        (out_pcm_map[i].out_ch & m->stride_ch)) {   /* [FLIX] 0x60123d23 bany */
+                        out_pcm_map[i].out_ch == m->stride_ch) {   /* 0x60123d23 beq.w18 */
                         m->bc_writer = out_pcm_map[i].fn;
                         break;
                     }
@@ -288,7 +294,7 @@ int out_event(struct out_module *m, struct aud_port *port, struct aud_event *ev)
             int zero = m->max_len - m->queued;
             irq_restore(ps);
             /* "%8s: max %d, queued %d, zero %d" */
-            if (zero >= 1) {                          /* [FLIX] 0x60123d78 blti 1 */
+            if (zero >= 1) {                          /* 0x60123d78 blti.w18 1 */
                 struct aud_data *z = aud_data_new_zero((unsigned)zero << m->stride_shift);
                 /* "%8s: zero_data %p, stride_shift %d" */
                 if (z)

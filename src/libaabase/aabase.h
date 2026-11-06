@@ -7,7 +7,8 @@
  * Prototypes and the module_appsink_callback / appsink_event_return types come from
  * the DWARF of usr/lib/gstreamer-1.0/libgstlgaudiosink.so (decl_file
  * /usr/include/aa/module/appsink.h). Instance sizes: impl->instance_size == 0x110
- * in both aud_module_impl tables (.data 0x12018 and 0x1208c).
+ * in both aud_module_impl tables (raw ELF .data 0x12018 and 0x1208c;
+ * Ghidra addresses 0x22018 and 0x2208c).
  */
 #ifndef LIBAABASE_AABASE_H
 #define LIBAABASE_AABASE_H
@@ -22,9 +23,13 @@ struct aud_appsrc {
     unsigned long long input_count;      /* 0x108: bytes pushed downstream */
 };
 
-/* Queue data on output 0; with sync, flush it to the down peers right away. */
+/* Transfer one data reference to output 0 (no copy); sync=true forwards pending
+ * objects on the caller's thread and CAN block before returning. false is not a
+ * nonblocking guarantee (locks/global sync_at_push). Always 0, even on drops;
+ * libaa enqueue OOM can leak the reference. See appsrc.c for ownership details. */
 int module_appsrc_push_data(struct aud_module *module, struct aud_data *data, bool sync);
-/* Queue an event on output 0 and flush output 0. */
+/* Transfer one event reference, then sync output 0; always 0. SYNC events share
+ * the data FIFO, async events may overtake it; neither API awaits remote render. */
 int module_appsrc_push_event(struct aud_module *module, struct aud_event *event);
 
 /* ---- appsink: module graph -> application --------------------------------- */

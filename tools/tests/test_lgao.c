@@ -12,6 +12,8 @@
 #define LOGI(...) ((void)0)
 #define LOGD(...) ((void)0)
 #define AREN_SET_JP4K_STREAM 20
+#define AREN_SET_MUTE 10
+#define AREN_SET_SPEED 9
 #define UNSET (~0u)
 struct aud_module { int id; };
 struct aud_object { int refs, kind; };
@@ -25,13 +27,16 @@ struct aud_data {
     unsigned char *data;
     unsigned size;
 };
-static struct aud_module main_src = {0}, bypass_src = {1};
+static struct aud_module main_src = {0}, bypass_src = {1}, sink = {2};
 static struct aud_event last_event[2];
 static struct aud_data last_data[2];
 static unsigned char payloads[2][32];
 static const void *data_identity[2];
-static int events[2], pushes[2], live_objects, ioctls, closes, fail_data;
+static int events[2], pushes[2], last_refs[2], live_objects, ioctls, closes, fail_data;
 static struct aren_pcm_info last_pcm;
+static unsigned disconnected[3], destroyed[3];
+static int disconnects, destroys, messages, opens, connects, starts, stops, plays;
+static int sequence, open_order, connect_order, start_order;
 
 static struct aud_object *aud_object_get(struct aud_object *o)
 {
@@ -124,8 +129,10 @@ static struct aud_data *aud_data_new(unsigned size)
 }
 static int module_appsrc_push_data(struct aud_module *m, struct aud_data *d, bool block)
 {
-    assert(block && d->size <= 32);
+    assert(m && block && d->size <= 32);
+    assert(d->object.refs > 0);
     last_data[m->id] = *d;
+    last_refs[m->id] = d->object.refs;
     data_identity[m->id] = d;
     memcpy(payloads[m->id], d->data, d->size);
     ++pushes[m->id];
@@ -139,8 +146,50 @@ static int mock_ioctl(int fd, unsigned command, void *arg)
     return 0;
 }
 static int mock_close(int fd) { ++closes; return 0; }
+static int aimc_module_disconnect_output(struct aimc *imc, unsigned uid, int port)
+{
+    assert(port == 0 && disconnects < 3);
+    disconnected[disconnects++] = uid;
+    return 0;
+}
+static int aimc_module_disconnect_input(struct aimc *imc, unsigned uid, int port)
+{
+    return aimc_module_disconnect_output(imc, uid, port);
+}
+static int aimc_module_destroy(struct aimc *imc, unsigned uid)
+{
+    assert(destroys < 3);
+    destroyed[destroys++] = uid;
+    return 0;
+}
+static int mock_msgsnd(int mq, const void *msg, size_t size, int flags)
+{
+    const lgao_mq_item *item = msg;
+    assert(size == sizeof(item->event) && item->event == LGAO_EVENT_BYPASS_DONE);
+    ++messages;
+    return 0;
+}
+static int _lgao_open_renderer(lgao *ao)
+{
+    assert(ao->fd == -1 && !ao->appsrc && !ao->bypass_appsrc);
+    ao->fd = 8;
+    ++opens; open_order = ++sequence;
+    return 0;
+}
+static int _lgao_connect_renderer(lgao *ao)
+{
+    assert(ao->fd == 8 && ao->rendererState == LGAO_STATE_CONFIG);
+    ao->appsrc = &main_src; ao->bypass_appsrc = &bypass_src; ao->appsink = &sink;
+    ao->uid_appsrc = 11; ao->uid_bypass_appsrc = 12; ao->uid_appsink = 13;
+    ++connects; connect_order = ++sequence;
+    return 0;
+}
+int lgao_stop_renderer(void *a) { ++stops; return 0; }
+int lgao_start_renderer(void *a) { ++starts; start_order = ++sequence; return 0; }
+int lgao_play(void *a) { ((lgao *)a)->rendererState = LGAO_STATE_PLAY; ++plays; return 0; }
 #define ioctl mock_ioctl
 #define close mock_close
+#define msgsnd mock_msgsnd
 void lgao_add_rts(void *a) {}
 static void _lgao_config_set_rts_param(lgao *ao, LGAO_APPTYPE_T type) {}
 static void _lgao_config_set_easevol(lgao *ao) {}
@@ -153,12 +202,16 @@ static lgao context(void)
 {
     lgao ao = {0};
     ao.index = 0; ao.fd = 7; ao.playSpeed = 1000;
-    ao.appsrc = &main_src; ao.bypass_appsrc = &bypass_src;
+    ao.appsrc = &main_src; ao.bypass_appsrc = &bypass_src; ao.appsink = &sink;
+    ao.uid_appsrc = 1; ao.uid_bypass_appsrc = 2; ao.uid_appsink = 3;
     ao.audioStartInfo.freq = 48000;
     ao.audioStartInfo.numberOfChannel = 6;
     ao.audioStartInfo.bitsPerSample = 32;
     strcpy(ao.audioStartInfo.codec_str, "ac3");
-    for (int i = 0; i < LGAO_DATA_TYPE_NUM; ++i) ao.isFirstRender[i] = true;
+    for (int i = LGAO_DATA_PCM; i <= LGAO_DATA_METADATA; ++i) {
+        ao.isFirstRender[i] = true;
+        ao.prevTimestamp[i] = ~0ull;
+    }
     return ao;
 }
 static int value(int dst, const char *key, int type, int fallback)
@@ -169,11 +222,21 @@ static int value(int dst, const char *key, int type, int fallback)
             return e->fields[i].number;
     return fallback;
 }
+static const char *string_value(int dst, const char *key)
+{
+    struct aud_event *e = &last_event[dst];
+    for (int i = 0; i < e->count; ++i)
+        if (!strcmp(e->fields[i].key, key) && e->fields[i].type == aud_value_str)
+            return e->fields[i].string;
+    return NULL;
+}
 static void reset(void)
 {
     assert(!live_objects);
     memset(events, 0, sizeof(events)); memset(pushes, 0, sizeof(pushes));
     ioctls = closes = fail_data = 0;
+    disconnects = destroys = messages = opens = connects = starts = stops = plays = 0;
+    sequence = open_order = connect_order = start_order = 0;
 }
 int main(void)
 {
@@ -195,6 +258,7 @@ int main(void)
     assert(lgao_feed(&ao, bytes, 4, 2000000000, LGAO_DATA_PCM) == 4);
     assert(events[0] == 1 && events[1] == 1);
     assert(data_identity[0] == data_identity[1]);
+    assert(last_refs[0] == 2 && last_refs[1] == 2);
     assert(last_data[1].info.type == type_pcm && !memcmp(payloads[1], bytes, 4));
     assert(!memcmp(payloads[0], payloads[1], 4));
     assert(lgao_set_first_render(&ao, LGAO_DATA_PCM, 1) == 0);
@@ -241,6 +305,134 @@ int main(void)
     assert(!ao.bufferedSize[0] && !live_objects);
     assert(lgao_set_pcm_multi_channel(NULL, 1) == -1);
     assert(lgao_feed(NULL, bytes, 4, 0, LGAO_DATA_PCM) == -1);
-    puts("lgao transport: routing, typed FIRSTs, latches, cache/ioctl order and drop/failure contracts passed");
+    reset(); ao = context();
+    strcpy(ao.audioStartInfo.codec_str, "mat");
+    assert(lgao_feed(&ao, bytes, 4, 0, LGAO_DATA_ES) == 4);
+    assert(value(1, "es", aud_value_bool, -1) == 1);
+    assert(!strcmp(string_value(1, "codec"), "mat"));
+    assert(!ao.pcm_multi_ch && !ao.pcm_bypass);
+    bool saved_latches[LGAO_DATA_TYPE_NUM];
+    memcpy(saved_latches, ao.isFirstRender, sizeof(saved_latches));
+    unsigned saved_buffered[LGAO_DATA_TYPE_NUM];
+    memcpy(saved_buffered, ao.bufferedSize, sizeof(saved_buffered));
+    struct aud_data *direct = aud_data_new(4);
+    direct->info.type = type_pcm;
+    memcpy(direct->data, bytes, 4);
+    assert(module_appsrc_push_data(ao.bypass_appsrc, direct, true) == -1);
+    assert(events[0] == 1 && events[1] == 1 && !pushes[0] && pushes[1] == 2);
+    assert(last_data[1].info.type == type_pcm && last_refs[1] == 1 && !live_objects);
+    assert(!strcmp(string_value(1, "codec"), "mat") && !ao.isFirstRender[0]);
+    assert(!memcmp(saved_latches, ao.isFirstRender, sizeof(saved_latches)));
+    assert(!memcmp(saved_buffered, ao.bufferedSize, sizeof(saved_buffered)));
+    assert(!ao.pcm_multi_ch && !ao.pcm_bypass);
+    assert(pthread_mutex_init(&ao.flush_mutex, NULL) == 0);
+    /* FLUSH_STOP then SEGMENT: rate zero/flush/rate restore, not FIRST replay. */
+    assert(lgao_set_playrate(&ao, 0) == 0);
+    assert(lgao_flush(&ao) == 0 && !ao.isFirstRender[0] && !ao.isFirstRender[1]);
+    assert(lgao_set_playrate(&ao, 1000) == 0);
+    assert(!memcmp(saved_latches, ao.isFirstRender, sizeof(saved_latches)));
+    assert(pthread_mutex_destroy(&ao.flush_mutex) == 0);
+    assert(lgao_set_mute(&ao, 1) == 0 && !ao.isFirstRender[0]);
+    int before_eos = events[0];
+    assert(lgao_eos(&ao) == 1 && events[0] == before_eos && !ao.isFirstRender[0]);
+    assert(lgao_set_mute(&ao, 0) == 0 && !ao.isFirstRender[0]);
+    ao.playSpeed = 249;
+    assert(lgao_eos(&ao) == 1 && !ao.isFirstRender[0]);
+    ao.playSpeed = 2001;
+    assert(lgao_eos(&ao) == 1 && !ao.isFirstRender[0]);
+    ao.playSpeed = 1000;
+    ao.drop_renderer = 1;
+    assert(lgao_eos(&ao) == 1 && !ao.isFirstRender[0]);
+    ao.drop_renderer = 0;
+    assert(lgao_set_pcm_multi_channel(&ao, 1) == 0 && !ao.isFirstRender[0]);
+    assert(lgao_eos(&ao) == 0 && ao.isFirstRender[0] && !ao.isFirstRender[1]);
+    assert(events[0] == before_eos);
+    assert(lgao_feed(&ao, bytes, 4, 0, LGAO_DATA_PCM) == 4);
+    assert(events[0] == before_eos + 1 && value(1, "es", aud_value_bool, -1) == -1);
+    assert(string_value(1, "codec") == NULL);
+    assert(lgao_set_pcm_multi_channel(&ao, 0) == 0 && !ao.isFirstRender[0]);
+    assert(lgao_push_first_event(&ao) == 0 && value(1, "es", aud_value_bool, -1) == 1);
+    assert(!strcmp(string_value(1, "codec"), "mat"));
+    strcpy(ao.audioStartInfo.codec_str, "ac3");
+    assert(lgao_set_audio_info(&ao, ao.audioStartInfo) == 0 && !ao.isFirstRender[0]);
+    assert(lgao_push_first_event(&ao) == 0);
+    assert(!strcmp(string_value(1, "codec"), "ac3"));
+
+    reset(); ao = context();
+    strcpy(ao.audioStartInfo.codec_str, "mat");
+    ao.rendererState = LGAO_STATE_PLAY;
+    assert(lgao_feed(&ao, bytes, 4, 0, LGAO_DATA_ES) == 4);
+    assert(lgao_eos(&ao) == 0 && events[0] == 3 && events[1] == 3);
+    assert(ao.isFirstRender[0] && !ao.isFirstRender[1]);
+    assert(lgao_feed(&ao, bytes, 4, 0, LGAO_DATA_ES) == 4);
+    assert(events[1] == 3 && ao.isFirstRender[0]);
+    assert(lgao_feed(&ao, bytes, 4, 0, LGAO_DATA_PCM) == 4);
+    assert(events[1] == 4 && !ao.isFirstRender[0]);
+    assert(value(1, "es", aud_value_bool, -1) == 1);
+    assert(!strcmp(string_value(1, "codec"), "mat"));
+
+    reset(); ao = context();
+    memset(ao.isFirstRender, 0, sizeof(ao.isFirstRender));
+    assert(lgao_disconnect_renderer(&ao) == 0 && disconnects == 3 && destroys == 3);
+    assert(disconnected[0] == 2 && disconnected[1] == 1 && disconnected[2] == 3);
+    assert(destroyed[0] == 1 && destroyed[1] == 2 && destroyed[2] == 3);
+    assert(!ao.appsrc && !ao.bypass_appsrc && !ao.appsink);
+    assert(!ao.uid_appsrc && !ao.uid_bypass_appsrc && !ao.uid_appsink);
+    assert(!ao.isFirstRender[0] && ao.fd == 7);
+    assert(lgao_disconnect_renderer(&ao) == 0 && disconnects == 3 && destroys == 3);
+    assert(lgao_close_renderer(&ao) == 0 && ao.fd == -1 && ao.isFirstRender[0]);
+
+    reset(); ao = context();
+    strcpy(ao.audioStartInfo.codec_str, "mat");
+    ao.rendererState = LGAO_STATE_PLAY;
+    assert(lgao_feed(&ao, bytes, 4, 0, LGAO_DATA_ES) == 4);
+    assert(lgao_set_pcm_bypass(&ao, 1) == 0 && !ao.isFirstRender[0]);
+    assert(lgao_set_drop_renderer(&ao, 1) == 0);
+    assert(messages == 1 && closes == 1 && stops == 1 && ao.fd == -1);
+    assert(!ao.appsrc && !ao.bypass_appsrc && ao.isFirstRender[0]);
+    assert(lgao_feed(&ao, bytes, 4, 0, LGAO_DATA_PCM) == 4);
+    assert(!ao.isFirstRender[0] && !pushes[0] && pushes[1] == 1);
+    assert(lgao_set_drop_renderer(&ao, 0) == 0);
+    assert(opens == 1 && connects == 1 && plays == 1 && starts == 1);
+    assert(open_order < connect_order && connect_order < start_order);
+    assert(ao.appsrc && ao.bypass_appsrc && ao.uid_bypass_appsrc == 12);
+    assert(events[0] == 2 && events[1] == 2);
+    assert(value(1, "es", aud_value_bool, -1) == -1 && string_value(1, "codec") == NULL);
+    assert(!ao.isFirstRender[0] && !ao.isFirstRender[1]);
+    assert(lgao_set_drop_renderer(&ao, 0) == 0 && events[1] == 2 && opens == 1);
+
+    reset(); ao = context();
+    strcpy(ao.audioStartInfo.codec_str, "mat");
+    assert(lgao_feed(&ao, bytes, 4, 0, LGAO_DATA_ES) == 4);
+    LGAO_AUDIO_START_INFO_T caps = ao.audioStartInfo;
+    assert(lgao_compare_audio_info(&ao, &caps) == 0);
+    caps.restart = 1;
+    assert(lgao_compare_audio_info(&ao, &caps) == 2);
+    assert(lgao_set_audio_info(&ao, caps) == 0 && !ao.isFirstRender[1]);
+    assert(events[1] == 1 && !closes && !connects);
+    caps.freq = 96000;
+    assert(lgao_compare_audio_info(&ao, &caps) == 1);
+    /* set_caps format-change sequence; FIRST waits for the next nonempty feed. */
+    assert(lgao_stop_renderer(&ao) == 0);
+    assert(lgao_disconnect_renderer(&ao) == 0);
+    assert(lgao_close_renderer(&ao) == 0);
+    assert(_lgao_open_renderer(&ao) == 0);
+    assert(lgao_set_audio_info(&ao, caps) == 0);
+    assert(lgao_config(&ao) == 0);
+    assert(_lgao_connect_renderer(&ao) == 0);
+    assert(ao.isFirstRender[0] && ao.isFirstRender[1] && events[1] == 1);
+    assert(lgao_feed(&ao, bytes, 4, 0, LGAO_DATA_ES) == 4);
+    assert(events[1] == 2 && value(1, "es", aud_value_bool, -1) == 1);
+    assert(!strcmp(string_value(1, "codec"), "mat"));
+
+    reset(); ao = context();
+    strcpy(ao.audioStartInfo.codec_str, "mat");
+    assert(lgao_feed(&ao, bytes, 4, 0, LGAO_DATA_ES) == 4);
+    assert(lgao_set_drop_renderer(&ao, 1) == 0);
+    assert(lgao_set_drop_renderer(&ao, 0) == 0);
+    assert(!plays && !starts && events[1] == 2);
+    assert(value(1, "es", aud_value_bool, -1) == 1);
+    assert(!strcmp(string_value(1, "codec"), "mat") && !live_objects);
+    puts("lgao transport: routing, FIRST replacement, lifetimes, teardown/rebuild and failure contracts passed");
     return 0;
 }

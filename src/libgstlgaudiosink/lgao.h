@@ -276,7 +276,14 @@ struct registry;
 struct aud_connector;
 struct aud_module;
 
-/* The handle behind every "void *a" below (calloc'd in lgao_open, 0x1f0 bytes). */
+/* Private handle behind every "void *a" below (lgao_open: 0x1f0 bytes on ARM).
+ * Shipped sink dynsym exports no handle/appsrc/UID accessor. GstLgAudioRender's
+ * private ao is at +0x200 in that build, not a portable GStreamer API. These
+ * offsets describe the identified ARM binary, not a supported injection ABI.
+ * Registry module pointers below are borrowed, not aud_object references;
+ * disconnect destroys their UIDs and clears them. No context lifetime lock is
+ * held by feed/FIRST/connect/disconnect: producers must be quiesced externally.
+ * flush_mutex coordinates flush notifications only; it does not pin modules. */
 typedef struct {
     int                     fd;              /* /dev/lg/aren0, -1 when closed */
     bool                    isMixer;
@@ -342,6 +349,13 @@ _Static_assert(__builtin_offsetof(lgao, rendererState) == 0x80, "rendererState")
 _Static_assert(__builtin_offsetof(lgao, playSpeed) == 0xd8, "playSpeed");
 _Static_assert(__builtin_offsetof(lgao, clock_type) == 0x140, "clock_type");
 _Static_assert(__builtin_offsetof(lgao, callback_mq_id) == 0x1b0, "callback_mq_id");
+_Static_assert(__builtin_offsetof(lgao, isFirstRender) == 0x98, "isFirstRender");
+_Static_assert(__builtin_offsetof(lgao, uid_appsrc) == 0x1c0, "uid_appsrc");
+_Static_assert(__builtin_offsetof(lgao, appsrc) == 0x1c4, "appsrc");
+_Static_assert(__builtin_offsetof(lgao, pcm_bypass) == 0x1d0, "pcm_bypass");
+_Static_assert(__builtin_offsetof(lgao, pcm_multi_ch) == 0x1d1, "pcm_multi_ch");
+_Static_assert(__builtin_offsetof(lgao, uid_bypass_appsrc) == 0x1d4, "uid_bypass_appsrc");
+_Static_assert(__builtin_offsetof(lgao, bypass_appsrc) == 0x1d8, "bypass_appsrc");
 _Static_assert(__builtin_offsetof(lgao, drop_renderer) == 0x1e0, "drop_renderer");
 #endif
 

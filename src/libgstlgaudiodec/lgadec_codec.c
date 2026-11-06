@@ -914,6 +914,7 @@ int lgadec_adpcm_resampling(void *a, unsigned char *data, unsigned int len, shor
     lgadec *adec = a;
     ADPCM_DATA_T *adpcm;
     unsigned int block_align, ch, done;
+    unsigned char stereo;
     int16_t *out, *start;
 
     if (!adec) {
@@ -924,6 +925,7 @@ int lgadec_adpcm_resampling(void *a, unsigned char *data, unsigned int len, shor
     adpcm = adec->codec_data;
     ch = adec->stream_info.channels;
     start = out = *sample;
+    stereo = ch == 2;
 
     switch (adpcm->type) {
     case LGADEC_ADPCM_IMA_WAV:
@@ -940,20 +942,24 @@ int lgadec_adpcm_resampling(void *a, unsigned char *data, unsigned int len, shor
                 data += 4;
             }
             pos = ch * 4;
-            for (; pos < block_align; pos += 4 * ch) {
+            for (; pos < block_align; pos += 4 * (stereo + 1)) {
+                int16_t *low = out;
+                int16_t *high = out + stereo;
+
                 for (unsigned int i = 0; i < 4; i++) {
+                    low[0] = _adpcm_decoder(adpcm, 0, data[i] & 0xf);
                     if (ch == 2) {
-                        out[4 * i + 0] = _adpcm_decoder(adpcm, 0, data[i] & 0xf);
-                        out[4 * i + 1] = _adpcm_decoder(adpcm, 1, data[4 + i] & 0xf);
-                        out[4 * i + 2] = _adpcm_decoder(adpcm, 0, data[i] >> 4);
-                        out[4 * i + 3] = _adpcm_decoder(adpcm, 1, data[4 + i] >> 4);
+                        low[1] = _adpcm_decoder(adpcm, 1, data[4 + i] & 0xf);
+                        high[1] = _adpcm_decoder(adpcm, 0, data[i] >> 4);
+                        high[2] = _adpcm_decoder(adpcm, 1, data[4 + i] >> 4);
                     } else {
-                        out[2 * i + 0] = _adpcm_decoder(adpcm, 0, data[i] & 0xf);
-                        out[2 * i + 1] = _adpcm_decoder(adpcm, 0, data[i] >> 4);
+                        high[1] = _adpcm_decoder(adpcm, 0, data[i] >> 4);
                     }
+                    low += 2 * (stereo + 1);
+                    high += 2 * (stereo + 1);
                 }
-                out += 8 * (ch == 2 ? 2 : 1);
-                data += 4 * (ch == 2 ? 2 : 1);
+                out += 8 * (stereo + 1);
+                data += 4 * (stereo + 1);
             }
         }
         break;
@@ -1016,23 +1022,20 @@ int lgadec_adpcm_resampling(void *a, unsigned char *data, unsigned int len, shor
     case LGADEC_ADPCM_IMA_QT:
         /* per channel 34-byte chunk: 9-bit predictor + 7-bit index, 32 bytes = 64 samples */
         for (done = 0; done < len; done += block_align) {
-            int16_t *base = out;
-
             for (unsigned int c = 0; c < ch; c++) {
-                const uint8_t *chunk = data + c * 34;
-                int16_t *o = base + c;
-                unsigned int index = chunk[1] & 0x7f;
+                unsigned int index = data[1] & 0x7f;
 
-                adpcm->adpcm_predictor_sample[c] = (int16_t)((chunk[0] << 8 | chunk[1]) & 0xff80);
+                adpcm->adpcm_predictor_sample[c] = (int16_t)((data[0] << 8 | data[1]) & 0xff80);
                 adpcm->adpcm_index[c] = index > 88 ? 88 : index;
                 for (unsigned int i = 2; i < 34; i++) {
-                    o[0] = _adpcm_decoder(adpcm, c, chunk[i] & 0xf);
-                    o[ch] = _adpcm_decoder(adpcm, c, chunk[i] >> 4);
-                    o += 2 * ch;
+                    out[0] = _adpcm_decoder(adpcm, c, data[i] & 0xf);
+                    out[ch] = _adpcm_decoder(adpcm, c, data[i] >> 4);
+                    out += 2 * ch;
                 }
+                data += 34;
+                if (c + 1 < ch)
+                    out -= ch * 64 - 1;
             }
-            out = base + ch * 64 + (ch - 1);
-            data += ch * 34;
             /* sic: undoes the per-channel offset; for mono this drops one sample per block */
             if (out > start)
                 out--;
@@ -1153,19 +1156,19 @@ int lgadec_dvdlpcm_header_check(void *a, unsigned char *data, int *new_header)
         return 0;
     }
     /* _dvdlpcm_parse_header (inlined) */
-    switch (data[3] >> 6) {                    /* quantization word length */
-    case 1:  pcm->width = 20; pcm->out_width = 24; break;
-    case 2:  pcm->width = 24; pcm->out_width = 24; break;
+    switch (header & 0xc000) {                 /* quantization word length */
+    case 0x4000: pcm->width = 20; pcm->out_width = 24; break;
+    case 0x8000: pcm->width = 24; pcm->out_width = 24; break;
     default: pcm->width = 16; pcm->out_width = 16; break;
     }
-    switch ((data[3] >> 4) & 3) {
-    case 0: pcm->frequency = 48000; break;
-    case 1: pcm->frequency = 96000; break;
-    case 2: pcm->frequency = 44100; break;
-    case 3: pcm->frequency = 32000; break;
+    switch (header & 0x3000) {
+    case 0:      pcm->frequency = 48000; break;
+    case 0x1000: pcm->frequency = 96000; break;
+    case 0x2000: pcm->frequency = 44100; break;
+    case 0x3000: pcm->frequency = 32000; break;
     }
     pcm->header = header;
-    pcm->channels = (data[3] & 7) + 1;
+    pcm->channels = ((header >> 8) & 7) + 1;
     LOGT(0x54e, "frequency=%d, channels=%d, out_width=%d", pcm->frequency, pcm->channels,
          pcm->out_width);
     adec->stream_info.freq = pcm->frequency;
@@ -1201,28 +1204,34 @@ int lgadec_dvdlpcm_resampling(void *a, unsigned char *data, unsigned int data_le
     pcm->timestamp = timestamp;
 
     switch (pcm->width) {
-    case 20:
+    case 20: {
+        unsigned int count = data_len / 10;
+
         if (!dest_buf) {
             LOGE(0x5a0, "parameters Err!! (dest_buf:0x%p)", NULL);
             return -1;
         }
-        for (unsigned int i = 0; i < data_len / 10; i++, data += 10, dest_buf += 12) {
-            dest_buf[0] = data[8] & 0xf0;
-            dest_buf[1] = data[1];
+        /* Preserve the source write order: overlapping input/output observes these stores. */
+        for (unsigned int i = 0; count > i; i++, data += 10, dest_buf += 12) {
             dest_buf[2] = data[0];
-            dest_buf[3] = data[8] << 4;
-            dest_buf[4] = data[3];
+            dest_buf[1] = data[1];
+            dest_buf[0] = data[8] & 0xf0;
             dest_buf[5] = data[2];
-            dest_buf[6] = data[9] & 0xf;           /* sic: not shifted like [0] */
-            dest_buf[7] = data[5];
+            dest_buf[4] = data[3];
+            dest_buf[3] = data[8] << 4;
             dest_buf[8] = data[4];
-            dest_buf[9] = data[9] << 4;
-            dest_buf[10] = data[7];
+            dest_buf[7] = data[5];
+            dest_buf[6] = data[9] & 0xf;           /* sic: not shifted like [0] */
             dest_buf[11] = data[6];
+            dest_buf[10] = data[7];
+            dest_buf[9] = data[9] << 4;
         }
         return 0;
+    }
 
-    case 24:
+    case 24: {
+        unsigned int count = data_len / 12;
+
         if (!pcm->channels) {
             LOGE(0x5c9, "Invalid channels(%u)", 0);
             return -1;
@@ -1232,16 +1241,27 @@ int lgadec_dvdlpcm_resampling(void *a, unsigned char *data, unsigned int data_le
             return -1;
         }
         /* 4 x 16-bit MSB words followed by 4 LSB bytes -> 4 x 24-bit LE */
-        for (unsigned int i = 0; i < data_len / 12; i++, data += 12) {
-            uint8_t o[12];
+        for (unsigned int i = 0; count > i; i++, data += 12) {
+            uint8_t temp = data[8];
+            uint8_t first, last;
 
-            memcpy(o, data, 12);
-            data[0] = o[8];  data[1] = o[1];  data[2] = o[0];
-            data[3] = o[9];  data[4] = o[3];  data[5] = o[2];
-            data[6] = o[10]; data[7] = o[5];  data[8] = o[4];
-            data[9] = o[11]; data[10] = o[7]; data[11] = o[6];
+            data[8] = data[4];
+            first = data[0];
+            last = data[11];
+            data[0] = temp;
+            data[4] = data[3];
+            data[3] = data[9];
+            data[11] = data[6];
+            temp = data[2];
+            data[9] = last;
+            data[6] = data[10];
+            data[10] = data[7];
+            data[7] = data[5];
+            data[2] = first;
+            data[5] = temp;
         }
         return 0;
+    }
 
     case 16:
         if (!pcm->channels) {

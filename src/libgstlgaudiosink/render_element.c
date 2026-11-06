@@ -23,6 +23,17 @@
 /* libgstlgclock (imported) */
 extern gpointer gst_lgclock_new (GstElement *element);
 
+/* The logmm mask branch is unhinted; GStreamer diagnostics are unlikely. */
+#define RENDER_LOGM(mlvl, line, fmt, ...) do { \
+        if (*logmm_module_media_event.mask & (1u << (mlvl))) \
+            logmm_printl (&logmm_module_media_event, (mlvl), __func__, (line), \
+                          "<audio_sink> " fmt, ##__VA_ARGS__); \
+    } while (0)
+#define RENDER_LOG(mlvl, glvl, line, obj, fmt, ...) do { \
+        RENDER_LOGM (mlvl, line, fmt, ##__VA_ARGS__); \
+        SINK_GST (glvl, line, obj, fmt, ##__VA_ARGS__); \
+    } while (0)
+
 /* @0x4488 gst_lg_audio_render_clock_calibrated: class handler of "clock-calibrated";
  * the next chain() call re-programs the renderer base time. */
 void gst_lg_audio_render_clock_calibrated (GstLgAudioRender *pAudioRen)
@@ -38,10 +49,11 @@ void gst_lg_audio_render_update_ts_offset (GstLgAudioRender *pAudioRen, gint pla
 {
     GstClockTimeDiff ts_offset;
 
-    if ((guint) (playspeed - 250) < 750) {
-        ts_offset = -475000000000LL / playspeed;
-        SINK_LOG (3, GST_LEVEL_INFO, 600, pAudioRen, "Set TS Offset to %lld", ts_offset);
-        gst_base_sink_set_ts_offset (GST_BASE_SINK (pAudioRen), ts_offset);
+    if (G_LIKELY ((guint) (playspeed - 250) < 750)) {
+        RENDER_LOG (3, GST_LEVEL_INFO, 600, pAudioRen, "Set TS Offset to %lld",
+                    -475000000000LL / playspeed);
+        gst_base_sink_set_ts_offset (GST_BASE_SINK (pAudioRen),
+                                     -475000000000LL / playspeed);
         return;
     }
 
@@ -52,7 +64,7 @@ void gst_lg_audio_render_update_ts_offset (GstLgAudioRender *pAudioRen, gint pla
     else
         ts_offset = (GstClockTimeDiff) (400 - pAudioRen->lipsync_offset) * -GST_MSECOND;
 
-    SINK_LOG (3, GST_LEVEL_INFO, 615, pAudioRen, "Set TS Offset to %lld", ts_offset);
+    RENDER_LOG (3, GST_LEVEL_INFO, 615, pAudioRen, "Set TS Offset to %lld", ts_offset);
     gst_base_sink_set_ts_offset (GST_BASE_SINK (pAudioRen), ts_offset);
 }
 
@@ -161,7 +173,7 @@ void gst_lg_audio_render_callback_task (void *data)
     int eventMsg;
 
     if (pAudioRen == NULL) {
-        SINK_LOG (0, GST_LEVEL_ERROR, 392, NULL, "pAudioRen is NULL");
+        RENDER_LOG (0, GST_LEVEL_ERROR, 392, NULL, "pAudioRen is NULL");
         return;
     }
     if (!pAudioRen->event_mq_running) {
@@ -169,39 +181,39 @@ void gst_lg_audio_render_callback_task (void *data)
         return;
     }
     if (msgrcv (pAudioRen->event_mq_id, &msg, sizeof (msg.event), 0, 0) <= 0) {
-        SINK_LOG (0, GST_LEVEL_ERROR, 403, pAudioRen, "mq error");
+        RENDER_LOG (0, GST_LEVEL_ERROR, 403, pAudioRen, "mq error");
         return;
     }
     eventMsg = msg.event;
-    SINK_LOG (4, GST_LEVEL_DEBUG, 408, pAudioRen, "Got Event (0x%x) from Renderer", eventMsg);
+    RENDER_LOG (4, GST_LEVEL_DEBUG, 408, pAudioRen, "Got Event (0x%x) from Renderer", eventMsg);
 
     if (eventMsg & LGAO_EVENT_CLOSE_IPC) {
         /* stop() kicks the blocked msgrcv() with this */
-        SINK_LOG (3, GST_LEVEL_INFO, 411, pAudioRen, "Got LGAO_EVENT_CLOSE_IPC event. kicked!");
+        RENDER_LOG (3, GST_LEVEL_INFO, 411, pAudioRen, "Got LGAO_EVENT_CLOSE_IPC event. kicked!");
         pAudioRen->event_mq_running = FALSE;
         return;
     }
     if (eventMsg & LGAO_EVENT_PRESENT_END) {
         /* wakes the EOS wait in event() */
-        SINK_LOG (3, GST_LEVEL_INFO, 417, pAudioRen, "Got LGAO_EVENT_PRESENT_END event");
+        RENDER_LOG (3, GST_LEVEL_INFO, 417, pAudioRen, "Got LGAO_EVENT_PRESENT_END event");
         g_mutex_lock (&pAudioRen->eos_mutex);
         g_cond_signal (&pAudioRen->eos_cond);
         g_mutex_unlock (&pAudioRen->eos_mutex);
     }
     if (eventMsg & LGAO_EVENT_UNDERFLOW) {
-        SINK_LOG (3, GST_LEVEL_INFO, 424, pAudioRen, "Got LGAO_EVENT_UNDERFLOW event");
+        RENDER_LOG (3, GST_LEVEL_INFO, 424, pAudioRen, "Got LGAO_EVENT_UNDERFLOW event");
         SINK_CHECK (lgao_get_state (pAudioRen->ao, &rendererState), 426);
         if (rendererState == LGAO_STATE_PLAY && !pAudioRen->isSeamless) {
-            SINK_LOG (2, GST_LEVEL_INFO, 430, pAudioRen, "Send underflow signal to upper layer");
+            RENDER_LOG (2, GST_LEVEL_INFO, 430, pAudioRen, "Send underflow signal to upper layer");
             g_signal_emit (pAudioRen, gst_lg_audio_render_signals[SIGNAL_UNDERRUN], 0);
         } else {
-            SINK_LOG (4, GST_LEVEL_DEBUG, 433, pAudioRen,
+            RENDER_LOG (4, GST_LEVEL_DEBUG, 433, pAudioRen,
                       "not send underflow signal(state=%d, seamless=%d)\n",
                       rendererState, pAudioRen->isSeamless);
         }
     }
     if (eventMsg & LGAO_EVENT_BYPASS_DONE) {
-        SINK_LOG (2, GST_LEVEL_INFO, 440, pAudioRen, "Got LGAO_EVENT_BYPASS_DONE event, send signal..");
+        RENDER_LOG (2, GST_LEVEL_INFO, 440, pAudioRen, "Got LGAO_EVENT_BYPASS_DONE event, send signal..");
         g_signal_emit_by_name (GST_ELEMENT (pAudioRen), "es-bypass-done");
     }
 }
@@ -1045,7 +1057,7 @@ gboolean gst_lg_audio_render_stop (GstBaseSink *sink)
 
     pAudioRen->decodedSize = 0;
     pAudioRen->currentPTS = 0;
-    SINK_LOG (2, GST_LEVEL_INFO, 2696, pAudioRen, "trace");
+    RENDER_LOG (2, GST_LEVEL_INFO, 2696, pAudioRen, "trace");
 
     if (pAudioRen->pAudioCaps) {
         gst_caps_unref (pAudioRen->pAudioCaps);
@@ -1060,10 +1072,10 @@ gboolean gst_lg_audio_render_stop (GstBaseSink *sink)
         pAudioRen->clocktype = NULL;
     }
 
-    SINK_LOG (3, GST_LEVEL_INFO, 2711, pAudioRen, "stopping renderer & callback task");
+    RENDER_LOG (3, GST_LEVEL_INFO, 2711, pAudioRen, "stopping renderer & callback task");
     kick.mtype = LGAO_MSG_TYPE_EVENT;
     kick.event = LGAO_EVENT_CLOSE_IPC;
-    SINK_LOG (3, GST_LEVEL_INFO, 2715, pAudioRen, "kicking locked task");
+    RENDER_LOG (3, GST_LEVEL_INFO, 2715, pAudioRen, "kicking locked task");
     msgsnd (pAudioRen->event_mq_id, &kick, sizeof (kick.event), 0);
     if (pAudioRen->task) {
         gst_task_stop (pAudioRen->task);
@@ -1087,7 +1099,7 @@ gboolean gst_lg_audio_render_stop (GstBaseSink *sink)
             fclose (pAudioRen->dump_file);
         pAudioRen->dump_file = NULL;
     }
-    SINK_LOG (2, GST_LEVEL_INFO, 2741, pAudioRen, "stop");
+    RENDER_LOG (2, GST_LEVEL_INFO, 2741, pAudioRen, "stop");
     return TRUE;
 }
 

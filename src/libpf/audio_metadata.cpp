@@ -1,6 +1,7 @@
 /* RapidJSON-assisted reconstruction of codec info readers. Raw ARM confirms
- * HasMember followed by operator[] (two member searches), no numeric type guard,
- * and a strict float-epsilon comparison against rates expressed in kHz.
+ * HasMember followed by operator[] (two member searches), with one more header
+ * lookup only when decoding, no numeric type guard, and a strict float-epsilon
+ * comparison against rates expressed in kHz.
  * Missing fields and unrecognized rates leave the corresponding output untouched.
  */
 #include "audio_metadata.h"
@@ -37,8 +38,10 @@ template<class Info> void streamInfo(Info &out, const rapidjson::Value &value)
         out.channels = value["channels"].GetInt();
     if (value.HasMember("sampleRate"))
         sampleRate(value["sampleRate"].GetDouble(), out.sampleRate);
-    if (value.HasMember("streamHeader") && value["streamHeader"].IsString() &&
-        value["streamHeader"].GetStringLength() != 0) {
+    if (value.HasMember("streamHeader")) {
+        const auto &header = value["streamHeader"];
+        if (!header.IsString() || header.GetStringLength() == 0)
+            return;
         gsize length;
         out.header = g_base64_decode(value["streamHeader"].GetString(), &length);
         out.headerSize = length;

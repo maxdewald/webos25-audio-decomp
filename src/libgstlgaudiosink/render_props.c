@@ -681,6 +681,17 @@ done:
     return ret;
 }
 
+/* The logmm mask branch is unhinted; GStreamer diagnostics are unlikely. */
+#define PROP_LOGM(mlvl, line, fmt, ...) do { \
+        if (*logmm_module_media_event.mask & (1u << (mlvl))) \
+            logmm_printl (&logmm_module_media_event, (mlvl), __func__, (line), \
+                          "<audio_sink> " fmt, ##__VA_ARGS__); \
+    } while (0)
+#define PROP_LOG(mlvl, glvl, line, obj, fmt, ...) do { \
+        PROP_LOGM (mlvl, line, fmt, ##__VA_ARGS__); \
+        SINK_GST (glvl, line, obj, fmt, ##__VA_ARGS__); \
+    } while (0)
+
 /* @0x10318 gst_lg_audio_render_get_property */
 void gst_lg_audio_render_get_property (GObject *object, guint prop_id,
                                        GValue *value, GParamSpec *pspec)
@@ -688,28 +699,31 @@ void gst_lg_audio_render_get_property (GObject *object, guint prop_id,
     GstLgAudioRender *pAudioRen = GST_LG_AUDIO_RENDER (object);
     gint fadeVolume = 100;
     guint64 undecodedSize = 0;
-    gint ival = 0;           /* one stack slot shared by all lgao getters */
     gchar *contents;
 
     contents = g_strdup_value_contents (value);
-    SINK_LOG (4, GST_LEVEL_DEBUG, 0x7a1, pAudioRen, "get_property \"%s\"(%d) = %s:'%s'",
+    PROP_LOG (4, GST_LEVEL_DEBUG, 0x7a1, pAudioRen, "get_property \"%s\"(%d) = %s:'%s'",
               pspec->name, prop_id, g_type_name (G_VALUE_TYPE (value)), contents);
     g_free (contents);
 
     switch (prop_id) {
-    case PROP_PLAY_SPEED:
-        if (lgao_get_playrate (pAudioRen->ao, &ival) == -1)
-            SINK_LOG (0, GST_LEVEL_ERROR, 0x7ab, pAudioRen, "lgao_get_playrate failed!");
+    case PROP_PLAY_SPEED: {
+        gint curr_speed = 0;
+        if (lgao_get_playrate (pAudioRen->ao, &curr_speed) == -1)
+            PROP_LOG (0, GST_LEVEL_ERROR, 0x7ab, pAudioRen, "lgao_get_playrate failed!");
         else
-            SINK_LOG (3, GST_LEVEL_INFO, 0x7ad, pAudioRen, "current play speed %d", ival);
-        g_value_set_int (value, ival);
+            PROP_LOG (3, GST_LEVEL_INFO, 0x7ad, pAudioRen, "current play speed %d", curr_speed);
+        g_value_set_int (value, curr_speed);
         break;
-    case PROP_DECODED_SIZE:
+    }
+    case PROP_DECODED_SIZE: {
+        gint mode_mixer = 0;
         /* original bug: queries the mixer mode and returns the (zero)
          * undecoded size; decodedSize is never reported */
-        SINK_CHECK (lgao_get_mode_mixer (pAudioRen->ao, &ival), 0x7b4);
+        SINK_CHECK (lgao_get_mode_mixer (pAudioRen->ao, &mode_mixer), 0x7b4);
         g_value_set_uint64 (value, undecodedSize);
         break;
+    }
     case PROP_UNDECODED_SIZE:
         SINK_CHECK (lgao_get_buffer_status (pAudioRen->ao, &undecodedSize), 0x7ba);
         g_value_set_uint64 (value, undecodedSize);
@@ -717,54 +731,66 @@ void gst_lg_audio_render_get_property (GObject *object, guint prop_id,
     case PROP_CURRENT_PTS:
         g_value_set_uint64 (value, pAudioRen->currentPTS);
         break;
-    case PROP_LIPSYNC_OFFSET:
-        SINK_CHECK (lgao_get_lipsync_offset (pAudioRen->ao, (unsigned int *) &ival), 0x7c4);
-        g_value_set_uint (value, ival);
+    case PROP_LIPSYNC_OFFSET: {
+        guint offset = 0;
+        SINK_CHECK (lgao_get_lipsync_offset (pAudioRen->ao, &offset), 0x7c4);
+        g_value_set_uint (value, offset);
         break;
+    }
     case PROP_DISABLE_GSTSYNC:
         g_value_set_boolean (value, pAudioRen->disableBasesinkSync);
         break;
-    case PROP_LIPSYNC:
-        SINK_CHECK (lgao_get_lipsync_mode (pAudioRen->ao, &ival), 0x7ce);
-        g_value_set_boolean (value, ival != 2);     /* 2 = lipsync off */
+    case PROP_LIPSYNC: {
+        gint mode = 0;
+        SINK_CHECK (lgao_get_lipsync_mode (pAudioRen->ao, &mode), 0x7ce);
+        g_value_set_boolean (value, mode != 2);     /* 2 = lipsync off */
         break;
-    case PROP_NODELAY:
-        SINK_CHECK (lgao_get_nodelay (pAudioRen->ao, &ival), 0x7d6);
-        g_value_set_boolean (value, ival);
+    }
+    case PROP_NODELAY: {
+        gint mode_nodelay = 0;
+        SINK_CHECK (lgao_get_nodelay (pAudioRen->ao, &mode_nodelay), 0x7d6);
+        g_value_set_boolean (value, mode_nodelay);
         break;
-    case PROP_NODELAY_MODE:
-        SINK_CHECK (lgao_get_rts (pAudioRen->ao, LGAO_RTS_OP_MODE, (unsigned int *) &ival),
+    }
+    case PROP_NODELAY_MODE: {
+        guint val = 0;
+        SINK_CHECK (lgao_get_rts (pAudioRen->ao, LGAO_RTS_OP_MODE, &val),
                     0x7dd);
-        g_value_set_uint (value, ival);
+        g_value_set_uint (value, val);
         break;
-    case PROP_NODELAY_SKIP_UP:
+    }
+    case PROP_NODELAY_SKIP_UP: {
+        guint val = 0;
         SINK_CHECK (lgao_get_rts (pAudioRen->ao, LGAO_RTS_THRESHOLD_SKIPPING,
-                                  (unsigned int *) &ival), 0x7e5);
-        g_value_set_uint (value, ival);
+                                  &val), 0x7e5);
+        g_value_set_uint (value, val);
         break;
-    case PROP_NODELAY_FAST_UP:
+    }
+    case PROP_NODELAY_FAST_UP: {
+        guint val = 0;
         SINK_CHECK (lgao_get_rts (pAudioRen->ao, LGAO_RTS_THRESHOLD_FAST,
-                                  (unsigned int *) &ival), 0x7ed);
-        g_value_set_uint (value, ival);
+                                  &val), 0x7ed);
+        g_value_set_uint (value, val);
         break;
-    case PROP_NODELAY_RECOVER:
+    }
+    case PROP_NODELAY_RECOVER: {
+        guint val = 0;
         SINK_CHECK (lgao_get_rts (pAudioRen->ao, LGAO_RTS_THRESHOLD_RECOVER,
-                                  (unsigned int *) &ival), 0x7f5);
-        g_value_set_uint (value, ival);
+                                  &val), 0x7f5);
+        g_value_set_uint (value, val);
         break;
-    case PROP_NODELAY_FAST_FREQ:
-        SINK_CHECK (lgao_get_rts (pAudioRen->ao, LGAO_RTS_FREQ_FAST, (unsigned int *) &ival),
+    }
+    case PROP_NODELAY_FAST_FREQ: {
+        guint val = 0;
+        SINK_CHECK (lgao_get_rts (pAudioRen->ao, LGAO_RTS_FREQ_FAST, &val),
                     0x7fd);
-        g_value_set_uint (value, ival);
+        g_value_set_uint (value, val);
         break;
-    case PROP_RENDER_BUFFER_THRESHOLD:
-        SINK_CHECK (lgao_get_rts (pAudioRen->ao, LGAO_RTS_BUFFERING_LEVEL,
-                                  (unsigned int *) &ival), 0x805);
-        g_value_set_uint (value, ival);
-        break;
-    case PROP_APP_TYPE:
-        SINK_CHECK (lgao_get_apptype (pAudioRen->ao, (LGAO_APPTYPE_T *) &ival), 0x80d);
-        switch (ival) {
+    }
+    case PROP_APP_TYPE: {
+        LGAO_APPTYPE_T apptype = 0;
+        SINK_CHECK (lgao_get_apptype (pAudioRen->ao, &apptype), 0x80d);
+        switch (apptype) {
         case LGAO_APPTYPE_DIRECTMEDIA: g_value_set_string (value, "DIRECTMEDIA"); break;
         case LGAO_APPTYPE_RTC:         g_value_set_string (value, "RTC");         break;
         case LGAO_APPTYPE_MIRACAST:    g_value_set_string (value, "MIRACAST");    break;
@@ -775,68 +801,93 @@ void gst_lg_audio_render_get_property (GObject *object, guint prop_id,
         default:                       g_value_set_string (value, "UNKNOWN");     break;
         }
         break;
-    case PROP_MIXER:
-        SINK_CHECK (lgao_get_mode_mixer (pAudioRen->ao, &ival), 0x82d);
-        g_value_set_boolean (value, ival);
+    }
+    case PROP_MIXER: {
+        gint mode_mixer = 0;
+        SINK_CHECK (lgao_get_mode_mixer (pAudioRen->ao, &mode_mixer), 0x82d);
+        g_value_set_boolean (value, mode_mixer);
         break;
-    case PROP_AUDIO_INDEX:
-        ival = -1;
-        SINK_CHECK (lgao_get_port (pAudioRen->ao, &ival), 0x835);
-        g_value_set_uint (value, ival);
+    }
+    case PROP_AUDIO_INDEX: {
+        gint port_index = -1;
+        SINK_CHECK (lgao_get_port (pAudioRen->ao, &port_index), 0x835);
+        g_value_set_uint (value, port_index);
         break;
+    }
     case PROP_AUDIO_ONLY:
         g_value_set_boolean (value, FALSE);
-        SINK_LOG (0, GST_LEVEL_ERROR, 0x83d, pAudioRen, "meaningless property");
+        PROP_LOG (0, GST_LEVEL_ERROR, 0x83d, pAudioRen, "meaningless property");
         break;
     case PROP_SEAMLESS:
         g_value_set_boolean (value, pAudioRen->isSeamless);
         break;
-    case PROP_MUTE:
-        SINK_CHECK (lgao_get_mute (pAudioRen->ao, &ival), 0x847);
-        g_value_set_boolean (value, ival);
+    case PROP_MUTE: {
+        gint mode = 0;
+        SINK_CHECK (lgao_get_mute (pAudioRen->ao, &mode), 0x847);
+        g_value_set_boolean (value, mode);
         break;
+    }
     case PROP_FADE_VOLUME:
-        SINK_LOG (3, GST_LEVEL_INFO, 0x84c, pAudioRen, "get ease fadeVolume");
+        PROP_LOG (3, GST_LEVEL_INFO, 0x84c, pAudioRen, "get ease fadeVolume");
         SINK_CHECK (lgao_get_fade (pAudioRen->ao, LGAO_FADE_PROP_EASE_VOL, &fadeVolume), 0x84d);
         g_value_set_int (value, fadeVolume);
         if (fadeVolume < 0)
-            SINK_LOG (3, GST_LEVEL_INFO, 0x851, pAudioRen, "GetVolume Err");
+            PROP_LOG (3, GST_LEVEL_INFO, 0x851, pAudioRen, "GetVolume Err");
         else
-            SINK_LOG (3, GST_LEVEL_INFO, 0x853, pAudioRen, "get fadeVolume = %d", fadeVolume);
+            PROP_LOG (3, GST_LEVEL_INFO, 0x853, pAudioRen, "get fadeVolume = %d", fadeVolume);
         break;
     case PROP_CLOCK_TYPE:
-        SINK_LOG (0, GST_LEVEL_ERROR, 0x85a, pAudioRen, "meaningless property get");
+        PROP_LOG (0, GST_LEVEL_ERROR, 0x85a, pAudioRen, "meaningless property get");
         g_value_set_string (value, NULL);
         break;
     case PROP_AUDIO_BE_DELAY:
         g_value_set_uint (value, 85);     /* fixed back-end delay, ms */
         break;
-    case PROP_DIRECTMEDIA_TOTAL_BUF_SIZE:
-        SINK_CHECK (lgao_get_buffer_size_for_directmedia (pAudioRen->ao, (unsigned int *) &ival,
+    case PROP_DIRECTMEDIA_TOTAL_BUF_SIZE: {
+        guint size = 0;
+        SINK_CHECK (lgao_get_buffer_size_for_directmedia (pAudioRen->ao, &size,
                                                           LGAO_DIRECTMEDIA_TOTAL_BUF), 0x867);
-        g_value_set_int (value, ival);
+        g_value_set_int (value, size);
         break;
-    case PROP_DIRECTMEDIA_USED_BUF_SIZE:
-        SINK_CHECK (lgao_get_buffer_size_for_directmedia (pAudioRen->ao, (unsigned int *) &ival,
+    }
+    case PROP_DIRECTMEDIA_USED_BUF_SIZE: {
+        guint size = 0;
+        SINK_CHECK (lgao_get_buffer_size_for_directmedia (pAudioRen->ao, &size,
                                                           LGAO_DIRECTMEDIA_USED_BUF), 0x86f);
-        g_value_set_int (value, ival);
+        g_value_set_int (value, size);
         break;
-    case PROP_PCM_BYPASS:
-        SINK_CHECK (lgao_get_pcm_bypass (pAudioRen->ao, &ival), 0x878);
-        g_value_set_boolean (value, ival);
+    }
+    case PROP_PCM_BYPASS: {
+        gint bypass = 0;
+        SINK_CHECK (lgao_get_pcm_bypass (pAudioRen->ao, &bypass), 0x878);
+        g_value_set_boolean (value, bypass);
         break;
-    case PROP_PCM_MULTI_CH:
-        SINK_CHECK (lgao_get_pcm_multi_channel (pAudioRen->ao, &ival), 0x880);
-        g_value_set_boolean (value, ival);
+    }
+    case PROP_PCM_MULTI_CH: {
+        gint multi_ch = 0;
+        SINK_CHECK (lgao_get_pcm_multi_channel (pAudioRen->ao, &multi_ch), 0x880);
+        g_value_set_boolean (value, multi_ch);
         break;
-    case PROP_GAME_MODE:
-        SINK_CHECK (lgao_get_game_mode (pAudioRen->ao, &ival), 0x889);
-        g_value_set_boolean (value, ival);
+    }
+    case PROP_GAME_MODE: {
+        gint game_mode = 0;
+        SINK_CHECK (lgao_get_game_mode (pAudioRen->ao, &game_mode), 0x889);
+        g_value_set_boolean (value, game_mode);
         break;
-    case PROP_QUEUE_MAX_LENGTH:
-        SINK_CHECK (lgao_get_queue_max_length (pAudioRen->ao, &ival), 0x890);
-        g_value_set_uint (value, ival);
+    }
+    case PROP_RENDER_BUFFER_THRESHOLD: {
+        guint val = 0;
+        SINK_CHECK (lgao_get_rts (pAudioRen->ao, LGAO_RTS_BUFFERING_LEVEL,
+                                  &val), 0x805);
+        g_value_set_uint (value, val);
         break;
+    }
+    case PROP_QUEUE_MAX_LENGTH: {
+        gint queue_max_length = 0;
+        SINK_CHECK (lgao_get_queue_max_length (pAudioRen->ao, &queue_max_length), 0x890);
+        g_value_set_uint (value, queue_max_length);
+        break;
+    }
     case PROP_VARIABLE_SPEED_PLAYBACK:
         g_value_set_boolean (value, pAudioRen->vsp_mode);
         break;
@@ -844,7 +895,10 @@ void gst_lg_audio_render_get_property (GObject *object, guint prop_id,
         g_value_set_uint (value, AUDIOSINK_VERSION);
         break;
     default:
-        G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+        g_log (NULL, G_LOG_LEVEL_WARNING,
+               "%s:%d: invalid %s id %u for \"%s\" of type '%s' in '%s'",
+               LG_SINK_FILE, 0x89e, "property", prop_id, pspec->name,
+               g_type_name (G_PARAM_SPEC_TYPE (pspec)), G_OBJECT_TYPE_NAME (object));
         break;
     }
 }
@@ -881,7 +935,7 @@ void gst_lg_audio_render_set_property (GObject *object, guint prop_id,
     gchar *contents;
 
     contents = g_strdup_value_contents (value);
-    SINK_LOG (4, GST_LEVEL_DEBUG, 0x5fb, pAudioRen, "set_property \"%s\"(%d) = %s:'%s'",
+    PROP_LOG (4, GST_LEVEL_DEBUG, 0x5fb, pAudioRen, "set_property \"%s\"(%d) = %s:'%s'",
               pspec->name, prop_id, g_type_name (G_VALUE_TYPE (value)), contents);
     g_free (contents);
 
@@ -914,7 +968,7 @@ void gst_lg_audio_render_set_property (GObject *object, guint prop_id,
                 : -(gint64) (400 - pAudioRen->lipsync_offset) * GST_MSECOND;
             gst_base_sink_set_ts_offset (GST_BASE_SINK (object), ts_offset);
         }
-        SINK_LOG (3, GST_LEVEL_INFO, 0x620, pAudioRen, "Set Audio's lipsync offset to %u",
+        PROP_LOG (3, GST_LEVEL_INFO, 0x620, pAudioRen, "Set Audio's lipsync offset to %u",
                   pAudioRen->lipsync_offset);
         SET_OR_DEFER (pAudioRen,
                       lgao_set_lipsync_offset (pAudioRen->ao, pAudioRen->lipsync_offset),
@@ -924,7 +978,7 @@ void gst_lg_audio_render_set_property (GObject *object, guint prop_id,
     case PROP_DISABLE_GSTSYNC:
         pAudioRen->disableBasesinkSync = g_value_get_boolean (value);
         if (pAudioRen->disableBasesinkSync) {
-            SINK_LOG (3, GST_LEVEL_INFO, 0x629, pAudioRen, "Disable BasepAudioRen's Sync");
+            PROP_LOG (3, GST_LEVEL_INFO, 0x629, pAudioRen, "Disable BasepAudioRen's Sync");
             gst_base_sink_set_sync (GST_BASE_SINK (pAudioRen), FALSE);
         }
         break;
@@ -933,7 +987,7 @@ void gst_lg_audio_render_set_property (GObject *object, guint prop_id,
         /* Only stored in lgao (ao->lipsyncMode); see report: it is consumed
          * when lgao builds/starts the renderer. */
         pAudioRen->lipsync_mode = g_value_get_boolean (value);
-        SINK_LOG (3, GST_LEVEL_INFO, 0x62f, pAudioRen, "Set Lipsync Mode to %s",
+        PROP_LOG (3, GST_LEVEL_INFO, 0x62f, pAudioRen, "Set Lipsync Mode to %s",
                   pAudioRen->lipsync_mode ? "ENABLE" : "DISABLE");
         SET_OR_DEFER (pAudioRen,
                       lgao_set_lipsync_mode (pAudioRen->ao, pAudioRen->lipsync_mode
@@ -943,7 +997,7 @@ void gst_lg_audio_render_set_property (GObject *object, guint prop_id,
 
     case PROP_NODELAY:
         pAudioRen->nodelay_mode = g_value_get_boolean (value);
-        SINK_LOG (3, GST_LEVEL_INFO, 0x639, pAudioRen, "Set No Delay Mode to %s",
+        PROP_LOG (3, GST_LEVEL_INFO, 0x639, pAudioRen, "Set No Delay Mode to %s",
                   TF (pAudioRen->nodelay_mode));
         SET_OR_DEFER (pAudioRen, lgao_set_nodelay (pAudioRen->ao, pAudioRen->nodelay_mode),
                       PROP_NODELAY, 0x63e);
@@ -951,7 +1005,7 @@ void gst_lg_audio_render_set_property (GObject *object, guint prop_id,
 
     case PROP_NODELAY_MODE:
         pAudioRen->rts_mode = g_value_get_uint (value);
-        SINK_LOG (3, GST_LEVEL_INFO, 0x643, pAudioRen, "Set RTS OP Mode = %u",
+        PROP_LOG (3, GST_LEVEL_INFO, 0x643, pAudioRen, "Set RTS OP Mode = %u",
                   pAudioRen->rts_mode);
         if (pAudioRen->rts_mode != 6)
             SET_OR_DEFER (pAudioRen,
@@ -964,7 +1018,7 @@ void gst_lg_audio_render_set_property (GObject *object, guint prop_id,
         SET_OR_DEFER (pAudioRen, lgao_set_rts (pAudioRen->ao, LGAO_RTS_THRESHOLD_SKIPPING,
                                                pAudioRen->nodelay_skip_up),
                       PROP_NODELAY_SKIP_UP, 0x64d);
-        SINK_LOG (3, GST_LEVEL_INFO, 0x64f, pAudioRen, "Set RTS Threshold of Skipping = %u",
+        PROP_LOG (3, GST_LEVEL_INFO, 0x64f, pAudioRen, "Set RTS Threshold of Skipping = %u",
                   pAudioRen->nodelay_skip_up);
         break;
 
@@ -973,7 +1027,7 @@ void gst_lg_audio_render_set_property (GObject *object, guint prop_id,
         SET_OR_DEFER (pAudioRen, lgao_set_rts (pAudioRen->ao, LGAO_RTS_THRESHOLD_FAST,
                                                pAudioRen->nodelay_fast_up),
                       PROP_NODELAY_FAST_UP, 0x656);
-        SINK_LOG (3, GST_LEVEL_INFO, 0x658, pAudioRen, "Set RTS Threshold of Fast = %u",
+        PROP_LOG (3, GST_LEVEL_INFO, 0x658, pAudioRen, "Set RTS Threshold of Fast = %u",
                   pAudioRen->nodelay_fast_up);
         break;
 
@@ -982,7 +1036,7 @@ void gst_lg_audio_render_set_property (GObject *object, guint prop_id,
         SET_OR_DEFER (pAudioRen, lgao_set_rts (pAudioRen->ao, LGAO_RTS_THRESHOLD_RECOVER,
                                                pAudioRen->nodelay_recover),
                       PROP_NODELAY_RECOVER, 0x65f);
-        SINK_LOG (3, GST_LEVEL_INFO, 0x661, pAudioRen, "Set RTS Threshold of Recover = %u",
+        PROP_LOG (3, GST_LEVEL_INFO, 0x661, pAudioRen, "Set RTS Threshold of Recover = %u",
                   pAudioRen->nodelay_recover);
         break;
 
@@ -991,7 +1045,7 @@ void gst_lg_audio_render_set_property (GObject *object, guint prop_id,
         SET_OR_DEFER (pAudioRen, lgao_set_rts (pAudioRen->ao, LGAO_RTS_FREQ_FAST,
                                                pAudioRen->nodelay_fast_freq),
                       PROP_NODELAY_FAST_FREQ, 0x668);
-        SINK_LOG (3, GST_LEVEL_INFO, 0x66a, pAudioRen, "Set RTS Fast Frequency of Fast = %u",
+        PROP_LOG (3, GST_LEVEL_INFO, 0x66a, pAudioRen, "Set RTS Fast Frequency of Fast = %u",
                   pAudioRen->nodelay_fast_freq);
         break;
 
@@ -1000,7 +1054,7 @@ void gst_lg_audio_render_set_property (GObject *object, guint prop_id,
         SET_OR_DEFER (pAudioRen, lgao_set_rts (pAudioRen->ao, LGAO_RTS_BUFFERING_LEVEL,
                                                pAudioRen->render_buf_thres),
                       PROP_RENDER_BUFFER_THRESHOLD, 0x671);
-        SINK_LOG (3, GST_LEVEL_INFO, 0x673, pAudioRen, "Set PROP_RENDER_BUFFER_THRESHOLD = %u",
+        PROP_LOG (3, GST_LEVEL_INFO, 0x673, pAudioRen, "Set PROP_RENDER_BUFFER_THRESHOLD = %u",
                   pAudioRen->render_buf_thres);
         break;
 
@@ -1018,23 +1072,23 @@ void gst_lg_audio_render_set_property (GObject *object, guint prop_id,
 
         /* low-latency sources (all except AIRPLAY) also drop basesink sync */
         if (strcmp (app, "AIRPLAY") == 0) {
-            SINK_LOG (3, GST_LEVEL_INFO, 0x680, pAudioRen, "This application is Airplay Mirroring");
+            PROP_LOG (3, GST_LEVEL_INFO, 0x680, pAudioRen, "This application is Airplay Mirroring");
             SET_OR_DEFER (pAudioRen, lgao_set_apptype (pAudioRen->ao, LGAO_APPTYPE_AIRPLAY),
                           PROP_APP_TYPE, 0x681);
             SET_OR_DEFER (pAudioRen, lgao_set_nodelay (pAudioRen->ao, TRUE), PROP_APP_TYPE, 0x683);
             goto app_done;
         } else if (strcmp (app, "RTC") == 0) {
-            SINK_LOG (3, GST_LEVEL_INFO, 0x688, pAudioRen, "This application is WiDi");
+            PROP_LOG (3, GST_LEVEL_INFO, 0x688, pAudioRen, "This application is WiDi");
             SET_OR_DEFER (pAudioRen, lgao_set_apptype (pAudioRen->ao, LGAO_APPTYPE_RTC),
                           PROP_APP_TYPE, 0x689);
             SET_OR_DEFER (pAudioRen, lgao_set_nodelay (pAudioRen->ao, TRUE), PROP_APP_TYPE, 0x68b);
         } else if (strcmp (app, "R2R") == 0) {
-            SINK_LOG (3, GST_LEVEL_INFO, 0x691, pAudioRen, "This application is R2R");
+            PROP_LOG (3, GST_LEVEL_INFO, 0x691, pAudioRen, "This application is R2R");
             SET_OR_DEFER (pAudioRen, lgao_set_apptype (pAudioRen->ao, LGAO_APPTYPE_R2R),
                           PROP_APP_TYPE, 0x692);
             SET_OR_DEFER (pAudioRen, lgao_set_nodelay (pAudioRen->ao, TRUE), PROP_APP_TYPE, 0x694);
         } else if (strcmp (app, "MIRACAST") == 0) {
-            SINK_LOG (3, GST_LEVEL_INFO, 0x698, pAudioRen, "This application is Miracast");
+            PROP_LOG (3, GST_LEVEL_INFO, 0x698, pAudioRen, "This application is Miracast");
             SET_OR_DEFER (pAudioRen, lgao_set_apptype (pAudioRen->ao, LGAO_APPTYPE_MIRACAST),
                           PROP_APP_TYPE, 0x699);
             SET_OR_DEFER (pAudioRen, lgao_set_nodelay (pAudioRen->ao, TRUE), PROP_APP_TYPE, 0x69b);
@@ -1043,23 +1097,23 @@ void gst_lg_audio_render_set_property (GObject *object, guint prop_id,
                           PROP_APP_TYPE, 0x69f);
             goto app_done;
         } else if (strcmp (app, "DIRECTMEDIA") == 0) {
-            SINK_LOG (3, GST_LEVEL_INFO, 0x6a2, pAudioRen,
+            PROP_LOG (3, GST_LEVEL_INFO, 0x6a2, pAudioRen,
                       "This application is Cloud Game(DIRECTMEDIA)");
             SET_OR_DEFER (pAudioRen, lgao_set_apptype (pAudioRen->ao, LGAO_APPTYPE_DIRECTMEDIA),
                           PROP_APP_TYPE, 0x6a3);
             SET_OR_DEFER (pAudioRen, lgao_set_nodelay (pAudioRen->ao, TRUE), PROP_APP_TYPE, 0x6a5);
         } else if (strcmp (app, "ID-GAPLESS") == 0) {
-            SINK_LOG (3, GST_LEVEL_INFO, 0x6a9, pAudioRen, "This application is for ID-GAPLESS PLAY");
+            PROP_LOG (3, GST_LEVEL_INFO, 0x6a9, pAudioRen, "This application is for ID-GAPLESS PLAY");
             SET_OR_DEFER (pAudioRen, lgao_set_apptype (pAudioRen->ao, LGAO_APPTYPE_IDGAPLESS),
                           PROP_APP_TYPE, 0x6aa);
             goto app_done;
         } else if (strcmp (app, "APPCAST") == 0) {
-            SINK_LOG (3, GST_LEVEL_INFO, 0x6ad, pAudioRen, "This application is for APPCAST");
+            PROP_LOG (3, GST_LEVEL_INFO, 0x6ad, pAudioRen, "This application is for APPCAST");
             SET_OR_DEFER (pAudioRen, lgao_set_apptype (pAudioRen->ao, LGAO_APPTYPE_APPCAST),
                           PROP_APP_TYPE, 0x6ae);
             goto app_done;
         } else if (strcmp (app, "SYE") == 0) {
-            SINK_LOG (3, GST_LEVEL_INFO, 0x6b1, pAudioRen, "This application is for AMAZON SYE");
+            PROP_LOG (3, GST_LEVEL_INFO, 0x6b1, pAudioRen, "This application is for AMAZON SYE");
             SET_OR_DEFER (pAudioRen, lgao_set_apptype (pAudioRen->ao, LGAO_APPTYPE_SYE),
                           PROP_APP_TYPE, 0x6b2);
         } else {
@@ -1069,7 +1123,7 @@ void gst_lg_audio_render_set_property (GObject *object, guint prop_id,
         }
         gst_base_sink_set_sync (GST_BASE_SINK (pAudioRen), FALSE);
 app_done:
-        SINK_LOG (3, GST_LEVEL_INFO, 0x6ba, pAudioRen, "Apptype %s received", pAudioRen->pAppType);
+        PROP_LOG (3, GST_LEVEL_INFO, 0x6ba, pAudioRen, "Apptype %s received", pAudioRen->pAppType);
         break;
     }
 
@@ -1077,26 +1131,26 @@ app_done:
         const GstStructure *st = gst_value_get_structure (value);
 
         if (st == NULL) {
-            SINK_LOG (0, GST_LEVEL_ERROR, 0x6d9, pAudioRen,
+            PROP_LOG (0, GST_LEVEL_ERROR, 0x6d9, pAudioRen,
                       "resource-info has not mixer-port field");
         } else {
             if (gst_structure_has_field (st, "audio-port")) {
                 gst_structure_get_int (st, "audio-port", &pAudioRen->audio_port);
-                SINK_LOG (5, GST_LEVEL_LOG, 0x6c9, pAudioRen, "audio-port is %d",
+                PROP_LOG (5, GST_LEVEL_LOG, 0x6c9, pAudioRen, "audio-port is %d",
                           pAudioRen->audio_port);
             }
             if (gst_structure_has_field (st, "video-port")) {
                 gst_structure_get_int (st, "video-port", &pAudioRen->video_port);
-                SINK_LOG (2, GST_LEVEL_INFO, 0x6d0, pAudioRen, "video-port is %d",
+                PROP_LOG (2, GST_LEVEL_INFO, 0x6d0, pAudioRen, "video-port is %d",
                           pAudioRen->video_port);
             }
             if (gst_structure_has_field (st, "mixer-port")) {
                 gst_structure_get_int (st, "mixer-port", &pAudioRen->mixer_port);
-                SINK_LOG (5, GST_LEVEL_LOG, 0x6d6, pAudioRen, "mixer-port is %d",
+                PROP_LOG (5, GST_LEVEL_LOG, 0x6d6, pAudioRen, "mixer-port is %d",
                           pAudioRen->mixer_port);
             }
         }
-        SINK_LOG (3, GST_LEVEL_INFO, 0x6db, pAudioRen, "audio-port %d, video-port %d,mixer-port %d",
+        PROP_LOG (3, GST_LEVEL_INFO, 0x6db, pAudioRen, "audio-port %d, video-port %d,mixer-port %d",
                   pAudioRen->audio_port, pAudioRen->video_port, pAudioRen->mixer_port);
         /* audio-port selects /dev/lg/aren<N> (renderer index); see lgao_set_port */
         SET_OR_DEFER (pAudioRen, lgao_set_port (pAudioRen->ao, pAudioRen->audio_port,
@@ -1107,7 +1161,7 @@ app_done:
 
     case PROP_MIXER:
         pAudioRen->mode_mixer = g_value_get_boolean (value);
-        SINK_LOG (3, GST_LEVEL_INFO, 0x6e3, pAudioRen,
+        PROP_LOG (3, GST_LEVEL_INFO, 0x6e3, pAudioRen,
                   "Set using Mixer(TRUE=Mixer, FALSE=Decoder): %s", TF (pAudioRen->mode_mixer));
         SET_OR_DEFER (pAudioRen, lgao_set_mode_mixer (pAudioRen->ao, pAudioRen->mode_mixer),
                       PROP_MIXER, 0x6e5);
@@ -1118,7 +1172,7 @@ app_done:
             pAudioRen->mixer_port = g_value_get_uint (value);
         else
             pAudioRen->audio_port = g_value_get_uint (value);
-        SINK_LOG (2, GST_LEVEL_INFO, 0x6ed, pAudioRen, "Set %s index to %u",
+        PROP_LOG (2, GST_LEVEL_INFO, 0x6ed, pAudioRen, "Set %s index to %u",
                   pAudioRen->mode_mixer ? "MIX" : "AUD",
                   pAudioRen->mode_mixer ? pAudioRen->mixer_port : pAudioRen->audio_port);
         SET_OR_DEFER (pAudioRen, lgao_set_port (pAudioRen->ao, pAudioRen->audio_port,
@@ -1129,8 +1183,8 @@ app_done:
     case PROP_AUDIO_ONLY: {
         gboolean audio_only = g_value_get_boolean (value);
 
-        SINK_LOG (0, GST_LEVEL_ERROR, 0x6f8, pAudioRen, "meaningless property");
-        SINK_LOG (3, GST_LEVEL_INFO, 0x6f9, pAudioRen,
+        PROP_LOG (0, GST_LEVEL_ERROR, 0x6f8, pAudioRen, "meaningless property");
+        PROP_LOG (3, GST_LEVEL_INFO, 0x6f9, pAudioRen,
                   "Set Audio Only Stream(TRUE=Audio Only, FALSE=Audio and Video): %s",
                   TF (audio_only));
         break;
@@ -1138,14 +1192,14 @@ app_done:
 
     case PROP_SEAMLESS:
         pAudioRen->isSeamless = g_value_get_boolean (value);
-        SINK_LOG (3, GST_LEVEL_INFO, 0x700, pAudioRen,
+        PROP_LOG (3, GST_LEVEL_INFO, 0x700, pAudioRen,
                   "Set Seamless audio change(TRUE=Enable, FALSE=Disable): %s",
                   TF (pAudioRen->isSeamless));
         break;
 
     case PROP_MUTE:
         pAudioRen->mode_mute = g_value_get_boolean (value);
-        SINK_LOG (3, GST_LEVEL_INFO, 0x707, pAudioRen, "Set sound-mute to %s",
+        PROP_LOG (3, GST_LEVEL_INFO, 0x707, pAudioRen, "Set sound-mute to %s",
                   TF (pAudioRen->mode_mute));
         SET_OR_DEFER (pAudioRen, lgao_set_mute (pAudioRen->ao, pAudioRen->mode_mute),
                       PROP_MUTE, 0x709);
@@ -1156,26 +1210,26 @@ app_done:
         gint targetVolume = 0, duration = 0;
         const gchar *fadeType;
 
-        SINK_LOG (3, GST_LEVEL_INFO, 0x714, pAudioRen, "ease volume setting start");
+        PROP_LOG (3, GST_LEVEL_INFO, 0x714, pAudioRen, "ease volume setting start");
         st = gst_value_get_structure (value);
         if (st == NULL) {
-            SINK_LOG (0, GST_LEVEL_ERROR, 0x747, pAudioRen, "ease volume fadeStructure is NULL");
+            PROP_LOG (0, GST_LEVEL_ERROR, 0x747, pAudioRen, "ease volume fadeStructure is NULL");
             break;
         }
         if (!gst_structure_has_field (st, "target-volume") ||
             !gst_structure_has_field (st, "duration-in-ms") ||
             !gst_structure_has_field (st, "fade")) {
-            SINK_LOG (0, GST_LEVEL_ERROR, 0x744, pAudioRen, "ease volume params are NULL");
+            PROP_LOG (0, GST_LEVEL_ERROR, 0x744, pAudioRen, "ease volume params are NULL");
             break;
         }
         gst_structure_get_int (st, "target-volume", &targetVolume);
         gst_structure_get_int (st, "duration-in-ms", &duration);
         fadeType = gst_structure_get_string (st, "fade");
-        SINK_LOG (3, GST_LEVEL_INFO, 0x720, pAudioRen, "audio ease volume value = %d",
+        PROP_LOG (3, GST_LEVEL_INFO, 0x720, pAudioRen, "audio ease volume value = %d",
                   targetVolume);
-        SINK_LOG (3, GST_LEVEL_INFO, 0x721, pAudioRen, "audio ease volume duration = %d",
+        PROP_LOG (3, GST_LEVEL_INFO, 0x721, pAudioRen, "audio ease volume duration = %d",
                   duration);
-        SINK_LOG (3, GST_LEVEL_INFO, 0x722, pAudioRen, "audio ease volume fadeType = %s",
+        PROP_LOG (3, GST_LEVEL_INFO, 0x722, pAudioRen, "audio ease volume fadeType = %s",
                   fadeType);
 
         SET_OR_DEFER (pAudioRen,
@@ -1204,7 +1258,7 @@ app_done:
             SET_OR_DEFER (pAudioRen,
                           lgao_set_fade (pAudioRen->ao, LGAO_FADE_PROP_TYPE, LGAO_EASE_NONE),
                           PROP_FADE, 0x73a);
-            SINK_LOG (0, GST_LEVEL_ERROR, 0x73d, pAudioRen, "Unkown fadeType");
+            PROP_LOG (0, GST_LEVEL_ERROR, 0x73d, pAudioRen, "Unkown fadeType");
         }
         SET_OR_DEFER (pAudioRen, lgao_set_ease_volume (pAudioRen->ao), PROP_FADE, 0x740);
         break;
@@ -1220,7 +1274,7 @@ app_done:
             break;
         if (strcmp (pAudioRen->clocktype, "atsc3-wall-clock") == 0 ||
             strcmp (pAudioRen->clocktype, "jp4k_ntp") == 0) {
-            SINK_LOG (3, GST_LEVEL_INFO, 0x755, pAudioRen, "Set %s Type", pAudioRen->clocktype);
+            PROP_LOG (3, GST_LEVEL_INFO, 0x755, pAudioRen, "Set %s Type", pAudioRen->clocktype);
             SET_OR_DEFER (pAudioRen, lgao_set_clocktype (pAudioRen->ao, LGAO_CLOCK_TYPE_ATSC3),
                           PROP_CLOCK_TYPE, 0x756);
         } else {
@@ -1231,7 +1285,7 @@ app_done:
 
     case PROP_PCM_BYPASS:
         pAudioRen->pcm_bypass = g_value_get_boolean (value);
-        SINK_LOG (3, GST_LEVEL_INFO, 0x762, pAudioRen, "Set pcm (multi channel) bypass %s",
+        PROP_LOG (3, GST_LEVEL_INFO, 0x762, pAudioRen, "Set pcm (multi channel) bypass %s",
                   TF (pAudioRen->pcm_bypass));
         SET_OR_DEFER (pAudioRen, lgao_set_pcm_bypass (pAudioRen->ao, pAudioRen->pcm_bypass),
                       PROP_PCM_BYPASS, 0x764);
@@ -1239,7 +1293,7 @@ app_done:
 
     case PROP_PCM_MULTI_CH:
         pAudioRen->pcm_multi_ch = g_value_get_boolean (value);
-        SINK_LOG (3, GST_LEVEL_INFO, 0x76b, pAudioRen, "Set pcm (multi channel) bypass %s",
+        PROP_LOG (3, GST_LEVEL_INFO, 0x76b, pAudioRen, "Set pcm (multi channel) bypass %s",
                   TF (pAudioRen->pcm_multi_ch));
         SET_OR_DEFER (pAudioRen,
                       lgao_set_pcm_multi_channel (pAudioRen->ao, pAudioRen->pcm_multi_ch),
@@ -1248,7 +1302,7 @@ app_done:
 
     case PROP_GAME_MODE:
         pAudioRen->game_mode = g_value_get_boolean (value);
-        SINK_LOG (3, GST_LEVEL_INFO, 0x774, pAudioRen, "Set game mode %s",
+        PROP_LOG (3, GST_LEVEL_INFO, 0x774, pAudioRen, "Set game mode %s",
                   pAudioRen->game_mode ? "Enable" : "Disable");
         SET_OR_DEFER (pAudioRen, lgao_set_game_mode (pAudioRen->ao, pAudioRen->game_mode),
                       PROP_GAME_MODE, 0x776);
@@ -1256,7 +1310,7 @@ app_done:
 
     case PROP_QUEUE_MAX_LENGTH:
         pAudioRen->queue_max_length = g_value_get_uint (value);
-        SINK_LOG (3, GST_LEVEL_INFO, 0x77d, pAudioRen, "Set PROP_QUEUE_MAX_LENGTH = %u",
+        PROP_LOG (3, GST_LEVEL_INFO, 0x77d, pAudioRen, "Set PROP_QUEUE_MAX_LENGTH = %u",
                   pAudioRen->queue_max_length);
         if (pAudioRen->queue_max_length <= 0x4000)
             SET_OR_DEFER (pAudioRen,
@@ -1266,7 +1320,7 @@ app_done:
 
     case PROP_VARIABLE_SPEED_PLAYBACK:
         pAudioRen->vsp_mode = g_value_get_boolean (value);
-        SINK_LOG (3, GST_LEVEL_INFO, 0x789, pAudioRen,
+        PROP_LOG (3, GST_LEVEL_INFO, 0x789, pAudioRen,
                   "Set Netflix VSP(Variable Speed Playback) mode %s", TF (pAudioRen->vsp_mode));
         if (pAudioRen->vsp_mode)
             SET_OR_DEFER (pAudioRen, lgao_set_vsp_mode (pAudioRen->ao),
@@ -1275,7 +1329,10 @@ app_done:
 
     default:
         /* includes the read-only ids (undecoded-size, current-pts, fade-volume, ...) */
-        G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+        g_log (NULL, G_LOG_LEVEL_WARNING,
+               "%s:%d: invalid %s id %u for \"%s\" of type '%s' in '%s'",
+               LG_SINK_FILE, 0x792, "property", prop_id, pspec->name,
+               g_type_name (G_PARAM_SPEC_TYPE (pspec)), G_OBJECT_TYPE_NAME (object));
         break;
     }
 }

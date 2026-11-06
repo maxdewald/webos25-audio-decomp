@@ -26,6 +26,15 @@ struct VideoInfo {
     int height;
     int frameRate;
     bool isDefault;
+
+    VideoInfo(int width_, int height_, int frameRate_, bool isDefault_ = false)
+        : width(width_), height(height_), frameRate(frameRate_), isDefault(isDefault_) {}
+    VideoInfo(std::string videoInfoString);
+
+    bool isSubsetOf(const VideoInfo &info) const {
+        return info.isDefault || (width * height <= info.width * info.height &&
+                                  frameRate <= info.frameRate);
+    }
 };
 using ResourcePair = std::pair<VideoInfo, ResourceListOptions>;
 using CodecTable = std::list<ResourcePair>;

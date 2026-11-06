@@ -451,7 +451,8 @@ int CommonBuffer_GetCurrentInfo(int *offset, ADEC_AU_INFO_T *au, ADEC_BUF_T *buf
 int CommonBuffer_ReadData(unsigned char **dst, int *size, int *au_in_data, ADEC_BUF_T *buf)
 {
     ADEC_COMMON_BUF_STATUS_T *st = &buf->status;
-    unsigned int used, ro, max, access, want, first, second;
+    int used;
+    unsigned int ro, max, access, want, first, second;
     unsigned char *ring;
 
     (void)au_in_data;
@@ -468,7 +469,7 @@ int CommonBuffer_ReadData(unsigned char **dst, int *size, int *au_in_data, ADEC_
     used = st->writeOffset - st->readOffset;
     if ((int)used < 0)
         used += buf->max_size;
-    BUF_ASSERT(used <= buf->max_size, "usedSize <= buf->max_size", buf, -ADEC_ERR_DATA_CORRUPTED, 0x34b,
+    BUF_ASSERT((unsigned int)used <= buf->max_size, "usedSize <= buf->max_size", buf, -ADEC_ERR_DATA_CORRUPTED, 0x34b,
                "used size exceed max size of the buffer\n");
     BUF_ASSERT((int)used >= 0, "usedSize >= 0", buf, -ADEC_ERR_DATA_CORRUPTED, 0x34d,
                "usedSize is smaller than 0.\n");
@@ -483,7 +484,6 @@ int CommonBuffer_ReadData(unsigned char **dst, int *size, int *au_in_data, ADEC_
                -ADEC_ERR_DATA_CORRUPTED, 0x355, "Current readPtr is greater than bufferEnd.\n");
     want = *size;
     access = buf->max_access_size;
-    ring = buf->data + access;
     if (ro + want > max) {
         /* wraps: limit to what the mirror area (or boundary_buf) can hold */
         if (!buf->boundary_buf) {
@@ -500,8 +500,8 @@ int CommonBuffer_ReadData(unsigned char **dst, int *size, int *au_in_data, ADEC_
         ro = st->readOffset;
         max = buf->max_size;
         access = buf->max_access_size;
-        ring = buf->data + access;
     }
+    ring = buf->data + access;
     if (ro + want <= max) {
         *dst = ring + ro;
         CACHE_INV(buf, ring + ro, want);

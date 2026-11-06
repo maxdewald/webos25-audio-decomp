@@ -142,15 +142,16 @@ void aud_data_adapter_cleanup(struct aud_data_adapter *adap)
 }
 
 /* @0x13b24: copy size bytes from the head without consuming them. -1 if fewer queued
- * (the partial copy stays in the destination). */
+ * (the partial copy stays in the destination). Even size 0 visits a queued head. */
 int aud_data_adapter_copy(struct aud_data_adapter *adap, void *data, unsigned int size)
 {
-    unsigned int offset = adap->offset;
+    unsigned int offset;
     unsigned char *dst = data;
     struct link *node;
 
     LOGD(aud_bufadp, 0x6eb, "adp%p, copy %d bytes\n", adap, size);
-    for (node = adap->holder.next; node != &adap->holder && size; node = node->next) {
+    offset = adap->offset;
+    for (node = adap->holder.next; node != &adap->holder; node = node->next) {
         struct aud_data_holder *holder = link_container(struct aud_data_holder, link, node);
         unsigned int copy_size = holder->data->size - offset;
 
@@ -161,6 +162,8 @@ int aud_data_adapter_copy(struct aud_data_adapter *adap, void *data, unsigned in
         offset = 0;
         size -= copy_size;
         dst += copy_size;
+        if (!size)
+            break;
     }
     if (size) {
         LOGE(aud_bufadp, 0x704, "adp%p, no data. remained size %d\n", adap, size);
@@ -248,7 +251,8 @@ struct aud_data *aud_data_adapter_get_data(struct aud_data_adapter *adap, unsign
     }
 
     h = link_first(struct aud_data_holder, link, &adap->holder);
-    if (adap->offset + size > h->data->size) {
+    d = h->data;
+    if (d->size < adap->offset + size) {
         d = aud_data_new(size);
         if (!d) {
             LOGE(aud_bufadp, 0x79a, "adp%p, no data for %d\n", adap, size);
@@ -277,10 +281,10 @@ struct aud_data *aud_data_adapter_get_data(struct aud_data_adapter *adap, unsign
         }
     }
 
-    if (h->data->size <= size)
-        return aud_data_get(h->data);
+    if (d->size <= size)
+        return aud_data_get(d);
 
-    LOGD(aud_bufadp, 0x77a, "adp%p, split buffer %d into %d\n", adap, h->data->size, size);
+    LOGD(aud_bufadp, 0x77a, "adp%p, split buffer %d into %d\n", adap, d->size, size);
     nh = new_holder(adap);
     if (!nh) {
         LOGE(aud_bufdata, 0x77e, "no mem.\n");

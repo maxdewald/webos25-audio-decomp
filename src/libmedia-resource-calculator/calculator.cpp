@@ -13,6 +13,7 @@
 #include <cstdint>
 
 namespace mrc {
+static const char defaultCodec[] = "default";
 #if UINTPTR_MAX == UINT32_MAX
 static_assert(sizeof(ResourceTable) == 0x1c, "TV resource table ABI");
 static_assert(sizeof(VideoResourceTable) == 0x1c, "TV video table ABI");
@@ -46,7 +47,7 @@ const ResourceListOptions *VideoResourceTable::lookup(std::string codec, int wid
 {
     auto found = resourceTable.find(codec);
     if (found == resourceTable.end()) {
-        found = resourceTable.find("default");
+        found = resourceTable.find(std::string(defaultCodec, defaultCodec + sizeof(defaultCodec) - 1));
         if (found == resourceTable.end())
             return nullptr;
     }
@@ -63,7 +64,7 @@ bool VideoResourceTable::getMaxResolution(std::string codec, int *width, int *he
 {
     auto found = resourceTable.find(codec);
     if (found == resourceTable.end()) {
-        found = resourceTable.find("default");
+        found = resourceTable.find(std::string(defaultCodec, defaultCodec + sizeof(defaultCodec) - 1));
         if (found == resourceTable.end())
             return false;
     }
@@ -89,14 +90,14 @@ int VideoResourceTable::getMaxFrameRate(std::string codec, int width, int height
 {
     auto found = resourceTable.find(codec);
     if (found == resourceTable.end()) {
-        found = resourceTable.find("default");
+        found = resourceTable.find(std::string(defaultCodec, defaultCodec + sizeof(defaultCodec) - 1));
         if (found == resourceTable.end())
             return 0;
     }
-    for (const auto &entry : found->second) {
-        const auto &info = entry.first;
-        if (info.isDefault || (width * height <= info.width * info.height && info.frameRate >= 0))
-            return info.frameRate;
+    const VideoInfo requested(width, height, 0);
+    for (auto row = found->second.begin(); row != found->second.end(); ++row) {
+        if (requested.isSubsetOf(row->first))
+            return row->first.frameRate;
     }
     return 0;
 }
@@ -105,6 +106,7 @@ int VideoResourceTable::getMaxFrameRate(std::string codec, int width, int height
 std::string ResourceCalculator::videoCodecToString(VideoCodec codec) const
 {
     switch (codec) {
+    case kVideoEtc: return "default";
     case kVideoH264: return "H264";
     case kVideoH265: return "H265";
     case kVideoMPEG: return "MPEG";
@@ -173,7 +175,7 @@ ResourceList ResourceCalculator::calcAdecResources(AudioCodecs codecs, int versi
         concatResourceList(&adec, adecTable.lookup("max"));
     if (codecs & kAudioIAMF)
         concatResourceList(&adec, adecTable.lookup("iamf"));
-    if (adec.empty() || (codecs & kAudioEtc))
+    if (adec.size() == 0 || (codecs & kAudioEtc))
         concatResourceList(&adec, adecTable.lookup("default"));
     return adec;
 }
@@ -238,7 +240,4 @@ ResourceCalculator *ResourceCalculator::create()
     return new ResourceCalculator();
 }
 
-/* @0x16170 = _ZN3mrc18ResourceCalculatorD1Ev */
-ResourceCalculator::~ResourceCalculator() {}
-/* @0x16198 = _ZN3mrc18ResourceCalculatorD0Ev */
 }

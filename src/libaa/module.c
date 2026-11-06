@@ -393,8 +393,6 @@ int aud_port_sync_locked(struct aud_port *out)
 
     pthread_mutex_lock(&out->check_free_mutex);
     if (out->legacy_buf && !out->flushing) {
-        ADEC_BUF_T *lb = out->legacy_buf;
-
         for (i = 0; i < out->pending_obj_num; i++) {
             struct aud_object *obj = out->pending_objs[i];
             ADEC_AU_INFO_T info;
@@ -427,7 +425,7 @@ int aud_port_sync_locked(struct aud_port *out)
             }
 
             if (!out->flushing) {
-                unsigned int free_size = lb->get_free_size(lb);
+                unsigned int free_size = out->legacy_buf->get_free_size(out->legacy_buf);
 
                 while (free_size < size) {
                     LOGD(commod, 0x2ea, "%s.%s%d : wait.. %d bytes. free %d\n",
@@ -435,13 +433,13 @@ int aud_port_sync_locked(struct aud_port *out)
                     pthread_cond_wait(&out->check_free_cond, &out->check_free_mutex);
                     if (out->flushing)
                         goto flushing;
-                    free_size = lb->get_free_size(lb);
+                    free_size = out->legacy_buf->get_free_size(out->legacy_buf);
                 }
                 if (out->flushing)
                     goto flushing;
                 LOGD(commod, 0x2f9, "%s.%s%d : write to legacy %d bytes\n", out->module->name,
                      DIR_STR(out), out->number, size);
-                lb->insert_au(buf, size, &info, lb);
+                out->legacy_buf->insert_au(buf, size, &info, out->legacy_buf);
             } else {
 flushing:
                 LOGI(commod, 0x2ff, "%s.%s%d : flushing...\n", out->module->name,
@@ -640,76 +638,83 @@ char *aud_prop_get_value_str(const char *str, const char *name, const char *def)
 int aud_module_set_prop_locked(struct aud_module *m, const struct aud_module_property *p,
                                const char *value, unsigned int size)
 {
-    char *field = (char *)m + p->offset;
+    unsigned int offset = p->offset;
+    char *field;
     int ret;
 
     pthread_mutex_lock(&m->prop_access_lock);
     if (p->set) {
-        LOGI(commod, 0x6f3, "%s: set %s..\n", m->name, p->name);
+        LOGF(commod, log_level_info, "set_prop", 0x6f3, "%s: set %s..\n", m->name, p->name);
         ret = p->set(m, p, value, size);
         pthread_mutex_unlock(&m->prop_access_lock);
         return ret;
     }
 
-    switch (p->type) {
-    case param_type_longlong: {
+    field = (char *)m + offset;
+    if (p->type == param_type_longlong) {
         unsigned long long v = strtoull(value, NULL, 0);
 
         if (v == *(unsigned long long *)field) {
-            LOGI(commod, 0x700, "%s: setting same value. ignore. %s: %lld\n", m->name, p->name,
-                 v);
+            LOGF(commod, log_level_info, "set_prop", 0x700,
+                 "%s: setting same value. ignore. %s: %lld\n", m->name, p->name, v);
             goto out;
         }
         *(unsigned long long *)field = v;
-        LOGI(commod, 0x705, "%s: set %s=%lld\n", m->name, p->name, v);
-        break;
+        LOGF(commod, log_level_info, "set_prop", 0x705, "%s: set %s=%lld\n", m->name, p->name, v);
+        goto updated;
     }
+    switch (p->type) {
     case param_type_bool: {
         bool v = parse_bool(value);
 
         if (*(bool *)field == v) {
-            LOGI(commod, 0x722, "%s: setting same value. ignore. %s: %s\n", m->name, p->name,
+            LOGF(commod, log_level_info, "set_prop", 0x722,
+                 "%s: setting same value. ignore. %s: %s\n", m->name, p->name,
                  v ? "true" : "false");
             goto out;
         }
         *(bool *)field = v;
-        LOGI(commod, 0x728, "%s: set %s=%s\n", m->name, p->name, v ? "true" : "false");
+        LOGF(commod, log_level_info, "set_prop", 0x728, "%s: set %s=%s\n", m->name, p->name,
+             v ? "true" : "false");
         break;
     }
     case param_type_int: {
         unsigned long v = strtoul(value, NULL, 0);
 
         if (*(unsigned long *)field == v) {
-            LOGI(commod, 0x70f, "%s: setting same value. ignore. %s: %d\n", m->name, p->name,
-                 (int)v);
+            LOGF(commod, log_level_info, "set_prop", 0x70f,
+                 "%s: setting same value. ignore. %s: %d\n", m->name, p->name, (int)v);
             goto out;
         }
         *(unsigned long *)field = v;
-        LOGI(commod, 0x714, "%s: set %s=%d\n", m->name, p->name,
+        LOGF(commod, log_level_info, "set_prop", 0x714, "%s: set %s=%d\n", m->name, p->name,
              (int)strtol(value, NULL, 10));
         break;
     }
     case param_type_str:
-        free(*(char **)field);
+        if (*(char **)field)
+            free(*(char **)field);
         *(char **)field = strdup(value);
-        LOGI(commod, 0x731, "%s: set %s=%s\n", m->name, p->name, *(char **)field);
+        LOGF(commod, log_level_info, "set_prop", 0x731, "%s: set %s=%s\n", m->name, p->name, *(char **)field);
         break;
     case param_type_data:
-        free(*(void **)field);
+        if (*(void **)field)
+            free(*(void **)field);
         *(void **)field = malloc(size);
         if (*(void **)field)
             memcpy(*(void **)field, value, size);
-        LOGI(commod, 0x73b, "%s: set %s=<data %p, size %d>\n", m->name, p->name,
-             *(void **)field, size);
+        LOGF(commod, log_level_info, "set_prop", 0x73b, "%s: set %s=<data %p, size %d>\n",
+             m->name, p->name, *(void **)field, size);
         break;
     case param_type_struct:
-        LOGE(commod, 0x73f, "%s: %s, please use set function to struct type parameter\n",
+        LOGF(commod, log_level_error, "set_prop", 0x73f, "%s: %s, please use set function to struct type parameter\n",
              m->name, p->name);
         goto out;
     default:
-        LOGE(commod, 0x745, "%s: unknown property type. %d\n", m->name, p->type);
+        LOGF(commod, log_level_error, "set_prop", 0x745, "%s: unknown property type. %d\n", m->name, p->type);
         goto out;
     }
+updated:
     if (m->impl->prop_updated)
         m->impl->prop_updated(m, p);
 out:

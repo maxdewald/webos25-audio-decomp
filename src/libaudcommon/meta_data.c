@@ -74,23 +74,20 @@ int aud_meta_data_gc(void)
     return 0;
 }
 
-/* @0x14624: NULL if size > 0x80000 or malloc fails */
+/* @0x14624: NULL if size > 0x80000 or malloc fails; allocated entries are prepended. */
 void *aud_meta_data_new(int size)
 {
-    struct aud_meta_data_cache *c = NULL;
+    struct aud_meta_data_cache *c;
     struct aud_meta_data *m;
-    int i;
+    int i = 0;
 
-    for (i = 0; i < N_META_CACHES; i++) {
-        if (size <= meta_caches[i].size) {
-            c = &meta_caches[i];
-            break;
+    while (meta_caches[i].size < size) {
+        if (++i == N_META_CACHES) {
+            LOGE(aud_meta_bufdata, 300, "no cache for size %d\n", size);
+            return NULL;
         }
     }
-    if (!c) {
-        LOGE(aud_meta_bufdata, 300, "no cache for size %d\n", size);
-        return NULL;
-    }
+    c = &meta_caches[i];
 
     pthread_mutex_lock(&c->lock);
     if (!link_empty(&c->freed)) {
@@ -98,7 +95,7 @@ void *aud_meta_data_new(int size)
         LOGD(aud_meta_bufdata, 0x11b, "new %p\n", m);
         link_del(&m->cache_link);
         c->count_freed--;
-        link_add_tail(&c->allocated, &m->cache_link);
+        link_add(&c->allocated, &m->cache_link);
         c->count_allocated++;
         pthread_mutex_unlock(&c->lock);
         return m->data;
@@ -116,7 +113,7 @@ void *aud_meta_data_new(int size)
     m->return_addr = NULL;
     m->return_addr2 = NULL;
     m->magic = AUD_META_DATA_MAGIC;
-    link_add_tail(&c->allocated, &m->cache_link);
+    link_add(&c->allocated, &m->cache_link);
     m->cache = c;
     c->count_allocated++;
     pthread_mutex_unlock(&c->lock);

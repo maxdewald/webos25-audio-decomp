@@ -68,7 +68,9 @@ static long libpf_test_syscall(long) { return static_cast<long>(getpid()); }
                         '-Isrc/libmedia-resource-calculator',
                         '-Ilg-opensource/public/media-resource-calculator/calculator',
                         'src/libmedia-resource-calculator/resource.cpp',
-                        'src/libmedia-resource-calculator/calculator.cpp', 'tools/test_mrc_calculator.cpp',
+                        'src/libmedia-resource-calculator/calculator.cpp',
+                        'src/libmedia-resource-calculator/calculator_destructor.cpp',
+                        'src/libmedia-resource-calculator/video_info.cpp', 'tools/test_mrc_calculator.cpp',
                         '-o', str(calculator)], cwd=ROOT, check=True)
         subprocess.run([str(calculator)], check=True)
 

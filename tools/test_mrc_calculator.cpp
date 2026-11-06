@@ -19,6 +19,22 @@ ResourceCalculator::ResourceCalculator() {}
 int main()
 {
     using namespace mrc;
+    for (const auto &row : std::map<std::string, VideoInfo>{
+             {"1920*1088 60p", {1920, 1088, 60}},
+             {"2k 59i", {2048, 1080, 29}}, {"4K 120P", {4096, 2160, 120}},
+             {"2K 4k 61I", {4096, 2160, 30}}, {"", {0, 0, 0}},
+             {"unknown  30p", {0, 0, 30}}, {"default", {0, 0, 0}},
+             {"max", {0, 0, 0, true}}, {"xxmaxxx", {0, 0, 0, true}}, {"prefixmaxsuffix", {0, 0, 0}},
+             {"max 1920*1080 60p", {1920, 1080, 60, true}},
+             {"1920*1080 60p max", {1920, 1080, 60, true}},
+             {"* 60p", {0, 0, 60}}, {"-3*4 -61i", {-3, 4, -30}}}) {
+        const VideoInfo parsed(row.first);
+        assert(parsed.width == row.second.width && parsed.height == row.second.height);
+        assert(parsed.frameRate == row.second.frameRate && parsed.isDefault == row.second.isDefault);
+    }
+    assert(VideoInfo(100, 100, 30).isSubsetOf(VideoInfo(200, 50, 30)));
+    assert(!VideoInfo(100, 100, 31).isSubsetOf(VideoInfo(200, 50, 30)));
+    assert(VideoInfo(4000, 4000, 1000).isSubsetOf(VideoInfo("max")));
     ResourceCalculator calculator;
     auto &audio = calculator.adecTable.resourceData;
     audio["aac6"] = {{"ADEC", 1}, {"NOTSUPPORTED", 1}};

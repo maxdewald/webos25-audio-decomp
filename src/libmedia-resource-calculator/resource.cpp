@@ -32,7 +32,7 @@ void concatResourceList(ResourceList *destination, const ResourceList *source)
     for (const auto &resource : *source) {
         auto found = destination->begin();
         for (; found != destination->end(); ++found) {
-            if (found->type == resource.type) {
+            if (found->type.compare(resource.type) == 0) {
                 if (found->quantity < resource.quantity)
                     found->quantity = resource.quantity;
                 break;

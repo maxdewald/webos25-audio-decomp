@@ -78,7 +78,15 @@ template<class Info> static void testStream(void (*parse)(Info &, const rapidjso
     assert(out.sampleRate == SAMPLE_RATE_48 && out.header == header && out.headerSize == 4);
     json.Parse(R"({"sampleRate":44.1,"streamHeader":4})"); parse(out, json);
     assert(out.sampleRate == SAMPLE_RATE_44_1 && out.header == header);
+    json.Parse(R"({"streamHeader":null})"); parse(out, json);
+    assert(out.header == header && out.headerSize == 4);
+    json.Parse(R"({"streamHeader":""})"); parse(out, json);
+    assert(out.header == header && out.headerSize == 4);
     g_free(header);
+    out.header = nullptr;
+    json.Parse(R"({"streamHeader":"AQIDBAUGBwgJCgsMDQ4PEA=="})"); parse(out, json);
+    assert(out.headerSize == 16 && out.header[0] == 1 && out.header[15] == 16);
+    g_free(out.header);
 }
 
 static void testCodecs()

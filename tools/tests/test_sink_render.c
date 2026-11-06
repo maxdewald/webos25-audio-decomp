@@ -154,7 +154,9 @@ int lgao_set_drop_renderer(void *a, int d) { record(d ? 'X' : 'x'); if (d != dro
 static int real_comparison;
 static lgao live_ao;
 #define LOGE(...) ((void)0)
-/* RECOVERED_COMPARISON */
+#define lgao_compare_audio_info recovered_compare_audio_info
+// @extract src/libgstlgaudiosink/lgao.c lgao_compare_audio_info
+#undef lgao_compare_audio_info
 int lgao_get_audio_info(void *a, LGAO_AUDIO_INFO_T prop, unsigned *p) { *p = 0; return 0; }
 int lgao_set_audio_info(void *a, LGAO_AUDIO_START_INFO_T i) { saved_info = i; if (real_comparison) live_ao.audioStartInfo = i; ++info_sets; record('A'); return -1; }
 int lgao_compare_audio_info(void *a, LGAO_AUDIO_START_INFO_T *i) { record('C'); return real_comparison ? recovered_compare_audio_info(a, i) : compare_result; }
@@ -178,7 +180,8 @@ int lgao_eos(void *a) { record('E'); return eos_result; }
 int lgao_audio_gap(void *a, unsigned long long b, unsigned long long e) { record('G'); return 0; }
 int lgao_feed(void *a, void *data, unsigned len, unsigned long long pts, LGAO_DATA_TYPE_T t) { assert(feeds < 16); assert(data == payload + offsets[copies-1]); sizes[feeds] = len; timestamps[feeds] = pts; types[feeds++] = t; record('H'); return feed_result; }
 
-/* RECOVERED_FUNCTIONS */
+// @match src/libgstlgaudiosink/render_element.c (?s)#define LG_BUFFER_FLAG_METADATA .*?(?=static const char \*\nout_type_name)
+// @extract src/libgstlgaudiosink/render_element.c gst_lg_audio_render_set_caps gst_lg_audio_render_event gst_lg_audio_render_chain
 
 static GstLgAudioRender reset(void) {
     real_comparison = 0;

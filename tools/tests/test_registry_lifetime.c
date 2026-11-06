@@ -1,5 +1,4 @@
-/* Usage: python3 tools/test_registry_lifetime.py.
- * Exercises source-extracted functions with real list/type definitions and
+/* Exercises source-extracted functions with real list/type definitions and
  * controlled dependencies. No threads, ARM execution or invented registry lock.
  */
 #include <assert.h>
@@ -136,7 +135,10 @@ void aud_module_disconnect(struct aud_port *out, struct aud_port *in) { disconne
 #define malloc test_malloc
 #define calloc test_calloc
 #define free test_free
-#include "registry_under_test.inc"
+// @match src/libaa/registry.c (?s)#define REGISTRY_HANDLER.*?(?=/\* @0x274a4)
+// @extract src/libaa/module.c aud_module_constructor aud_module_destructor
+// @extract src/libaa/registry.c aud_mregistry_add_class ModuleRegistry_Register ModuleRegistry_SearchInstByUid ModuleRegistry_SearchInstByName ModuleRegistry_SearchModuleImpl get_empty_internal_index aud_registry_create_instance_param aud_registry_create_instance regcmd_create_module aud_registry_destroy_instance ModuleRegistry_ProcessCmd aud_connector_connect aud_connector_disconnect Connector_Cmd Connector_Create Connector_Destroy ModuleRegistry_Cleanup
+// @hangs --full-cursor-one
 #undef malloc
 #undef calloc
 #undef free

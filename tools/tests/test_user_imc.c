@@ -1,4 +1,4 @@
-/* Scoped host harness. Run with python3 tools/tests/test_user_imc.py. */
+/* Scoped user IMC host harness. */
 #include <assert.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -130,7 +130,9 @@ static unsigned int aud_inst_role_search(char *);
 static int auimc_cache_sync(struct user_imc *, struct auimc_cache *);
 static int auimc_munmap(struct user_imc *, unsigned int);
 
-#include "user_imc_scoped.inc"
+// @match lg-opensource/kdriver/include/audio_uimc.h (?s)struct auimc_ipc_header.*(?=#endif)
+// @match src/kernel/aud/user_imc.c (?s)struct hma_shmem\n.*?(?=static DEFINE_MUTEX)
+// @extract src/kernel/aud/user_imc.c open release connect_module disconnect_module_output disconnect_module_input ioctl compat_ioctl
 
 static uintptr_t ipc_pointer;
 static int ipc_write(struct user_imc *u, struct auimc_ipc_header *h)

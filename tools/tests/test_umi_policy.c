@@ -1,5 +1,5 @@
-/* Usage: python3 tools/tests/test_umi_policy.py [--sanitize].
- * Host adapters are not an LG class layout: byte storage represents the shipped
+// @sources src/libumi/*.c
+/* Host adapters are not an LG class layout: byte storage represents the shipped
  * ARM object and separately owned maps/JSON stand in for C++ library objects.
  */
 #include "../../src/libumi/policy.h"

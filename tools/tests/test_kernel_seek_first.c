@@ -1,4 +1,4 @@
-/* Usage: python3 tools/tests/test_kernel_seek.py. Mock DSP FIRST ownership and ordering. */
+/* Mock DSP FIRST ownership and ordering. */
 #include <assert.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -90,7 +90,7 @@ static int chain_handler(struct aud_port *p,struct aud_data *d) {
 }
 static const char *named;
 static void aimc_raise_named_event(void *a,int uid,const char *name,void *p,int n) { named=name; }
-#include "first_under_test.inc"
+// @extract src/dsp1/module.c foreach_sync adjust_thread_priority del_input_port aud_module_disconnect aud_module_connect aud_module_chain_locked aud_module_event_flush_locked aud_module_event_disconnect_locked aud_module_event_first_au_locked aud_module_event_last_au_locked aud_module_event_locked aud_module_event
 int main(void) {
     struct aud_module_impl impl={.name="output_arc", .flag=AUD_IMPL_SKIP_SYNC,
                                 .event=event_handler,.chain=chain_handler};

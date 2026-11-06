@@ -1,4 +1,4 @@
-/* Usage: python3 tools/test_flush_cancel.py. Actual recovered lock/wait bodies;
+/* Actual recovered lock/wait bodies;
  * only peer/ring services and list traversal are host mocks. No target execution. */
 #define _POSIX_C_SOURCE 200809L
 #include <assert.h>
@@ -143,7 +143,8 @@ int aud_module_chain_locked(struct aud_port *, struct aud_data *);
 void aud_module_unblock_locked(struct aud_module *);
 #define pthread_mutex_lock observed_lock
 #define pthread_cond_wait observed_wait
-/* RECOVERED_FUNCTIONS */
+// @extract src/libaa/module.c aud_port_sync_locked foreach_sync aud_module_sync foreach_push_event aud_module_push_event aud_port_push_event foreach_down_peer_push_event foreach_down_peer_push_data aud_module_event_locked aud_module_event aud_module_chain_locked aud_module_unblock_locked aud_port_check_legacy aud_module_check_legacy_output
+// @extract src/libaabase/appsrc.c module_appsrc_push_event
 #undef pthread_mutex_lock
 #undef pthread_cond_wait
 

@@ -1,4 +1,4 @@
-/* Host-only contract harness; driven by test_block_manager.py. */
+/* Host-only block-manager contract harness. */
 #include <assert.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -65,7 +65,10 @@ static int apipeline_connect(struct apipeline *out, int op, struct apipeline *in
 static int apipeline_disconnect(struct apipeline *in, int ip)
 { last_in=in; last_in_port=ip; disconnects++; event("disconnect", "pipe"); return disconnect_result; }
 static const char *apipeline_get_name(struct apipeline *p) { return p->name; }
-#include "block_manager_scope.inc"
+// @match src/kernel/aud/block_manager.c (?ms)^struct (?:bm_list_block|bm_list_block_port|bm_list_connected_port|bm_list_port_forward|bm_list_reserved_conncection|bm_list_work_farm|aud_bm_info)\n\{.*?^\};
+struct aud_bm_info _bm_info = { };
+static int _bm_connect_block_locked(struct aud_block_info *, int, struct aud_block_info *, int);
+// @extract src/kernel/aud/block_manager.c _bm_find_block_impl_by_type _bm_find_block_in_reserved_list _bm_find_block_by_index _bm_find_block_by_block_info _bm_get_block_port bm_get_port_forward _bm_add_port_connection _bm_connect_port _bm_del_port _bm_add_port _bm_disconnect_block_locked bm_disconnect_block _bm_connect_block_locked _bm_connect_block_reserved bm_connect_block_reserved_out _bm_disconnect_blocks_without_update _bm_reconnect_blocks bm_suspend bm_resume
 
 static struct apipeline po={"out"}, pi={"in"}, pfo={"forward-out"}, pfi={"forward-in"};
 static struct aud_block_info oi={"out",&po}, ii={"in",&pi};

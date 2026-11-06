@@ -1,3 +1,4 @@
+// @cflags -std=c++14 -Wpedantic -Wconversion -Wsign-conversion -Wshadow
 #include <array>
 #include <cassert>
 #include <cstddef>

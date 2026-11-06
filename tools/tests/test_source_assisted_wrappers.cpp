@@ -1,3 +1,4 @@
+// @cflags -std=c++14 -fno-sized-deallocation -Ilg-opensource/public/umediaserver/include/public
 // Host semantic tests only: mock imported methods, not the original ARM runtime.
 #include <cassert>
 #include <cstdint>

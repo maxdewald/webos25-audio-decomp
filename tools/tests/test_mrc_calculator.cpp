@@ -1,3 +1,5 @@
+// @sources src/libmedia-resource-calculator/resource.cpp src/libmedia-resource-calculator/calculator.cpp src/libmedia-resource-calculator/calculator_destructor.cpp src/libmedia-resource-calculator/video_info.cpp
+// @cflags -std=c++14 -Isrc/libmedia-resource-calculator -Ilg-opensource/public/media-resource-calculator/calculator
 /* Host-only fixtures; no claim that these synthetic tables are TV defaults. */
 #include <map>
 #include <list>

@@ -1,4 +1,4 @@
-/* Actual-source host harness; python3 tools/tests/test_renderer_ownership.py. */
+/* Actual-source renderer ownership host harness. */
 #include <assert.h>
 #include <stdbool.h>
 #include <errno.h>
@@ -91,7 +91,24 @@ static void bm_destroy_block(struct aud_block_info *b)
 { struct aud_renderer_info *r = (void *)b; assert(!driver_lock.held); destroys++;
   if (r) { if (r->pipeline_bypass) apipeline_del(r->pipeline_bypass); blocks--; free(r); } }
 static int bm_get_block_head(struct aud_block_info *b) { return b ? 777 : 0; }
-#include "renderer_ownership_scoped.inc"
+// @match src/kernel/aud/aapi_media.c (?m)^#define AREN_MAX \d+
+// @match src/kernel/aud/aapi_media.c (?s)#define ARENDERER_CHECK_INDEX_AND_OPENED_AND_LOCK.*?(?=struct str_table)
+// @match src/kernel/aud/renderer.c (?ms)struct renderer_param param_(?:src|gain)\[\] = \{.*?^};
+// @extract src/kernel/aud/renderer.c renderer_run_param renderer_set_default renderer_create_bypass_pipeline renderer_get_uid_pcm_bypass_head renderer_get_uid_es_bypass_head renderer_set_pcm_bypass_rts_out_channels
+// @extract src/kernel/aud/aapi_media.c aren_open aren_close aren_get_uid
+// @extract src/kernel/aud/driver.c driver_aren_open driver_aren_close
+/* The driver ioctl case for SET_INDEX, run on its own. */
+#define AREN_IOW_SET_INDEX 1
+static int select_index(struct file *filp, int index)
+{
+    struct audio_renderer_info *info = filp->private_data;
+    struct { int index; } args = {index};
+    int ret = -1;
+    switch (AREN_IOW_SET_INDEX) {
+// @match src/kernel/aud/driver.c (?s)case AREN_IOW_SET_INDEX:.*?(?=\n\s*case AREN_IO_ADD_QUEUE:)
+    }
+    return ret;
+}
 static void unlocked(void)
 { for (int i = 0; i < AREN_MAX; i++) assert(!arenderer_info[i].lock.held); assert(!driver_lock.held); }
 static void fd_open(struct file *f) { assert(driver_aren_open(NULL, f) == 0); }

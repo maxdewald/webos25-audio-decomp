@@ -1,5 +1,6 @@
+// @sources src/libresource_mgr_client/ResourceManagerClient.cpp
+// @cflags -std=c++14 -DRMC_HOST_TEST -Ilg-opensource/public/rapidjson/include
 // Host-only tests: no target library loading or Luna/GLib execution.
-// Run: python3 tools/tests/test_resource_client.py
 #include "../../../src/libresource_mgr_client/ResourceManagerClient.h"
 #include <pbnjson.hpp>
 #include <cassert>

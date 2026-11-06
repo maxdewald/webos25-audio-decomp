@@ -1,7 +1,4 @@
-/* Usage: cc -std=c11 -Wall -Wextra -Werror -pedantic -fsanitize=address,undefined
- * tools/tests/dsp2/lgsrc_sinc.c -o build/scratch/lgsrc-sinc-test &&
- * build/scratch/lgsrc-sinc-test
- * Synthetic ROM tests the actual copy/reindexing code, not a sinc/FIR mock.
+/* Synthetic ROM tests the actual copy/reindexing code, not a sinc/FIR mock.
  */
 #include <assert.h>
 #include <stddef.h>

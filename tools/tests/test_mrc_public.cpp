@@ -1,3 +1,5 @@
+// @sources src/libmedia-resource-calculator/resource.cpp
+// @cflags -std=c++17 -Isrc/libmedia-resource-calculator -Ilg-opensource/public/media-resource-calculator/calculator
 /* Regression checks for shipped resource-list semantics. */
 #include "resource.h"
 #include <cassert>

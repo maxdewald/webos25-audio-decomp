@@ -1,7 +1,3 @@
-/* usage: cc -std=c11 -Wall -Wextra -Werror -pedantic -fsanitize=address,undefined
- * tools/tests/dsp2/msf_metadata.c -o build/scratch/msf-metadata/test &&
- * build/scratch/msf-metadata/test
- */
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>

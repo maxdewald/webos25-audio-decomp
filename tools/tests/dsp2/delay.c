@@ -1,3 +1,4 @@
+// @sources tools/tests/dsp2/delay_stubs.c
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>

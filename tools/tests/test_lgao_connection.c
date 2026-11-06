@@ -96,7 +96,7 @@ static void _lgao_set_msgpid_to_signal(lgao *ao) { ++signaled; }
 #define close mock_close
 #define ioctl mock_ioctl
 
-/* RECOVERED_FUNCTIONS */
+// @extract src/libgstlgaudiosink/lgao.c _lgao_open_renderer _lgao_connect_renderer lgao_disconnect_renderer lgao_close_renderer lgao_open_renderer lgao_compare_audio_info
 
 static lgao reset(void)
 {

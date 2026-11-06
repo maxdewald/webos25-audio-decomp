@@ -1,7 +1,3 @@
-/* Usage: cc -std=c11 -Wall -Wextra -Werror -pedantic -fsanitize=address,undefined
- * tools/tests/dsp2/lgsrc_engine.c -o build/scratch/lgsrc-engine/test &&
- * build/scratch/lgsrc-engine/test
- */
 #include "../../../src/dsp2/lgsrc_engine.c"
 #include <assert.h>
 #include <math.h>

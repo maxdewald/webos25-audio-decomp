@@ -1,4 +1,4 @@
-/* Host-only mock harness for resource_delivery.cpp. Run via test_libpf.py. */
+/* Host-only mock harness for resource_delivery.cpp and airplayer.cpp. */
 #include <any>
 #include <cassert>
 #include <cstdarg>
@@ -111,7 +111,8 @@ static int gst_element_set_state(GstElement *, int state)
     return state_result;
 }
 
-// RESOURCE_DELIVERY_IMPLEMENTATION
+// @match src/libpf/resource_delivery.cpp (?s)(?<=#include "libpf.h"\n).*
+// @match src/libpf/airplayer.cpp (?s)(?<=#include "libpf.h"\n).*
 
 namespace mediapipeline {
 PfLog Pipeline::pflog;

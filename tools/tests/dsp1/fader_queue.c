@@ -1,7 +1,4 @@
-/* usage: clang -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined
- * tools/tests/dsp1/fader_queue.c -o build/scratch/fader-dsp1/test &&
- * build/scratch/fader-dsp1/test
- * Framework doubles exercise recovered control flow, not external PCM SIMD kernels.
+/* Framework doubles exercise recovered control flow, not external PCM SIMD kernels.
  */
 #include <assert.h>
 #include <stdarg.h>

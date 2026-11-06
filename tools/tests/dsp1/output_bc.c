@@ -1,8 +1,4 @@
-/* Host reconstruction checks, not execution of the firmware or SIMD validation.
- * usage: clang -std=c11 -Wall -Wextra -Werror -fsanitize=address,undefined
- *   -ffunction-sections -fdata-sections tools/tests/dsp1/output_bc.c
- *   -Wl,-dead_strip -o build/scratch/dsp1-output-bc && build/scratch/dsp1-output-bc
- */
+/* Host reconstruction checks, not execution of the firmware or SIMD validation. */
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>

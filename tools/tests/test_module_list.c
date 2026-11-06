@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
-/* Usage: python3 tools/tests/test_module_list.py. Kernel mocks, not a DSP runtime test. */
+/* Kernel mocks, not a DSP runtime test. */
 #include <assert.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -92,7 +92,10 @@ static DEFINE_MUTEX(processors_lock);
 static DEFINE_MUTEX(connection_lock);
 static struct proc_dir_entry *proc_processors;
 static bool allow_nonsecure_connect = true;
-#include "module_list_under_test.inc"
+// @match src/kernel/aud/module_list.c (?ms)^struct (?:aud_mod_owner|jumper|port|aud_mod_impl_port_buf_def|aud_mod_inst|aud_mod_impl|aud_proc_info|aud_impl_helper)\n\{.*?^\};
+// @declare src/kernel/aud/module_list.c unregister_impl unregister_processor aud_modlist_unregister_processor put_instance aud_modlist_del_owner get_input_port get_output_port disconnect_in_processor connect_in_processor jumper_inter_output_glue jumper_inter_input_glue connect_between_processor destroy_jumper inst_by_uid owner_inst_by_uid aud_modlist_disconnect_inst_output aud_modlist_disconnect_inst_input aud_inst_connect aud_inst_disconnect_output aud_inst_disconnect_input aud_modlist_connect_inst
+#include "test_module_list_mocks.inc"
+// @extract src/kernel/aud/module_list.c unregister_impl unregister_processor aud_modlist_unregister_processor put_instance aud_modlist_del_owner get_input_port get_output_port disconnect_in_processor connect_in_processor jumper_inter_output_glue jumper_inter_input_glue connect_between_processor destroy_jumper inst_by_uid owner_inst_by_uid aud_modlist_disconnect_inst_output aud_modlist_disconnect_inst_input aud_inst_connect aud_inst_disconnect_output aud_inst_disconnect_input aud_modlist_connect_inst
 
 static struct aud_mod_owner *owner(void)
 {

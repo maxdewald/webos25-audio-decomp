@@ -1,4 +1,4 @@
-/* Usage: python3 tools/tests/test_kernel_seek.py. FRPLL write-order contract. */
+/* FRPLL write-order contract. */
 #include <assert.h>
 #include <stddef.h>
 #include <stdio.h>
@@ -13,7 +13,8 @@ static void write_field(const char *name,unsigned value) { fields[writes]=name;v
 #define CTOP_CTRL_O22Ax_WrFL(b,r) ((void)0)
 #define CTOP_CTRL_O22Ax_Wr01(b,r,f,v) write_field(#f,v)
 static void udelay(unsigned us) { assert(delay_count<3);delays[delay_count++]=us; }
-#include "hal_under_test.inc"
+// @match src/kernel/aud/hal_clock.c (?ms)^struct frpll_fout_settings\n.*?(?=^static struct frpll_fout_settings \*_aud_get_frpll_fout_settings)
+// @extract src/kernel/aud/hal_clock.c _aud_get_frpll_fout_settings aud_set_earc_frpll aud_hal_set_arc_sample_rate
 static void reset(void) { writes=delay_count=0; }
 int main(void) {
     for(size_t i=0;i<9;i++)

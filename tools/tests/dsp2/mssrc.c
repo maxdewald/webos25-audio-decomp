@@ -1,5 +1,4 @@
-/* Host mocks check recovered control flow/ownership, NOT MS12 DSP conversion.
- * usage: cc -std=c11 -Wall -Wextra -Werror -pedantic tools/tests/dsp2/mssrc.c -o build/scratch/test-mssrc && build/scratch/test-mssrc */
+/* Host mocks check recovered control flow/ownership, NOT MS12 DSP conversion. */
 #include <assert.h>
 #include <stdarg.h>
 #include <stdio.h>

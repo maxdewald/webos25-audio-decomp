@@ -206,7 +206,8 @@ static int mock_ioctl(int fd, unsigned request, void *p)
 #define pthread_cond_wait mock_wait
 #define pthread_cond_broadcast mock_broadcast
 
-/* RECOVERED_FUNCTIONS */
+// @extract src/libaa/aimc.c handler_thread aimc_handler_sync aimc_handler_destory aimc_finalize aimc_wait_until_process_header register_command_handler aimc_unregister_command_handler aimc_dispatch_command aimc_command_response aimc_module_create aimc_module_destroy aimc_module_connect aimc_module_disconnect_output aimc_module_disconnect_input aimc_send_command aimc_send_command_sync aimc_add_processor_done
+// @hangs self-sync process-lock
 
 #undef write
 #undef read

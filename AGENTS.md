@@ -31,3 +31,13 @@ Use only these. Do not create other top-level folders.
 - A script worth keeping goes in `tools/` with a usage line; everything else in
   `build/scratch/`.
 - After adding functions, run `make progress` and commit `progress.svg`.
+
+## Tests
+
+- A test is one C/C++ file in `tools/tests/`; `make test` runs it. No per-test launcher
+  scripts. Pull recovered code in with `// @extract`, `// @match` and the other
+  directives listed in `tools/runtests.py`.
+- Test behaviour that can break: control flow, ownership, error paths. Do not test that a
+  stub was called or restate the source.
+- Do not test against LG binaries: no byte, hash or disassembly checks. `make diff` and
+  `make status` already compare with the original.

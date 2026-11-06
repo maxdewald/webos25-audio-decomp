@@ -1,6 +1,6 @@
 PY ?= python3
 
-.PHONY: status diff todo progress toolchain verify symbols opensource public-sources public-source-map test-public-sources test-public-reuse test-libpf decomp-arm decomp-dsp
+.PHONY: status diff todo progress test toolchain verify symbols opensource public-sources public-source-map decomp-arm decomp-dsp
 
 status:            ## coverage + instruction match per target
 	$(PY) tools/progress.py status
@@ -13,6 +13,10 @@ todo:              ## make todo T=libumi
 
 progress:          ## progress.svg for the README
 	$(PY) tools/progress.py svg $(if $(NO_MATCH),--no-match)
+
+test:              ## host tests in tools/tests/; make test T=lgao
+	$(PY) tools/runtests.py $(T)
+	$(PY) -m unittest discover -s tools/tests -p 'test_*.py'
 
 toolchain:         ## GCC 11.4 armel cross compiler image
 	docker build -t webos25-decomp-gcc tools/toolchain
@@ -32,16 +36,6 @@ public-sources:    ## pinned public dependencies and webOS reference implementat
 public-source-map: ## upstream paths per target (not verified binary coverage)
 	$(PY) tools/fetch-public-sources.py --list
 
-test-public-sources: ## offline fetch/cache and target-map tests
-	$(PY) tools/tests/test_public_sources.py
-
-test-public-reuse: test-public-sources test-libpf ## source-assisted regression tests
-	$(PY) tools/tests/test_source_assisted_wrappers.py
-	$(PY) tools/tests/test_resource_client.py
-	$(PY) tools/tests/test_progress.py
-
-test-libpf:        ## host sanitizer tests; requires public-sources and native GLib
-	$(PY) tools/test_libpf.py
 
 decomp-arm:        ## full Ghidra export of every ARM target (slow)
 	tools/decomp-arm-all.sh

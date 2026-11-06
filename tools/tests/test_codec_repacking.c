@@ -1,29 +1,4 @@
-#!/usr/bin/env python3
-"""Host codec regressions; run: python3 tools/tests/test_codec_repacking.py."""
-from pathlib import Path
-import re
-import shutil
-import subprocess
-from tempfile import TemporaryDirectory
-
-ROOT = Path(__file__).resolve().parents[2]
-SOURCE = ROOT / 'src/libgstlgaudiodec/lgadec_codec.c'
-SCRATCH = ROOT / 'build/scratch'
-
-
-def function(source, name):
-    match = re.search(r'^(?:static inline )?[^\n;{}]*\b' + name + r'\([^;]*?\)\s*\{', source, re.M)
-    if not match:
-        raise AssertionError(name)
-    start = source.index('{', match.start())
-    end, depth = start + 1, 1
-    while depth:
-        depth += (source[end] == '{') - (source[end] == '}')
-        end += 1
-    return source[match.start():end]
-
-
-HARNESS = r'''
+/* DVD-LPCM and ADPCM repacking from lgadec_codec.c with a minimal lgadec. */
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -39,9 +14,11 @@ typedef struct {
     void *codec_data;
     struct { unsigned int block_align, channels, freq, bits_per_sample; } stream_info;
 } lgadec;
-'''
-
-TESTS = r'''
+// @match src/libgstlgaudiodec/lgadec_codec.c typedef struct \{[^}]*\} ADPCM_DATA_T;
+// @match src/libgstlgaudiodec/lgadec_codec.c typedef struct \{[^}]*\} PCM_DATA_T;
+// @match src/libgstlgaudiodec/lgadec_codec.c static const [^;]*\b_adpcm_(?:index|step|adapt)_table\[[^;]*;
+// @match src/libgstlgaudiodec/lgadec_codec.c static const [^;]*\b_adpcm_adapt_coeff_[12]\[[^;]*;
+// @extract src/libgstlgaudiodec/lgadec_codec.c clip_int16 _adpcm_decoder _adpcm_ms_expand_nibble rd16 lgadec_adpcm_resampling lgadec_dvdlpcm_header_check lgadec_dvdlpcm_resampling
 static void dvd_headers(void)
 {
     PCM_DATA_T pcm = {0};
@@ -207,35 +184,3 @@ int main(void)
     adpcm_blocks();
     puts("decoder codec regressions: PASS (128 headers, DVD 16/20/24, WAV/QT/MS ADPCM)");
 }
-'''
-
-
-def main():
-    source = re.sub(r'/\*.*?\*/', '', SOURCE.read_text(), flags=re.S)
-    parts = [HARNESS]
-    for name in ('ADPCM_DATA_T', 'PCM_DATA_T'):
-        parts.append(re.search(r'typedef struct \{[^}]*\} ' + name + ';', source).group())
-    for name in ('_adpcm_index_table', '_adpcm_step_table', '_adpcm_adapt_table',
-                 '_adpcm_adapt_coeff_1', '_adpcm_adapt_coeff_2'):
-        parts.append(re.search(r'static const [^;]*\b' + name + r'\[[^;]*;', source).group())
-    for name in ('clip_int16', '_adpcm_decoder', '_adpcm_ms_expand_nibble', 'rd16',
-                 'lgadec_adpcm_resampling', 'lgadec_dvdlpcm_header_check', 'lgadec_dvdlpcm_resampling'):
-        parts.append(function(source, name))
-    parts.append(TESTS)
-    SCRATCH.mkdir(parents=True, exist_ok=True)
-    compiler = shutil.which('clang') or shutil.which('cc')
-    if not compiler:
-        raise SystemExit('A host C compiler is required')
-    with TemporaryDirectory(prefix='decoder-codec-', dir=SCRATCH) as directory:
-        generated = Path(directory) / 'regression.c'
-        binary = Path(directory) / 'regression'
-        generated.write_text('\n\n'.join(parts))
-        subprocess.run([compiler, '-std=gnu11', '-O1', '-Wall', '-Wextra', '-Werror',
-                        '-fsanitize=address,undefined', '-fno-sanitize-recover=all',
-                        '-fno-omit-frame-pointer', str(generated), '-o', str(binary)],
-                       check=True, timeout=60)
-        subprocess.run([str(binary)], check=True, timeout=15)
-
-
-if __name__ == '__main__':
-    main()

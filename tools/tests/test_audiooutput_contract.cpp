@@ -1,4 +1,5 @@
-// Usage: python3 tools/tests/test_audiooutput_contract.py
+// @sources src/audiooutputd/connectionmanager.cpp src/audiooutputd/contract.cpp src/audiooutputd/qualitymanager.cpp src/audiooutputd/volumemanager.cpp
+// @cflags -std=c++14 -DAUDIOOUTPUT_HOST_TEST -Isrc/audiooutputd -isystem lg-opensource/public/rapidjson/include
 #include "audiooutput.hpp"
 #include <cassert>
 #include <cstring>

@@ -1,4 +1,4 @@
-/* Usage: python3 tools/test_appsrc.py. Recovered appsrc + libaa queue/sync bodies;
+/* Recovered appsrc + libaa queue/sync bodies;
  * peer callbacks, allocator failures and legacy ring progress are host mocks. */
 #include <assert.h>
 #include <errno.h>
@@ -113,7 +113,7 @@ static int mock_broadcast(pthread_cond_t *cond) { ++broadcasts; return 0; }
 #define realloc mock_realloc
 #define pthread_cond_wait mock_wait
 #define pthread_cond_broadcast mock_broadcast
-/* RECOVERED_FUNCTIONS */
+// @extract src/libaa/module.c add_pending_obj_locked aud_module_push_data aud_module_sync aud_port_sync_locked foreach_sync foreach_push_event aud_module_push_event del_output_port
 #undef realloc
 #undef pthread_cond_wait
 #undef pthread_cond_broadcast

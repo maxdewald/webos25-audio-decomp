@@ -1,4 +1,4 @@
-/* Usage: python3 tools/tests/test_aabase.py. Host mocks, not ARM execution. */
+/* Host mocks, not ARM execution. */
 #include <assert.h>
 #include <dirent.h>
 #include <dlfcn.h>

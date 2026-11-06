@@ -1,4 +1,4 @@
-/* Usage: python3 tools/tests/test_output_routing.py; actual source format predicates. */
+/* Actual source format predicates. */
 #include <assert.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -66,7 +66,7 @@ static bool renderer_get_jp4k(struct aud_block_info *b) { return jp4k; }
 static bool renderer_get_pcm_bypass(struct aud_block_info *b) { return pcm_bypass; }
 static unsigned int notifier_get_play_speed(int index) { return index<2 && index>=0?speed:1000; }
 
-#include "format_under_test.inc"
+// @extract src/kernel/aud/alsa_sndout.c sndout_codec_convert_output_codec input_codec_convert_output_codec input_codec_convert_sndout_codec _use_output _org_output _get_output_format_set_type _is_decoder_bypass _get_output_format
 
 static void check(struct alsa_sndout_output_type *out, enum output_codec_t expected, bool bypass) {
     enum output_codec_t codec=OUTPUT_CODEC_MAT; bool actual=true;

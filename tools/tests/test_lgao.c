@@ -197,7 +197,7 @@ static void _lgao_config_set_easevol(lgao *ao) {}
 static void _lgao_write_dump(lgao *ao, void *buf, unsigned len) {}
 static unsigned ns_to_pts(unsigned long long ts) { return ts * 9 / 100000; }
 
-/* RECOVERED_FUNCTIONS */
+// @extract src/libgstlgaudiosink/lgao.c _lgao_config_set_renderer_param lgao_config lgao_set_first_render lgao_set_pcm_bypass lgao_set_pcm_multi_channel lgao_set_audio_info lgao_close_renderer lgao_flush lgao_eos _lgao_set_playspeed lgao_set_playrate lgao_compare_audio_info lgao_set_mute lgao_disconnect_renderer lgao_push_first_event lgao_feed lgao_set_drop_renderer
 
 static lgao context(void)
 {

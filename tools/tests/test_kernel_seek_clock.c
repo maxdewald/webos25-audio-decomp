@@ -1,4 +1,4 @@
-/* Usage: python3 tools/tests/test_kernel_seek.py. Host contracts, not TV execution. */
+/* Host contracts, not TV execution. */
 #include <assert.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -74,7 +74,10 @@ static int input_set_hdmi_bypass(struct aud_block_info *b, bool drop, int port) 
 }
 static int multi_calls;
 static int input_set_hdmi_multi_pcm_out(struct aud_block_info *b, bool enable) { multi_calls++; return -1; }
-#include "clock_under_test.inc"
+// @extract src/kernel/aud/notifier.c notifier_set_play_speed notifier_get_play_speed
+// @extract src/kernel/aud/clock.c _get_output_info _update_output_info _update_output_sample_rate aud_clock_update_output aud_clock_set_input_index
+// @extract src/kernel/aud/output.c output_set_format _set_format _adec_codec_convert_output_codec _cb_output_status
+// @extract src/kernel/aud/alsa_decoder.c sndout_decoder_is_hdmi decoder_set_output_mode decoder_set_multi_pcm_out
 
 static void reset_clock(void) {
     memset(output_list, 0, sizeof(output_list));

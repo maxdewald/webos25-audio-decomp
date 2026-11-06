@@ -1,4 +1,4 @@
-/* Usage: python3 tools/test_libaa_match_regression.py. Source-extracted host mocks. */
+/* Source-extracted host mocks. */
 #define _GNU_SOURCE
 #include <assert.h>
 #include <stdarg.h>
@@ -30,7 +30,8 @@ static void invalidate(void *addr, int len, ADEC_BUF_T *buf)
     lengths[invalidations++] = len;
 }
 #define CACHE_INV(buf, p, n) (buf)->adap->pfnInvalidate((p), (n), (buf))
-/* RECOVERED_FUNCTIONS */
+// @extract src/libaa/module.c parse_bool aud_module_set_prop_locked
+// @extract src/libaa/buffers.c CommonBuffer_ReadData
 
 struct values {
     struct aud_module module;

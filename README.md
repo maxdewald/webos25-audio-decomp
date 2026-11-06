@@ -30,6 +30,7 @@ make status                          # coverage and instruction match per target
 make todo T=libumi                   # largest functions not yet reconstructed
 make diff T=libumi F=setOutputType   # instruction diff, original vs compiled src/
 make progress                        # regenerate chart; NO_MATCH=1 for coverage only
+make test                            # host tests in tools/tests/ (ASan/UBSan); T=name filters
 ```
 
 1. Check `make public-source-map` first (references, not verified coverage), then `make todo`.

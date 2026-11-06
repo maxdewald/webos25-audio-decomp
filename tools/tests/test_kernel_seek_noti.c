@@ -1,4 +1,4 @@
-/* Usage: python3 tools/tests/test_kernel_seek.py. Workqueue callback FIFO contract. */
+/* Workqueue callback FIFO contract. */
 #include <assert.h>
 #include <stdbool.h>
 #include <stddef.h>
@@ -54,7 +54,8 @@ typedef struct { struct { unsigned sender; } senderInfo;
          (e)=container_of((e)->m.next,struct named_event,m))
 #define link_del list_del
 #define ADEC_FREE(ctx,p) kfree(p)
-#include "noti_under_test.inc"
+// @extract src/kernel/aud/kaimc.c noti_handler_work cb_func_local
+// @extract src/kernel/aud/adec_imc.c process_named_event_handle
 int main(void) {
     struct noti_info n={.callback_func=callback,.repeat=true};
     init_list(&n.list); init_list(&n.param_list); n.callback_param=&n; active=&n;

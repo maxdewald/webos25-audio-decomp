@@ -1,3 +1,5 @@
+// @sources src/starfish-media-pipeline/metadata.cpp src/starfish-media-pipeline/track_metadata.cpp
+// @cflags -std=c++14 -isystem lg-opensource/public/boost
 #include "../../src/starfish-media-pipeline/metadata.hpp"
 #include <cassert>
 #include <iostream>

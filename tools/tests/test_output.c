@@ -159,7 +159,8 @@ static void _old_connect_output(struct alsa_sndout_output_type *type, int old)
 { R(OLD_CONNECT,0,0,0,0); }
 static void notifier_output_changed(void) { R(NOTIFY,0,0,0,0); }
 
-/* RECOVERED_FUNCTIONS */
+// @extract src/kernel/aud/output.c output_set_mute output_set_delay _set_format _adec_codec_convert_output_codec _cb_output_status output_pre_connect output_post_connect output_pre_disconnect output_post_disconnect
+// @extract src/kernel/aud/alsa_sndout.c _set_output sndout_earc_output_type
 
 static unsigned int occurrences(int id)
 {

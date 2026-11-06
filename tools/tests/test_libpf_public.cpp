@@ -1,4 +1,20 @@
+// @sources src/libpf/audio_metadata.cpp
+// @cflags -std=c++14 -Isrc/libpf -isystem lg-opensource/public/boost -isystem lg-opensource/public/rapidjson/include
+// @pkg glib-2.0
 /* Host tests for public-dependency-assisted libpf reconstructions. */
+/* options.cpp gets only libpf.h's PmLog part, so GStreamer is not needed. */
+#include <cstdio>
+#include <cstring>
+#include <unistd.h>
+#include <sys/syscall.h>
+#ifndef SYS_gettid
+#define SYS_gettid SYS_getpid
+#endif
+static long libpf_test_syscall(long) { return static_cast<long>(getpid()); }
+#define syscall libpf_test_syscall
+// @match src/libpf/libpf.h (?s)/\* PmLogLib.*?(?=/\* Custom event)
+#define LIBPF_H
+#include "../../src/libpf/options.cpp"
 #include "options.h"
 #include "audio_metadata.h"
 #include "shared_ptr.h"
@@ -12,8 +28,6 @@
 #include <vector>
 
 extern "C" {
-struct PmLogContextStruct { int level; };
-using PmLogContext = PmLogContextStruct *;
 static std::vector<std::string> messages;
 int PmLogGetContext(const char *name, PmLogContext *ctx)
 {

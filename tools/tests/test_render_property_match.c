@@ -1,33 +1,4 @@
-#!/usr/bin/env python3
-"""Usage: python3 tools/tests/test_render_property_match.py
-
-Execute recovered property getter and timestamp-offset branches with host mocks.
-These are source regression tests, not execution of LG's binary.
-"""
-import os
-from pathlib import Path
-import re
-import shutil
-import subprocess
-import tempfile
-
-from test_sink_context import function
-
-ROOT = Path(__file__).resolve().parents[2]
-
-
-def main():
-    cc = shutil.which(os.environ.get('CC', 'cc'))
-    if not cc:
-        raise SystemExit('C compiler missing')
-    props = (ROOT / 'src/libgstlgaudiosink/render_props.c').read_text()
-    element = (ROOT / 'src/libgstlgaudiosink/render_element.c').read_text()
-    header = (ROOT / 'src/libgstlgaudiosink/render_element.h').read_text()
-    getter = function(props, 'gst_lg_audio_render_get_property')
-    offset = function(element, 'gst_lg_audio_render_update_ts_offset')
-    enum = re.search(r'enum \{\s*PROP_0,.*?\n\};', header, re.S).group()
-    calls = sorted(set(re.findall(r'\b(lgao_\w+)\s*\(', getter)))
-    fixture = r'''
+/* Recovered property getter and ts-offset branches with host mocks. */
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -80,20 +51,27 @@ static void g_value_set_string(GValue *v, const char *s) { v->string=s; }
 static void gst_base_sink_set_ts_offset(GstLgAudioRender *self, int64_t n) {
     (void)self; ts=n;
 }
-'''
-    fixture += enum + '\n'
-    for name in calls:
-        if name == 'lgao_get_buffer_status':
-            fixture += f'#define {name}(ao,out) read_size(out)\n'
-        elif name in {'lgao_get_rts', 'lgao_get_fade'}:
-            fixture += f'#define {name}(ao,kind,out) read_int("{name}",out)\n'
-        elif name == 'lgao_get_buffer_size_for_directmedia':
-            fixture += f'#define {name}(ao,out,kind) read_int("{name}",out)\n'
-        else:
-            fixture += f'#define {name}(ao,out) read_int("{name}",out)\n'
-    fixture += 'static void get(GObject *object,guint prop_id,GValue *value,GParamSpec *pspec)\n' + getter
-    fixture += '\nstatic void update(GstLgAudioRender *pAudioRen,gint playspeed)\n' + offset
-    fixture += r'''
+// @match src/libgstlgaudiosink/render_element.h (?s)enum \{\s*PROP_0,.*?\n\};
+#define lgao_get_apptype(ao,out) read_int("lgao_get_apptype",out)
+#define lgao_get_buffer_size_for_directmedia(ao,out,kind) read_int("lgao_get_buffer_size_for_directmedia",out)
+#define lgao_get_buffer_status(ao,out) read_size(out)
+#define lgao_get_fade(ao,kind,out) read_int("lgao_get_fade",out)
+#define lgao_get_game_mode(ao,out) read_int("lgao_get_game_mode",out)
+#define lgao_get_lipsync_mode(ao,out) read_int("lgao_get_lipsync_mode",out)
+#define lgao_get_lipsync_offset(ao,out) read_int("lgao_get_lipsync_offset",out)
+#define lgao_get_mode_mixer(ao,out) read_int("lgao_get_mode_mixer",out)
+#define lgao_get_mute(ao,out) read_int("lgao_get_mute",out)
+#define lgao_get_nodelay(ao,out) read_int("lgao_get_nodelay",out)
+#define lgao_get_pcm_bypass(ao,out) read_int("lgao_get_pcm_bypass",out)
+#define lgao_get_pcm_multi_channel(ao,out) read_int("lgao_get_pcm_multi_channel",out)
+#define lgao_get_playrate(ao,out) read_int("lgao_get_playrate",out)
+#define lgao_get_port(ao,out) read_int("lgao_get_port",out)
+#define lgao_get_queue_max_length(ao,out) read_int("lgao_get_queue_max_length",out)
+#define lgao_get_rts(ao,kind,out) read_int("lgao_get_rts",out)
+// @extract src/libgstlgaudiosink/render_props.c gst_lg_audio_render_get_property
+// @extract src/libgstlgaudiosink/render_element.c gst_lg_audio_render_update_ts_offset
+#define get gst_lg_audio_render_get_property
+#define update gst_lg_audio_render_update_ts_offset
 int main(void) {
     GstLgAudioRender sink={.currentPTS=987654321,.disableBasesinkSync=1,
                            .isSeamless=1,.vsp_mode=1};
@@ -144,22 +122,3 @@ int main(void) {
     sink.lipsync_offset=400;update(&sink,1000);assert(ts==0);
     puts("PASS render properties: getter defaults/types/app mappings; timestamp speed/offset boundaries");
 }
-'''
-    scratch = ROOT / 'build/scratch'
-    scratch.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix='render-property-match-', dir=scratch) as temporary:
-        src, binary = Path(temporary) / 'properties.c', Path(temporary) / 'properties'
-        src.write_text(fixture)
-        for label, flags in [('strict', ['-O2']),
-                             ('sanitized', ['-O1', '-fsanitize=address,undefined',
-                                            '-fno-sanitize-recover=all'])]:
-            command = [cc, '-std=c11', '-Wall', '-Wextra', '-Werror',
-                       '-Wno-unused-parameter', '-Wno-unused-variable', *flags,
-                       '-I', str(ROOT / 'src'), str(src), '-o', str(binary)]
-            print(label + ': ' + ' '.join(command), flush=True)
-            subprocess.run(command, cwd=ROOT, check=True, timeout=60)
-            subprocess.run([str(binary)], cwd=ROOT, check=True, timeout=15)
-
-
-if __name__ == '__main__':
-    main()

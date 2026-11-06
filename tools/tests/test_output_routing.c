@@ -1,4 +1,4 @@
-/* Usage: python3 tools/tests/test_output_routing.py (extracts the owned kernel bodies). */
+/* Output routing topology on the recovered kernel bodies. */
 #include <assert.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -162,7 +162,8 @@ static int output_add(int output, bool mixed) { assert(output == COMMON_HP); ret
 static void sndout_init(void) { init_calls++; alsa_sndout_info[0].isOpen=true; }
 static void output_set_earc_on(struct aud_block_info *block, bool on) { earc_calls++; }
 
-#include "routing_under_test.inc"
+// @extract src/kernel/aud/alsa_sndout.c _connect_pcm _set_output _connect_output _old_connect_output _old_arc_connect_output _connect_output_all sndout_connect_output default_hp_connection sndout_earc_onoff sndout_earc_output_type
+// @extract src/kernel/aud/notifier.c notifier_output_changed notifier_input_changed notifier_set_play_speed notifier_get_play_speed
 
 static void reset(void) {
     memset(alsa_sndout_info,0,sizeof(alsa_sndout_info));

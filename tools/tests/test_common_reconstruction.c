@@ -1,3 +1,4 @@
+// @sources src/libaudcommon/adapter.c src/libaudcommon/data.c src/libaudcommon/event.c
 /* Host regressions for libaudcommon adapter and metadata reconstruction. */
 #include <assert.h>
 #include <stdint.h>

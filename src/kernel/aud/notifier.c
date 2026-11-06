@@ -38,8 +38,7 @@ unsigned int play_speed[PLAY_SPEED_INDEX_MAX] = { 1000, 1000 };
  * This is NOT a reconnect/event queue in this Image: renderer_change_output
  * @0xffffffc010cad3f0 is just RET. Reconnection occurs separately inside the
  * control handlers, before notification; even unchanged valid writes notify.
- * Digest-bound aligned direct-call evidence: test_output_routing.py. Indirect
- * callers are not ruled out. */
+ * Callers are direct BLs in the Image; indirect callers are not ruled out. */
 /* @0xffffffc010cc32a0 */
 void notifier_output_changed (void)
 {

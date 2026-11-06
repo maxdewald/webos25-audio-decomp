@@ -18,6 +18,7 @@ import concurrent.futures
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -98,6 +99,13 @@ def insert(kind, args):
 
 
 def run(path):
+    try:
+        return build_and_run(path)
+    except Exception as error:  # one broken test must not hide the others' results
+        return str(path.relative_to(TESTS).with_suffix('')), 'FAIL', repr(error)
+
+
+def build_and_run(path):
     name = str(path.relative_to(TESTS).with_suffix(''))
     text = path.read_text()
     opts = {}
@@ -114,6 +122,8 @@ def run(path):
                 raise Skip(f'missing {p}')
         packages = ' '.join(opts.get('pkg', [])).split()
         if packages:
+            if not shutil.which('pkg-config'):
+                raise Skip('pkg-config not installed')
             result = subprocess.run(['pkg-config', '--cflags', '--libs', *packages],
                                     capture_output=True, text=True)
             if result.returncode:

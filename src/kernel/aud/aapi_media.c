@@ -1249,7 +1249,8 @@ int aren_open (int index)
  * +0x78/+0x80 disconnect/destroy unconditionally, no decrement/reference test.
  * bm_destroy_block -> _bm_destroy_block_locked @0xffffffc010c9ee80 invokes
  * impl->destructor (+0x28) then frees the block. renderer_destroy deletes both
- * pipelines. A second fd is therefore NOT a harmless query handle. */
+ * pipelines. A second fd is therefore NOT a harmless query handle.
+ * Never touches eARC mix_option or the mixer BYPASS_PORT mute/reservation. */
 int aren_close (int index)
 {
     ARENDERER_INFO_T *ren = NULL;
@@ -1468,7 +1469,7 @@ int aren_set_speed (int index, unsigned int speed)
     return 0;
 }
 
-/* @0xffffffc010cbe840 */
+/* @0xffffffc010cbe840: AREN_SET_MUTE -> main-chain gain only (gain has no bypass uid2). */
 int aren_set_mute (int index, unsigned int mute)
 {
     ARENDERER_INFO_T *ren = NULL;

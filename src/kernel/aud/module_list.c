@@ -863,6 +863,7 @@ static int send_cmd (const char *name, unsigned int uid, int argc, char **argv)
     return 0;
 }
 
+/* Shipped @0xffffffc010c92630: "cmd arg..." as kstrtouint base 0, async, unchecked. */
 static int proc_inst_cmd (void *arg, int argc, char **argv)
 {
     struct aud_mod_inst *inst = arg;
@@ -870,6 +871,7 @@ static int proc_inst_cmd (void *arg, int argc, char **argv)
     return send_cmd (inst->name, inst->uid, argc, argv);
 }
 
+/* Shipped @0xffffffc010c91dc0: "name value" -> ADEC_CMD_SET_PROP "name=value"; no result. */
 static int proc_inst_prop (void *arg, int argc, char **argv)
 {
     struct aud_mod_inst *inst = arg;

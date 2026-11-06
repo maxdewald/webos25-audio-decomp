@@ -24,7 +24,11 @@
 struct aud_mutex { uint32_t opaque[7]; };
 struct aud_cond { uint32_t opaque[4]; };
 struct aud_thread;
-struct aud_event;
+struct aud_event {
+    uint32_t object[3];
+    int type;                       /* +0x0c: FIRST=1, LAST=2, DISCONNECT=6 */
+    unsigned prop;                  /* +0x10: bit0 direction, bit1 local-only */
+};
 struct aud_starter;
 struct mod_glue;
 struct link { struct link *prev, *next; };
@@ -58,6 +62,7 @@ struct buffer_status {
 struct adec_buf {
     unsigned offset;                /* original +0x38 */
     int (*get_au_cnt)(struct adec_buf *);                         /* +0x90 */
+    int (*slot_0x98)(struct adec_buf *);  /* +0x98: name not recovered */
     int (*get_current_info)(int *, struct au_info *, struct adec_buf *); /* +0xbc */
     int (*read_data)(unsigned char **, int *, int *, struct adec_buf *); /* +0xc0 */
     int (*flush_data)(int, struct adec_buf *);                    /* +0xc4 */
@@ -66,7 +71,9 @@ struct adec_buf {
 struct aud_port {
     int number;
     struct mod_glue *module;         /* +0x04 */
+    struct aud_mutex check_free_mutex; /* +0x10c */
     struct link starter_link;        /* +0x130 */
+    struct adec_buf *legacy_buf;     /* +0x13c: InterBufWriter of gluepw */
     struct aud_starter *starter;     /* +0x138 */
 };
 struct aud_starter {
@@ -82,11 +89,14 @@ struct aud_starter {
 };
 struct mod_glue {
     uint32_t uid;                   /* module +0x04 */
+    void *aimc_ctx;                 /* +0x68 */
     void *imc;                      /* +0xf0 */
     struct aud_starter *starter;    /* +0xf4 */
     struct adec_buf *shared_buf;    /* +0xf8 */
     unsigned cowork_uid;            /* +0xfc */
+    struct adec_buf *legacy_out;    /* +0x104: Glue_SetBuffer(0x100, buf) */
     unsigned shbuf_offset;          /* +0x108 */
+    int last_data_size;             /* +0x114: size of last chained aud_data */
     void *meta_adapter;             /* semantic adapter, original embedded +0x120 */
 };
 struct shared_buffer_cmd {
@@ -133,6 +143,13 @@ extern struct aud_port *aud_module_get_output_port(struct mod_glue *, int);
 extern struct aud_port *aud_module_new_output_port(struct mod_glue *, int);
 extern void aud_module_del_output_port(struct mod_glue *, int);
 extern void aud_data_adapter_cleanup(void *);
+extern void *aud_event_serialize(struct aud_event *, unsigned *len);
+extern int aimc_send_command(void *, uint32_t cmd, uint32_t src, uint32_t dst, void *, unsigned);
+extern int aud_module_push_event(struct mod_glue *, int, struct aud_event *);
+extern int aud_module_push_data(struct mod_glue *, int, struct aud_data *);
+extern int aud_module_default_event(struct mod_glue *, struct aud_port *, struct aud_event *);
+extern int aud_event_value_get_int(struct aud_event *, const char *, int);
+extern struct aud_data *aud_data_new_zero(unsigned);
 
 static struct aud_port *linked_port(struct link *l)
 {
@@ -459,6 +476,86 @@ int SetSharedBufferStatus(struct mod_glue *g, const struct remote_status_cmd *cm
         break;
     default: break;
     }
+    return 0;
+}
+
+/* Pads the writer ring with silent AUs only when the FIRST asks for it; es=1 alone never does. */
+static void glue_first_zero_fill(struct mod_glue *g, struct adec_buf *w, struct aud_event *e,
+                                 bool push_ref)
+{
+    int n = w->slot_0x98(w) - w->get_au_cnt(w);
+    int size = aud_event_value_get_int(e, "processing-size", g->last_data_size);
+    int with_zero = aud_event_value_get_int(e, "with-zero-buffer", 0);
+    if (push_ref)
+        (void)aud_module_push_event(g, 0, e);
+    if (!with_zero)
+        return;
+    for (int i = 0; i < n - 1; i++)
+        (void)aud_module_push_data(g, 0, aud_data_new_zero((unsigned)size));
+}
+
+/* @0x600ff5e0 Glue_Event (gluepw/gluepr/glue_legacy share it; xtobjdump 0x600ff5e0..0x600ff84c).
+ * Events not marked local (prop bit1) cross to the peer glue as serialized cmd 0x10190000,
+ * except DISCONNECT. With a legacy output buffer (+0x104) only FIRST/LAST/DISCONNECT pass;
+ * every other event type is dropped here. No LAST/stop generates zero, pause or silence
+ * bursts: zero AUs come only from FIRST with-zero-buffer!=0. */
+int Glue_Event(struct mod_glue *g, struct aud_port *port, struct aud_event *e)
+{
+    unsigned prop = e->prop;
+    if (!(prop & 2) && g->cowork_uid &&
+        (g->starter ? !(prop & 1) : (prop & 1)) && e->type != 6) {
+        unsigned len;
+        void *buf = aud_event_serialize(e, &len);
+        if (buf) {
+            (void)aimc_send_command(g->aimc_ctx, 0x10190000u, g->uid, g->cowork_uid, buf, len);
+            free(buf);
+        }
+        /* else "glue%p, no mem" */
+    }
+
+    if (g->legacy_out) {
+        switch (e->type) {                          /* 0x600ff606/60e/616 beqi.w18 1/2/6 */
+        case 1:
+            glue_first_zero_fill(g, g->legacy_out, e, true);
+            return 0;
+        case 2:
+            return aud_module_push_event(g, 0, e);
+        case 6:
+            return aud_module_default_event(g, port, e);
+        default:
+            /* "drop event %s" */
+            aud_object_put(e);
+            return 0;
+        }
+    }
+
+    if (e->type != 1)
+        return aud_module_default_event(g, port, e);
+    struct aud_port *out = aud_module_get_output_port(g, 0);
+    if (!out)
+        return aud_module_default_event(g, port, e);
+    (void)aud_module_push_event(g, 0, aud_object_get(e));
+    if (out->legacy_buf)
+        glue_first_zero_fill(g, out->legacy_buf, e, false);
+    aud_object_put(e);
+    return 0;
+}
+
+/* @0x600ff90c set_shbuf_pw: writer side. Installs the InterBufWriter in out0's
+ * legacy_buf under check_free_mutex; insert_au happens in the port sync. */
+int set_shbuf_pw(struct mod_glue *g, const struct shared_buffer_cmd *cmd)
+{
+    struct aud_port *p = aud_module_new_output_port(g, 0);
+    if (!p)
+        return -1;                                  /* "glue%p, no port" */
+    g->shared_buf = CreateBuffer(g, cmd, 0);
+    if (!g->shared_buf) {
+        aud_module_del_output_port(g, 0);           /* "glue%p, no glue" */
+        return -1;
+    }
+    aud_mutex_lock(&p->check_free_mutex);
+    p->legacy_buf = g->shared_buf;
+    aud_mutex_unlock(&p->check_free_mutex);
     return 0;
 }
 

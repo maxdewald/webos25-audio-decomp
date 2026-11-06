@@ -43,7 +43,6 @@ struct mock_data {
     struct aud_data d;
     struct aud_data *parent;
 };
-struct aud_event { uint32_t object[4]; unsigned char value; };
 struct aud_thread { int unused; };
 static struct aud_thread thread;
 static struct aud_port ports[2];
@@ -191,14 +190,14 @@ struct aud_event *aud_event_deserialize(const void *data, unsigned size)
     assert(e);
     e->object[0] = 1;
     e->object[1] = 2;
-    e->value = *(const unsigned char *)data;
+    e->type = *(const unsigned char *)data;
     return e;
 }
 int aud_module_event(struct mod_glue *g, struct aud_port *p, struct aud_event *e)
 {
     assert(p == NULL && consumed == current.size && locks == 1);
     assert(g == ports[events % 2 == 0 ? 1 : 0].module);
-    assert(e->value == expected[0]);
+    assert(e->type == expected[0]);
     record('E');
     ++events;
     aud_object_put(e);

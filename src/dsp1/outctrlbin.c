@@ -24,7 +24,11 @@
  *    arrives without es_mode, it is dropped while muted.
  * Note: the constructor sets mute-output = 1, and the kernel's output_pre_disconnect
  * also sets mute-output/mute-input = 1. ES therefore stays zeroed until the kernel
- * writes mute-output=0.
+ * writes mute-output=0. The kernel's "mute-output=%d\mute-input=%d" SET_PROP also
+ * reaches gain/delay directly: bin_cmd @0x600f9858 runs aud_module_cmd on every
+ * propagate-list child (0x600f992b..61) before the bin's own default command, or
+ * queues it for aud_module_bin_propagate_pending when no children exist yet.
+ * outctrlbin itself has no mute-input property; only gain clears it.
  */
 #include <stdbool.h>
 #include <stdint.h>

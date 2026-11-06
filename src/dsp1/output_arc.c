@@ -160,7 +160,9 @@ static inline int ceil_log2(int x)
 /* Inlined strncmp ladder (0x60123982..0x60123e36). Lengths are the literal lengths, so
  * these are prefix matches. "dts_hd_ma" is tried before "dts_ma"/"dts_hd"/"dts", so
  * the longest name wins. Anything else stays PCM (0). There is no DTS handling beyond
- * this label: the payload goes through cpy_es/cpy_es8 like any other ES. */
+ * this label: the payload goes through cpy_es/cpy_es8 like any other ES.
+ * "dtshd" matches only "dts" (5); "truehd" matches nothing (PCM 0, while es stays set).
+ * Kernel _cb_output_status maps 5..9 to PCM, so only pcm..mat drive eARC ES mode. */
 static inline int out_codec_from_str(const char *c)
 {
     if (!strncmp(c, "pcm", 3))       return OUT_CODEC_PCM;
@@ -231,7 +233,10 @@ int out_event(struct out_module *m, struct aud_port *port, struct aud_event *ev)
                 HAL_SetSpdifEsMode(st.data_rate);
             } else if (strncmp(m->name, "output_arc", 10) == 0) {
                 HAL_SetIEC1958ValidBit(1, 5);         /* eARC validity = non-audio */
-                HAL_SetArcEsMode(st.data_rate);       /* 768000 -> fs code 9 (HBR) */
+                /* Lane fs code from data-rate only: 192000 -> 0xe, 768000 -> 9. dsp1 has
+                 * no "clock-x4" string; LG's MAT encoder (encode_init @0x60126d10) also
+                 * sends data-rate 192000, ch 8, bps 16. */
+                HAL_SetArcEsMode(st.data_rate);
             }
             m->stride_shift = ceil_log2(m->channels * m->bits_per_sample / 8);
             m->output_stride_shift = ceil_log2(m->stride_ch * 32 / 8);

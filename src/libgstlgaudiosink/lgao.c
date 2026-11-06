@@ -1987,7 +1987,23 @@ int lgao_push_first_event(void *a)
     if (info->lfe_enable)
         aud_event_value_set_bool(event, "lfe-enable", true);
 
-    if (!ao->pcm_bypass && !ao->pcm_multi_ch) {
+    /* raw 0x282d0+: one ldrh tests both adjacent flags; PCM branch is the fallthrough */
+    if (ao->pcm_bypass || ao->pcm_multi_ch) {
+        int acmod = info->numberOfChannel < 3 ? 2 : 7;
+
+        LOGN(0xb26, "pcm_bypass or pcm_multi_ch\n");
+        event_bypass = aud_event_dup_and_set(event, "acmod", aud_value_int, acmod, NULL);
+        if (!event_bypass) {
+            LOGE(0xb2d, "first_event is NULL\n");
+            goto fail;
+        }
+        aud_event_value_set_int(event, "acmod", acmod);
+        LOGN(0xb33, "pcm_bypass/pcm_multi_ch acmod = %d\n", acmod);
+        if (ao->pcm_bypass) {
+            aud_event_value_set_bool(event, "ch-mapping-lfe-c", true);
+            aud_event_value_set_bool(event_bypass, "ch-mapping-lfe-c", true);
+        }
+    } else {
         /* ES bypass: data_* describe the IEC 61937 stream (defaults 2ch/16bit/48k) */
         if (info->data_channels < 1)
             info->data_channels = 2;
@@ -2013,21 +2029,6 @@ int lgao_push_first_event(void *a)
         if (str) {
             LOGN(0xb54, "Event BYPASSS : %s", str);
             free(str);
-        }
-    } else {
-        int acmod = info->numberOfChannel < 3 ? 2 : 7;
-
-        LOGN(0xb26, "pcm_bypass or pcm_multi_ch\n");
-        event_bypass = aud_event_dup_and_set(event, "acmod", aud_value_int, acmod, NULL);
-        if (!event_bypass) {
-            LOGE(0xb2d, "first_event is NULL\n");
-            goto fail;
-        }
-        aud_event_value_set_int(event, "acmod", acmod);
-        LOGN(0xb33, "pcm_bypass/pcm_multi_ch acmod = %d\n", acmod);
-        if (ao->pcm_bypass) {
-            aud_event_value_set_bool(event, "ch-mapping-lfe-c", true);
-            aud_event_value_set_bool(event_bypass, "ch-mapping-lfe-c", true);
         }
     }
 
@@ -2123,15 +2124,19 @@ int lgao_feed(void *a, void *buff, unsigned int buffLength, unsigned long long t
          (unsigned long long)buffer->info.timestamp, outType);
     memcpy(buffer->data, buff, buffLength);
 
-    if (outType == LGAO_DATA_ES) {
+    if (outType == LGAO_DATA_PCM) {
+        buffer->info.type = type_pcm;
+        module_appsrc_push_data(ao->appsrc,
+                                (struct aud_data *)aud_object_get(&buffer->object), true);
+        if (ao->pcm_bypass || ao->pcm_multi_ch)
+            module_appsrc_push_data(ao->bypass_appsrc,
+                                    (struct aud_data *)aud_object_get(&buffer->object), true);
+    } else if (outType == LGAO_DATA_ES) {
         buffer->info.type = type_es;
         module_appsrc_push_data(ao->bypass_appsrc,
                                 (struct aud_data *)aud_object_get(&buffer->object), true);
     } else {
-        if (outType == LGAO_DATA_PCM)
-            buffer->info.type = type_pcm;
-        else
-            buffer->info.type = outType == LGAO_DATA_METADATA2 ? type_meta_ext : type_meta;
+        buffer->info.type = outType == LGAO_DATA_METADATA2 ? type_meta_ext : type_meta;
         module_appsrc_push_data(ao->appsrc,
                                 (struct aud_data *)aud_object_get(&buffer->object), true);
         if (ao->pcm_bypass || ao->pcm_multi_ch)

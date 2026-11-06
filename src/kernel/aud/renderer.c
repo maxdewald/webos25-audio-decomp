@@ -1061,7 +1061,7 @@ int renderer_unregister_event (struct aud_block_info *block, enum audio_renderer
     return 0;
 }
 
-/* @0xffffffc010ca95d0 */
+/* @0xffffffc010ca95d0: id 0 only resets main gain mute-input=0; id 1 sets bypass lipsync dataType=1. */
 static int renderer_set_default (struct aud_block_info *block, unsigned int id)
 {
     struct aud_renderer_info *renderer = (struct aud_renderer_info *) block;

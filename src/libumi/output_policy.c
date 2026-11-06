@@ -77,7 +77,9 @@ static int channel_and_mix(umi_tv_audio *a, int ct, int device_channels, int *mo
 }
 
 /* @0x41b64: cache request and eARC state BEFORE ALSA write, even on failure.
- * [2,ct,cn,0,mo], then optional SP50; delay notification only after success. */
+ * [2,ct,cn,0,mo], then optional SP50; delay notification only after success.
+ * Sole writer of the control; libumi never reads it back. The shipped kernel
+ * rejects ct 10/11 (-EINVAL), so it keeps the previous [st,ct,cn,sr,mo]. */
 bool setEArcOutputType(umi_tv_audio *a, int ct, int mo, int cn)
 {
     int words[5] = {2, ct, cn, 0, mo};

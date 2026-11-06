@@ -99,10 +99,13 @@ def insert(kind, args):
 
 
 def run(path):
+    name = str(path.relative_to(TESTS).with_suffix(''))
     try:
         return build_and_run(path)
+    except Skip as skip:
+        return name, 'SKIP', str(skip)
     except Exception as error:  # one broken test must not hide the others' results
-        return str(path.relative_to(TESTS).with_suffix('')), 'FAIL', repr(error)
+        return name, 'FAIL', repr(error)
 
 
 def build_and_run(path):
@@ -116,21 +119,18 @@ def build_and_run(path):
                for p in sorted(ROOT.glob(pattern))]
     paths = [re.sub(r'^-(?:I|isystem)', '', f) for f in flags] + sources
     paths += [a.split(None, 1)[0] for k in INSERTS for a in opts.get(k, [])]
-    try:
-        for p in paths:
-            if p.startswith('lg-opensource/') and not (ROOT / p).exists():
-                raise Skip(f'missing {p}')
-        packages = ' '.join(opts.get('pkg', [])).split()
-        if packages:
-            if not shutil.which('pkg-config'):
-                raise Skip('pkg-config not installed')
-            result = subprocess.run(['pkg-config', '--cflags', '--libs', *packages],
-                                    capture_output=True, text=True)
-            if result.returncode:
-                raise Skip(f'pkg-config {" ".join(packages)} failed')
-            flags += shlex.split(result.stdout)
-    except Skip as skip:
-        return name, 'SKIP', str(skip)
+    for p in paths:
+        if p.startswith('lg-opensource/') and not (ROOT / p).exists():
+            raise Skip(f'missing {p}')
+    packages = ' '.join(opts.get('pkg', [])).split()
+    if packages:
+        if not shutil.which('pkg-config'):
+            raise Skip('pkg-config not installed')
+        result = subprocess.run(['pkg-config', '--cflags', '--libs', *packages],
+                                capture_output=True, text=True)
+        if result.returncode:
+            raise Skip(f'pkg-config {" ".join(packages)} failed')
+        flags += shlex.split(result.stdout)
     binary = OUT / name
     binary.parent.mkdir(parents=True, exist_ok=True)
     source = path

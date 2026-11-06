@@ -24,11 +24,13 @@ def main():
     if cc is None:
         raise SystemExit("C compiler missing; set CC to an installed compiler")
     sources = [ROOT / "src/dsp2" / f"{name}.c"
-               for name in ("gain", "delay", "debug", "glue")]
+               for name in ("gain", "delay", "debug", "glue", "srcbin", "pcmcvt",
+                            "rft", "lgsrc", "rts", "lipsync", "mssrc")]
     run([cc, "-std=c11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only", *sources])
     tests = ROOT / "tools/tests/dsp2"
     with tempfile.TemporaryDirectory(prefix="dsp2-tests-") as temporary:
-        for name in ("gain", "delay", "transport", "debug"):
+        for name in ("gain", "delay", "transport", "debug", "srcbin", "pcmcvt",
+                     "pcmcvt_rft", "rft", "lgsrc", "rts", "lipsync", "mssrc"):
             output = Path(temporary) / name
             inputs = [tests / f"{name}.c"]
             if name == "delay":
@@ -38,7 +40,7 @@ def main():
                  "-fdata-sections", *flags, *inputs, "-o", output])
             run([output])
     run(["sh", "-n", ROOT / "tools/xtobjdump.sh"])
-    print("PASS: source syntax, ES/discovery semantics and decoder shell syntax", flush=True)
+    print("PASS: source syntax, ES/discovery, converter/FIRST semantics and decoder shell syntax", flush=True)
 
 
 if __name__ == "__main__":

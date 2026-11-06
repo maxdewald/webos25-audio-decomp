@@ -34,6 +34,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 enum lipsync_action {            /* names from the table @0x601062c0 */
     LS_OFF = 0,                  /* "LIPSYNC_OFF" */
@@ -54,7 +55,7 @@ enum lipsync_action {            /* names from the table @0x601062c0 */
 
 #define LIPSYNC_EVT_FIRST_OUTPUT 0xca04u
 
-struct aud_event { int pad[3]; int type; };
+struct aud_event { int pad[3]; int type; unsigned flags; /* +0x10 */ };
 struct aud_data {
     int pad[4];
     int type;                    /* +0x10 0 pcm, 1 es, 2 meta, 3 meta_ext */
@@ -81,7 +82,7 @@ struct lipsync {
     unsigned bytes_in;           /* +0x138 consumed bytes */
     unsigned bytes_out;          /* +0x13c bytes for every action except SKIP */
     int   drop_count;            /* +0x140 frames to drop in write_output */
-    int   autotest_mode;         /* +0x144 "autotest_mode": AuiLogger dump */
+    int   autotest_mode;         /* +0x144 "autotest_mode": fill payload with 0x1f */
     int   repeat_cnt, skip_cnt, cnt150; /* +0x148/+0x14c/+0x150 */
     int   idle_cnt;              /* +0x154 */
     int   last_diff;             /* +0x158 */
@@ -148,11 +149,9 @@ extern void msf_flush_metadata(void *);                                       /*
 extern void aud_mutex_lock(void *), aud_mutex_unlock(void *);
 extern void aud_cond_signal(void *);
 extern void aud_cond_wait_timeout(void *, void *, int ms);
-extern int  strcmp(const char *, const char *);
 extern void lipsync_fadein(int ch, void *buf, unsigned size);                 /* @0x600a2138 */
 extern void lipsync_fadeout(int ch, void *buf, unsigned size);                /* @0x600a2218 */
 extern void _lipsync_write_lipsync_state(struct lipsync *, int action);       /* @0x600a22ec */
-extern void AuiLogger_dump(void *buf, int id, unsigned size);                 /* @0x600fb998 */
 
 int _lipsync_state(struct lipsync *ls);
 int _lipsync_core(struct lipsync *ls);
@@ -176,9 +175,13 @@ void _lipsync_put_data(struct lipsync *ls, unsigned n)
     aud_data_adapter_flush(ls->adapter, n);
 }
 
+/* Inlined at 0x600a2401..2424 and 0x600a2609..2624: get a reference to the
+ * retained event, not a duplicate; no FIRST fields are rewritten. aud_event_str
+ * and its free @0x600e9550 are omitted logging-only allocation/cleanup. The push
+ * consumes the extra reference (@0x60072b38); +0x238 keeps the original one. */
 static void lipsync_send_first(struct lipsync *ls)
 {
-    aud_module_push_event(ls, 0, aud_object_get(ls->first));  /* "send first event (%s)" lvl 3 */
+    aud_module_push_event(ls, 0, aud_object_get(ls->first));
     ls->first_sent = 1;
 }
 
@@ -198,7 +201,14 @@ void _lipsync_write_metadata(struct lipsync *ls, int nspf, int discard)
     /* MS12 metadata path: msf_* dequeue/attach, FLIX-heavy, not needed for ES [GAP] */
 }
 
-/* @0x600a2554 _lipsync_write_output */
+/* @0x600a2554 _lipsync_write_output: drop precedes FIRST, typing and payload
+ * access (@0x600a2563..2569). Otherwise only timestamp (+0x18) and type (+0x10)
+ * change (@0x600a257e..2589): exactly dataType==1 produces ES, all others PCM.
+ * No payload conversion/copy or IEC framing here. Exception: autotest calls
+ * @0x600fb998 with (buf,0x1f,size) @0x600a258d..2593. Despite the export's
+ * AuiLogger_Init name, byte replication @0x600fb99b..9a7 and the store loop
+ * @0x600fb9b5..9c0 prove this is memset, not an observational logger.
+ * Push/sync @0x600a25a6..25af submit the same object; downstream can still drop. */
 int _lipsync_write_output(struct lipsync *ls, struct aud_data *d)
 {
     if (ls->over_protection || ls->drop_count >= 1) {
@@ -212,17 +222,28 @@ int _lipsync_write_output(struct lipsync *ls, struct aud_data *d)
     d->timestamp = ls->out_ts;
     d->type = (ls->dataType == 1) ? 1 : 0;            /* ES stays ES */
     if (ls->autotest_mode)
-        AuiLogger_dump(d->buf, 0x1f, d->size);
+        memset(d->buf, 0x1f, d->size);
     /* "push %u" (lvl 5) */
     aud_module_push_data(ls, 0, d);                   /* core drop-output-data check here */
     aud_module_sync(ls, 0);
     return 0;
 }
 
-/* @0x600a1cec _lipsync_event */
+/* @0x600a1cec _lipsync_event: literal @0x600a083c -> "pcm" is both the
+ * codec default and exact strcmp operand (@0x600a1de3..1df9). PCM forces 4-byte
+ * internal samples / 256 samples per frame; any other codec forces ES / 2-byte
+ * samples / sample-number (default 1536). The incoming bits-per-sample is read
+ * but overwritten in BOTH branches (@0x600a1dfb,1e2e).
+ * FIRST replaces the owned +0x238 reference (@0x600a1d80..1d86,1e40), without
+ * duplication or mutation, and is normally retained until output. If +0x110 is
+ * already set, a reference to this SAME new FIRST is pushed immediately
+ * (@0x600a1e43..1e56). +0x268 requests a flush on the next chain; FIRST does not
+ * flush/reset +0x110 itself. LAST before any FIRST was sent is swallowed and
+ * leaves the retained FIRST/state intact (@0x600a1ea5 ->1eef).
+ * Validated FLIX: @0x600a1d48 selects LAST(2); @0x600a1d65 tests FLUSH flags
+ * bit 1, selecting synchronous _lipsync_flush rather than the async flag. */
 int _lipsync_event(struct lipsync *ls, struct aud_port *port, struct aud_event *e)
 {
-    (void)port;
     /* "port%d, event %s" (lvl 3) */
     aud_mutex_lock(ls->mutex);
     aud_cond_signal(ls->cond);                        /* wake a sleeping _lipsync_core */
@@ -250,7 +271,9 @@ int _lipsync_event(struct lipsync *ls, struct aud_port *port, struct aud_event *
             ls->nSamplePerFrame = aud_event_value_get_int(e, "sample-number", 0x600);
             ls->bytePerSample = 2;
             ls->is_pcm = 0;
-            ls->print_interval = (unsigned)(ls->fs * 2000) / (unsigned)ls->nSamplePerFrame;
+            /* @0x600a1e31..1e37: low-word multiply then unsigned quotient.
+             * [GAP] sample-number==0: DSP divide-by-zero behavior is not modeled. */
+            ls->print_interval = ((uint32_t)ls->fs * 2000u) / (unsigned)ls->nSamplePerFrame;
         }
         ls->first = e;                                /* held, not forwarded */
         if (ls->first_sent)
@@ -262,7 +285,7 @@ int _lipsync_event(struct lipsync *ls, struct aud_port *port, struct aud_event *
         return 0;
     }
 
-    if (e->type == 2) {                               /* FLIX @0x600a1d48 -> 0x600a1e90 [FLIX?] LAST */
+    if (e->type == 2) {                               /* LAST */
         aimc_raise_named_event(ls->imc, ls->uid, "last", NULL, 0);
         if (!ls->first_sent) {
             aud_object_put(e);                        /* nothing output yet: swallowed */
@@ -279,11 +302,11 @@ int _lipsync_event(struct lipsync *ls, struct aud_port *port, struct aud_event *
         return aud_module_default_event(ls, port, e);
     }
 
-    if (e->type == 7) {                               /* FLUSH: FLIX -> 0x600a1e78 "flush event" */
-        ls->flush_async = true;                       /* breaks the core loop */
-    } else {
-        /* FLIX @0x600a1d65 -> 0x600a1e70 [FLIX?]: one more type (likely DISCONNECT 6
-         * or STOP 4) runs _lipsync_flush before the default handler. */
+    if (e->type == 7) {                               /* FLUSH */
+        if (e->flags & 2u)                            /* @0x600a1d61..1d65 */
+            _lipsync_flush(ls);                       /* @0x600a1e70; no async store */
+        else
+            ls->flush_async = true;                   /* @0x600a1d6d */
     }
     return aud_module_default_event(ls, port, e);
 }
@@ -567,7 +590,13 @@ int _lipsync_set_prop_channel(struct lipsync *ls, int ch)
     return 0;
 }
 
-/* @0x600a4458 "dataType" (kernel sends 1 for lipsync_bypass) */
+/* @0x600a4458 "dataType" (kernel sends 1 for lipsync_bypass).
+ * Parsed integer v is stored verbatim @0x600a4472; exactly 1 selects 2-byte ES,
+ * all other values select 4-byte PCM (@0x600a4475..4484,449f..44ab).
+ * Internal configuration only: no FIRST mutation/re-emission, no payload work,
+ * no nSamplePerFrame/print_interval reset. A later FIRST overwrites these three
+ * fields from its codec; conversely a property after FIRST can change output
+ * buffer typing without changing the retained event's codec or format fields. */
 int _lipsync_set_prop_datatype(struct lipsync *ls, int v)
 {
     ls->dataType = v;

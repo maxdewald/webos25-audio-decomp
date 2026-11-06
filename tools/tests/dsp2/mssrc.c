@@ -29,6 +29,14 @@ static unsigned packet_count, pushes, metadata_allocs, pcm_allocs;
 static bool fail_metadata, fail_pcm;
 static unsigned char pcm_bytes[32], output_bytes[32];
 static const struct mssrc_implementation *registered;
+static struct mssrc *active;
+static struct aud_data chunk, *adapter_head;
+static unsigned char input_bytes[512], observed_bytes[512];
+static unsigned adapter_pushes, reads, peeps, runs, library_inits, metadata_runs;
+static unsigned needed_bytes, produced_bytes, observed_ratio, run_limit;
+static int run_result, library_init_result, metadata_result;
+static bool fail_read, initialize_format, no_head;
+static unsigned run_sizes[8];
 
 static void op(char c) { assert(operation_count + 1 < sizeof(operations)); operations[operation_count++] = c; operations[operation_count] = 0; }
 static void reset(void)
@@ -42,6 +50,11 @@ static void reset(void)
     forwarded = NULL; forwarded_port = NULL;
     operation_count = 0; operations[0] = 0;
     mask = ipc_id = 0;
+    adapter_pushes = reads = peeps = runs = library_inits = metadata_runs = 0;
+    needed_bytes = 32; produced_bytes = 32; observed_ratio = 0; run_limit = 8;
+    run_result = metadata_result = 0; library_init_result = 4;
+    fail_read = no_head = false; initialize_format = true; adapter_head = NULL;
+    memset(run_sizes, 0, sizeof(run_sizes));
 }
 void aud_data_adapter_init(struct mssrc_adapter *a) { memset(a, 0, sizeof(*a)); ++initialized_adapter; }
 void aud_data_adapter_cleanup(struct mssrc_adapter *a) { (void)a; ++cleanups; op('D'); }
@@ -109,8 +122,39 @@ struct aud_data *aud_data_new(unsigned n)
 }
 int aud_module_push_data(struct mssrc *m, int port, struct aud_data *d)
 { (void)m; assert(port == 0 && d == &packets[pushes]); ++pushes; return 31; }
-int _mssrc_chain(struct aud_port *p, struct aud_data *d)
-{ (void)p; (void)d; assert(!"unrecovered chain must not execute in these tests"); return -1; }
+void aud_data_adapter_push(struct mssrc_adapter *a, struct aud_data *d)
+{ a->pushed += d->size; adapter_head = d; ++adapter_pushes; op('A'); }
+struct aud_data *aud_data_adapter_get_data(struct mssrc_adapter *a, unsigned n)
+{
+    assert(n <= a->pushed - a->flushed && n <= sizeof(input_bytes)); ++reads; op('G');
+    if (fail_read) return NULL;
+    chunk = (struct aud_data){0}; chunk.ptr = input_bytes; chunk.size = n;
+    return &chunk;
+}
+struct aud_data *aud_data_adapter_peep(struct mssrc_adapter *a)
+{ (void)a; ++peeps; return no_head ? NULL : adapter_head; }
+int ms_src_main_process_init(void *p, int a, int b)
+{
+    assert(active && p == active->library && a == 0 && b == 0); ++library_inits; op('I');
+    if (initialize_format) {
+        active->format_ready = 1;
+        uint32_t format[7] = {48000, 8, 0, 32, 11, 22, 33};
+        memcpy(active->library_output_format, format, sizeof(format));
+    }
+    return library_init_result;
+}
+unsigned ms_src_main_process_getsize(void *p, unsigned ratio)
+{ assert(active && p == active->library); observed_ratio = ratio; return needed_bytes; }
+int ms_src_main_process_run(void *p, void *pcm, unsigned n, unsigned ratio)
+{
+    assert(active && p == active->library && pcm == input_bytes && ratio == active->ratio);
+    assert(runs < run_limit && n <= sizeof(observed_bytes));
+    run_sizes[runs++] = n; memcpy(observed_bytes, pcm, n); op('R');
+    active->output_size = produced_bytes; active->output_pcm = pcm_bytes;
+    return run_result;
+}
+int msf_process_metadata(void *p, const void *data, unsigned n)
+{ assert(active && p == metadata(active) && data == input_bytes && n == 12); ++metadata_runs; op('T'); return metadata_result; }
 void ModuleRegistry_Register(const struct mssrc_implementation *impl) { registered = impl; }
 
 static void set(struct event *e, const char *key, int value) { aud_event_value_set_int(&e->base, key, value); }
@@ -288,9 +332,122 @@ static void push_and_properties(void)
     assert(registered->firmware_instance_size == 0x280 && registered->chain == _mssrc_chain);
     assert(registered->event == _mssrc_event && registered->command == _mssrc_cmd);
 }
+static void prepare_chain(struct mssrc *m)
+{
+    reset(); memset(m, 0, sizeof(*m)); active = m;
+    _mssrc_constructor(m); _mssrc_init(m);
+    operation_count = 0; operations[0] = 0;
+}
+static void chain(void)
+{
+    struct mssrc m;
+    struct aud_port port = {0, &m};
+    struct aud_data input = {0}; input.ptr = input_bytes; input.size = 12;
+    for (int type = 0; type <= 3; ++type) {
+        prepare_chain(&m); m.unsupported = true; input.type = type;
+        assert(_mssrc_chain(&port, &input) == -1 && releases == 1 && released[0] == &input);
+        assert(adapter_pushes == 0 && library_inits == 0 && metadata_runs == 0);
+    }
+    prepare_chain(&m); input.type = 2; metadata_result = -7;
+    assert(_mssrc_chain(&port, &input) == 0 && metadata_runs == 1 && releases == 1);
+    assert(!strcmp(operations, "T") && library_inits == 0 && adapter_pushes == 0);
+    assert(m.ratio == 0 && m.total_input == 0);
+    input.type = 0; input.size = 16; input.ts = 9000;
+    for (int result = -1; result <= 5; ++result) {
+        prepare_chain(&m); library_init_result = result;
+        int expected = result == 3 || result == 4 ? 0 : 1;
+        assert(_mssrc_chain(&port, &input) == expected && library_inits == 1);
+        assert(adapter_pushes == (expected == 0 ? 1u : 0u));
+        assert(releases == (expected == 0 ? 0u : 1u));
+        if (expected == 0) assert(m.output_format[0] == 48000 && m.output_format[1] == 8 && m.output_format[3] == 32);
+    }
+    prepare_chain(&m); initialize_format = false;
+    assert(_mssrc_chain(&port, &input) == 1 && releases == 1 && adapter_pushes == 0);
+    const int rates[] = {24000, 44100, 48000, 96000, -1};
+    const unsigned ratios[] = {2, 1, 7, 7, 7};
+    for (unsigned i = 0; i < 5; ++i) {
+        prepare_chain(&m); m.sampling_rate = rates[i]; m.ratio = 7;
+        assert(_mssrc_chain(&port, &input) == 0 && m.ratio == ratios[i] && observed_ratio == ratios[i]);
+        assert(reads == 0 && m.total_input == 16 && m.adapter.pushed == 16);
+    }
+    prepare_chain(&m); m.sampling_rate = 0;
+    assert(_mssrc_chain(&port, &input) == 1 && releases == 1 && adapter_pushes == 0);
+    prepare_chain(&m); fail_read = true; input.size = 32; m.field_25c = 77;
+    assert(_mssrc_chain(&port, &input) == 0 && reads == 1 && runs == 0 && m.field_25c == 0);
+    assert(flushes == 0 && releases == 0 && m.adapter.pushed == 32);
+    for (unsigned mode = 0; mode < 4; ++mode) {
+        prepare_chain(&m); m.channel_mode = mode; input.size = needed_bytes = 291;
+        for (unsigned i = 0; i < input.size; ++i) input_bytes[i] = (unsigned char)(i + 1);
+        assert(_mssrc_chain(&port, &input) == 0 && runs == 1 && pushes == 2);
+        for (unsigned frame = 0; frame < 9; ++frame) {
+            for (unsigned byte = 0; byte < 32; ++byte) {
+                unsigned char expected = (unsigned char)(frame * 32 + byte + 1);
+                if (mode == 1) expected = byte < 8 ? (unsigned char)(frame * 32 + byte + 25) : 0;
+                else if (mode != 0 && byte >= 24) expected = 0;
+                assert(observed_bytes[frame * 32 + byte] == expected);
+            }
+        }
+        for (unsigned i = 288; i < 291; ++i) assert(observed_bytes[i] == (unsigned char)(i + 1));
+        assert(releases == 1 && released[0] == &chunk && last_flush == 291);
+        assert(m.total_input == 291 && m.total_output == 32 && m.output_size == 0);
+        assert(m.field_260 == 291 && m.field_258 == 1 && m.timestamp == 9000 && m.field_254 == 32);
+    }
+    prepare_chain(&m); input.size = 64;
+    assert(_mssrc_chain(&port, &input) == 0 && runs == 2 && reads == 2 && pushes == 4);
+    assert(m.timestamp == 9001 && m.field_250 == 9001 && m.field_248 == 9000);
+    assert(m.field_24c == 9001 && m.total_output == 64 && flushes == 2);
+    assert(run_sizes[0] == 32 && run_sizes[1] == 32 && m.adapter.flushed == 64);
+    prepare_chain(&m); input.size = 32;
+    m.format_ready = 1; m.output_format[1] = 3; m.output_format[3] = 32;
+    m.field_248 = input.ts; m.field_250 = 1000;
+    assert(_mssrc_chain(&port, &input) == 0 && m.timestamp == 1003 && library_inits == 0);
+    assert(m.field_248 == input.ts && m.field_250 == 1003);
+    prepare_chain(&m); m.format_ready = 1; m.output_format[1] = 8; m.output_format[3] = 16;
+    m.field_248 = input.ts; m.field_250 = 1000;
+    assert(_mssrc_chain(&port, &input) == 0 && m.timestamp == 1003);
+    prepare_chain(&m); produced_bytes = 30; m.field_248 = input.ts; m.field_250 = 1000;
+    assert(_mssrc_chain(&port, &input) == 0 && m.timestamp == 1000 && m.total_output == 30);
+    prepare_chain(&m); input.size = 32; no_head = true;
+    assert(_mssrc_chain(&port, &input) == 0 && m.timestamp == 1 && m.field_248 == 255);
+    prepare_chain(&m); input.ts = 0x0fffffff;
+    assert(_mssrc_chain(&port, &input) == 0 && m.timestamp == 1 && m.field_250 == 1);
+    input.ts = 9000;
+    prepare_chain(&m); m.format_ready = 1; m.output_size = 32; m.output_pcm = pcm_bytes;
+    input.size = 16; m.timestamp = 123;
+    assert(_mssrc_chain(&port, &input) == 0 && pushes == 2 && library_inits == 0);
+    assert(m.total_output == 32 && m.output_size == 0 && packets[1].ts == 123);
+    prepare_chain(&m); input.size = 32; run_result = 3;
+    assert(_mssrc_chain(&port, &input) == 0 && flushes == 1 && pushes == 0 && m.total_output == 0);
+    assert(m.output_size == 32 && releases == 1);
+    run_result = 0; input.size = 16;
+    assert(_mssrc_chain(&port, &input) == 0 && runs == 1 && pushes == 2);
+    assert(m.output_size == 0 && m.total_output == 32 && m.total_input == 48);
+    input.size = 32;
+    prepare_chain(&m); produced_bytes = 0;
+    assert(_mssrc_chain(&port, &input) == 0 && flushes == 1 && pushes == 0 && m.field_258 == 0);
+    prepare_chain(&m); run_result = -7; input.size = 64;
+    assert(_mssrc_chain(&port, &input) == 0 && flushes == 1 && metadata_flushes == 1);
+    assert(m.total_input == 64 && m.total_output == 0 && opens == 1 && closes == 0);
+    assert(last_flush == 64 && m.adapter.flushed == 64 && runs == 1);
+    input.size = 32;
+    prepare_chain(&m); run_result = -30656;
+    assert(_mssrc_chain(&port, &input) == 0 && flushes == 1 && metadata_flushes == 2);
+    assert(opens == 2 && closes == 1 && connects == 2 && m.total_input == 0);
+    prepare_chain(&m); fail_metadata = fail_pcm = true;
+    assert(_mssrc_chain(&port, &input) == 0 && pushes == 0 && m.total_output == 32 && m.output_size == 0);
+    prepare_chain(&m); input.type = 1;
+    m.total_input = m.total_output = 0xfffffff0u;
+    m.adapter.pushed = m.adapter.flushed = 0xfffffff0u;
+    assert(_mssrc_chain(&port, &input) == 0 && runs == 1 && pushes == 2);
+    assert(m.total_input == 16 && m.total_output == 16 && m.adapter.flushed == 16);
+    assert(m.adapter.pushed == m.adapter.flushed); /* unsigned occupancy survives wrap */
+    prepare_chain(&m); input.type = 0; input.ts = 0xfffffffeu; input.size = 64;
+    assert(_mssrc_chain(&port, &input) == 0 && m.timestamp == 0xffffffffu);
+    assert(m.field_248 == 0xfffffffeu && m.field_250 == 0xffffffffu);
+}
 int main(void)
 {
-    lifecycle(); commands(); events(); push_and_properties();
-    puts("mssrc: lifecycle, commands, FIRST ownership/metadata, push and properties passed");
+    lifecycle(); commands(); events(); push_and_properties(); chain();
+    puts("mssrc: lifecycle, commands, FIRST, push/properties and conversion chain passed");
     return 0;
 }

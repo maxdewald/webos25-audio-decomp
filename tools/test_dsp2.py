@@ -25,12 +25,15 @@ def main():
         raise SystemExit("C compiler missing; set CC to an installed compiler")
     sources = [ROOT / "src/dsp2" / f"{name}.c"
                for name in ("gain", "delay", "debug", "glue", "srcbin", "pcmcvt",
-                            "rft", "lgsrc", "rts", "lipsync", "mssrc")]
+                            "rft", "lgsrc", "rts", "lipsync", "mssrc", "event",
+                            "data_adapter", "lgsrc_io", "lgsrc_engine", "sola", "nullgen")]
     run([cc, "-std=c11", "-Wall", "-Wextra", "-Werror", "-fsyntax-only", *sources])
     tests = ROOT / "tools/tests/dsp2"
     with tempfile.TemporaryDirectory(prefix="dsp2-tests-") as temporary:
         for name in ("gain", "delay", "transport", "debug", "srcbin", "pcmcvt",
-                     "pcmcvt_rft", "rft", "lgsrc", "rts", "lipsync", "mssrc"):
+                     "pcmcvt_rft", "rft", "lgsrc", "rts", "lipsync", "mssrc",
+                     "event", "data_adapter", "lgsrc_io", "lgsrc_engine",
+                     "lgsrc_pipeline", "sola", "nullgen"):
             output = Path(temporary) / name
             inputs = [tests / f"{name}.c"]
             if name == "delay":

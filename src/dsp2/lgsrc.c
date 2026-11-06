@@ -37,8 +37,8 @@ extern void *aud_malloc(unsigned);      /* @0x600e97b4 allocator alias */
 extern void aud_free(void *);           /* @0x600e9550 deallocator alias */
 extern void AuiLogger_Init(void *, int, unsigned); /* @0x600fb998 memset alias */
 extern void lgsrcSinctable_makeTable(void); /* @0x6009f650 shared table */
-/* [FLIX] Filter implementations are not recovered here; these are real external
- * calls, not identity conversions or fabricated sample-count calculations. */
+/* Filter controls are reconstructed in lgsrc_engine.c; remaining [FLIX]
+ * kernels stay external, never identity/no-op substitutes. */
 extern void lgsrcFast_init(struct lgsrc_state *);       /* @0x6009e4a8 */
 extern void lgsrcFast_changeFs(struct lgsrc_state *);   /* @0x6009e64c */
 extern int lgsrcFast_process(struct lgsrc_state *);     /* @0x6009e83c */
@@ -171,7 +171,7 @@ int lgsrc_setOutputFs(struct lgsrc *h, uint32_t fs)
 /* @0x600a0d6c: 0..32 inclusive, not just 16/24/32. Stores both formats without
  * reinitialization or state change. I/O entry dispatches @0x6009f130..14f and
  * @0x6009f36f..391 implement only 8/16/24/32; other values return -1, ignored
- * by process. Actual packing/SIMD conversions remain external here.
+ * by process. Scalar packing conversions are reconstructed in lgsrc_io.c.
  */
 int lgsrc_setInOutPCMFormat(struct lgsrc *h, uint32_t bits)
 {

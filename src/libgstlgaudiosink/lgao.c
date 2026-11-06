@@ -1686,7 +1686,10 @@ int lgao_get_pcm_bypass(void *a, int *bypass)
     return 0;
 }
 
-/* @0x17960 */
+/* @0x17960: only caches ao+0x1d1 (saved export @0x27960). Feed routing and
+ * explicit FIRST construction see it immediately; no ioctl, reconnect, or
+ * isFirstRender invalidation. SET_PCM_INFO waits for a non-PLAY lgao_config;
+ * GET_BYPASS_UID selects the kernel head separately, before data is fed. */
 int lgao_set_pcm_multi_channel(void *a, int multi_ch)
 {
     lgao *ao = a;
@@ -1901,7 +1904,13 @@ int lgao_play(void *a)
 /* @0x182d0: the "first AU" events that configure both chains. The main appsrc
  * gets the PCM description; the bypass appsrc gets either an ES description
  * (es=true, codec string, IEC data rate) or, with pcm_bypass/pcm_multi_ch, the
- * PCM description with an acmod override. */
+ * PCM description with an acmod override. This explicit call always sends both
+ * FIRSTs (unless dropped); only feed consults isFirstRender[outType]. Both push
+ * returns are ignored and ALL type latches are then cleared. Switching data type
+ * or either cached PCM transport flag does not itself resend FIRST. lgao_open,
+ * close_renderer (PCM through METADATA only), EOS (PCM only), or set_first_render
+ * can rearm it; flush/set_audio_info do not. Caps acmod/downmix changes and undrop call here
+ * explicitly. Saved export @0x282d0; no kernel head is created by this call. */
 int lgao_push_first_event(void *a)
 {
     lgao *ao = a;
@@ -2022,7 +2031,17 @@ static inline void _lgao_write_dump(lgao *ao, void *buff, unsigned int buffLengt
 }
 
 /* @0x18828: PCM -> appsrc (and bypass_appsrc too when pcm_bypass/pcm_multi_ch);
- * ES -> bypass_appsrc only; metadata -> appsrc (+bypass in PCM-bypass mode). */
+ * ES -> bypass_appsrc only; metadata -> appsrc (+bypass with either PCM flag).
+ * Saved export @0x28828: both destinations receive references to the SAME copied
+ * aud_data, still type_pcm; this does not frame IEC or convert samples. Configure
+ * the intended head before connecting, with matching FIRST/format and valid
+ * appsrcs; changing a cached flag midstream is not a safe pipeline transition.
+ * PCM-typed carrier -> ES retyping is supported statically by lipsync's output
+ * store @0x600a257e..2589 when dataType==1, NOT demonstrated playback: PCM-mode FIRST
+ * (no codec) resets dataType=0. Enabling duplication after an ES FIRST also sends
+ * those bytes into the main PCM chain; it is not a bypass-only carrier API.
+ * Saved runtime/idle-state.txt:1533 shows only dataType=0, not this transport.
+ * Feed's byte-count return is not delivery proof (drops/push errors are hidden). */
 int lgao_feed(void *a, void *buff, unsigned int buffLength, unsigned long long timestamp,
               LGAO_DATA_TYPE_T outType)
 {

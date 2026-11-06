@@ -28,7 +28,9 @@ struct mssrc {
     _Alignas(4) unsigned char library[0x100]; /* +0x10c..20b; opaque MS12 state */
     /* Named host views of library-owned output fields, not another ABI. */
     void *output_pcm;                     /* +0x160 */
+    int format_ready;                     /* +0x178: library-owned */
     unsigned output_size;                 /* +0x180 */
+    uint32_t library_output_format[7];    /* +0x194..1ac: library-owned */
     int sampling_rate, channels;          /* +0x204, +0x208: INPUT caches */
     uint32_t output_format[7];            /* +0x20c..224 */
     uint32_t field_228, timestamp;         /* +0x228, +0x22c */
@@ -47,10 +49,17 @@ struct aud_port { int index; struct mssrc *module; };
 extern void aud_data_adapter_init(struct mssrc_adapter *);
 extern void aud_data_adapter_cleanup(struct mssrc_adapter *);
 extern void aud_data_adapter_flush(struct mssrc_adapter *, unsigned);
+extern void aud_data_adapter_push(struct mssrc_adapter *, struct aud_data *);
+extern struct aud_data *aud_data_adapter_get_data(struct mssrc_adapter *, unsigned);
+extern struct aud_data *aud_data_adapter_peep(struct mssrc_adapter *);
 extern void AuiLogger_Init(void *, int, unsigned);
 extern void AuiLogger_AppendData(void *, const void *, unsigned);
 extern int ms_src_main_process_open(void *), ms_src_main_connect_msf(void *);
 extern int ms_src_main_process_close(void *);
+extern int ms_src_main_process_init(void *, int, int);
+extern unsigned ms_src_main_process_getsize(void *, unsigned);
+extern int ms_src_main_process_run(void *, void *, unsigned, unsigned);
+extern int msf_process_metadata(void *, const void *, unsigned);
 extern void msf_flush_metadata(void *), msf_print_metadata(void *);
 extern void __assert_failed(const char *, unsigned, const char *);
 extern struct aud_data *aud_data_new_metadata(void *), *aud_data_new(unsigned);
@@ -66,13 +75,6 @@ extern uint32_t ms_src_get_lib_version(void);
 extern volatile uint32_t *mssrc_ipc_log_mask; /* literal 0x60060ca0 */
 extern uint32_t *mssrc_ipc_id;               /* literal 0x60060c9c */
 extern void IPC_WriteDebug(uint32_t, int, int, int, const char *, ...);
-
-/* Explicit decompiler/[FLIX] gap: 0x6009a17c..6009a5f4. The original chain
- * accepts META(2) separately; all other data types enter its PCM path, even
- * ES(1). It drops every data type with -1 while +0x27c is set. MS12 converter
- * processing, channel mapping and timestamp arithmetic are NOT synthesized.
- * The implementation below registers this external gap, not a memcpy chain. */
-extern int _mssrc_chain(struct aud_port *, struct aud_data *);
 
 static void *metadata(struct mssrc *m) { return m->library + 8; } /* +0x114 */
 static void *output_metadata(struct mssrc *m) { return m->library + 0x40; } /* +0x14c */
@@ -184,7 +186,7 @@ int _mssrc_cmd(struct mssrc *m, uint32_t command, void *payload, unsigned size)
  * Both packets inherit the signed low 16 bits at +0x23c and timestamp +0x22c.
  * Metadata also gets +0x230/+0x234. PCM type is explicitly 0. Output allocation
  * failures and downstream push errors still return 0; no totals/size changes
- * occur here (those belong to the external chain). Odd output_size asserts. */
+ * occur here (those belong to the chain). Odd output_size asserts. */
 int _mssrc_push_pcm(struct mssrc *m)
 {
     if ((m->output_size & 1u) != 0)
@@ -207,6 +209,119 @@ int _mssrc_push_pcm(struct mssrc *m)
     AuiLogger_AppendData(data->ptr, m->output_pcm, m->output_size);
     aud_module_push_data(m, 0, data);
     return 0;
+}
+
+/* @0x6009a17c: merged through 0x6009a5f4, including split branch targets.
+ * META bypasses the adapter; every other type (including ES) is PCM input.
+ * MS12 init/run/getsize remain genuine library boundaries, not fake kernels.
+ * Aligned entries 0x6009a1dd/3c3 recover the ratio branch. Validated FLIX
+ * branch slots suffice here; no SIMD arithmetic is synthesized. Library
+ * formats must have positive channels and whole-byte sample widths; zero
+ * divisors/malformed formats are outside this host model (guards below).
+ * Neither metadata path copies index/field_20/field_24 into the PCM caches. */
+int _mssrc_chain(struct aud_port *port, struct aud_data *input)
+{
+    struct mssrc *m = port->module;
+    if (m->unsupported) {
+        aud_object_put(input);
+        return -1;
+    }
+    if (input->type == 2) {
+        (void)msf_process_metadata(metadata(m), input->ptr, input->size);
+        aud_object_put(input);
+        return 0;
+    }
+    if ((uint32_t)m->sampling_rate < 48000u) {
+        /* Host safety boundary: the DSP's unsigned divide-by-zero result is
+         * not modeled. FIRST/property validation does not reject rate=0. */
+        if (m->sampling_rate == 0) {
+            aud_object_put(input);
+            return 1;
+        }
+        m->ratio = 48000u / (uint32_t)m->sampling_rate;
+    }
+    if (m->ratio == 0) m->ratio = 1;
+    if (m->format_ready == 0) {
+        int result = ms_src_main_process_init(m->library, 0, 0);
+        if ((result != 3 && result != 4) || m->format_ready == 0) {
+            aud_object_put(input);
+            return 1;
+        }
+        AuiLogger_AppendData(m->output_format, m->library_output_format, 28);
+    }
+    if ((int32_t)m->output_size > 0) {
+        int result = _mssrc_push_pcm(m);
+        if (result != 0) {
+            aud_object_put(input);
+            return result;
+        }
+        m->total_output += m->output_size;
+        m->output_size = 0;
+    }
+    aud_data_adapter_push(&m->adapter, input);
+    m->total_input += input->size;
+    for (;;) {
+        unsigned needed = ms_src_main_process_getsize(m->library, m->ratio);
+        if (m->adapter.pushed - m->adapter.flushed < needed) return 0;
+        m->field_25c = 0;
+        struct aud_data *chunk = aud_data_adapter_get_data(&m->adapter, needed);
+        if (chunk == NULL) return 0;
+        struct aud_data *head = aud_data_adapter_peep(&m->adapter);
+        m->timestamp = head == NULL ? 0x0fffffffu : head->ts;
+        /* Scalar 8 x 32-bit interleaved channel routing. Mode 1 replaces
+         * channels 0/1 with 6/7 and clears 2..7; any other nonzero mode
+         * clears only 6/7. Trailing partial frames are untouched. */
+        if (m->channel_mode != 0 && needed <= INT32_MAX) {
+            unsigned char *pcm = chunk->ptr;
+            for (unsigned frame = 0; frame < needed / 32; ++frame, pcm += 32) {
+                if (m->channel_mode == 1) {
+                    memcpy(pcm, pcm + 24, 8);
+                    memset(pcm + 8, 0, 24);
+                } else {
+                    memset(pcm + 24, 0, 8);
+                }
+            }
+        }
+        int result = ms_src_main_process_run(m->library, chunk->ptr, needed, m->ratio);
+        aud_object_put(chunk);
+        if (result == -30656) { /* literal 0xffff8840: unsupported rate */
+            _mssrc_flush(m);
+            _mssrc_init(m);
+            return 0;
+        }
+        if (result != 0 && result != 3) {
+            _mssrc_flush(m);
+            return 0;
+        }
+        aud_data_adapter_flush(&m->adapter, needed);
+        if (result != 0 || (int32_t)m->output_size <= 0) continue;
+        m->field_260 = needed;
+        if (m->field_258 == 0) m->field_258 = 1;
+        uint32_t timestamp = m->timestamp;
+        if (timestamp == m->field_248 || timestamp == 0x0fffffffu) {
+            /* Scalar quos/mull/quos @0x6009a59c: truncation occurs before
+             * multiplication by 90000, then division by fixed 48000. */
+            int32_t channels = (int32_t)m->output_format[1];
+            int32_t bits = (int32_t)m->output_format[3];
+            if (channels <= 0 || bits < 8 || (bits & 7) != 0 ||
+                (uint32_t)channels > INT32_MAX / (uint32_t)(bits / 8))
+                return 0; /* host safety boundary, not a firmware branch */
+            int32_t frame_bytes = channels * (bits / 8);
+            int32_t frames = (int32_t)m->output_size / frame_bytes;
+            int32_t ticks = (int32_t)((uint32_t)frames * 90000u);
+            m->field_250 += (uint32_t)(ticks / 48000);
+            timestamp = m->field_250;
+        } else {
+            m->field_250 = timestamp;
+            m->field_248 = timestamp;
+        }
+        m->timestamp = m->field_24c = timestamp;
+        m->field_254 = m->output_size;
+        result = _mssrc_push_pcm(m);
+        if (result != 0) return 0;
+        m->total_output += m->output_size;
+        m->output_size = 0;
+    }
 }
 
 /* @0x6009a5f4: FIRST accepts ONLY channels=8 and bits-per-sample=32 (defaults
@@ -269,7 +384,9 @@ int _mssrc_constructor(struct mssrc *m)
     aud_data_adapter_init(&m->adapter);
     AuiLogger_Init(m->library, 0, 0x100);
     m->output_pcm = NULL;
+    m->format_ready = 0;
     m->output_size = 0;
+    memset(m->library_output_format, 0, sizeof(m->library_output_format));
     m->sampling_rate = 48000;
     m->channels = 8;
     memset(m->output_format, 0, sizeof(m->output_format));

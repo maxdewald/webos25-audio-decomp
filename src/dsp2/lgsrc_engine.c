@@ -1,7 +1,7 @@
 /* DSP2 resampler control, audio_a0_dsp2.main_60000000.bin.
  * State layout matches lgsrc.c; accessors preserve its target byte offsets.
- * [FLIX] Coefficient installation and filter kernels remain external, not
- * identity filters. Normal mode filters even at equal input/output rates.
+ * [FLIX] Lowpass history initialization and filter kernels remain external,
+ * not identity filters. Normal mode filters even at equal input/output rates.
  */
 #include <stddef.h>
 #include <stdint.h>
@@ -27,9 +27,12 @@ static unsigned char *src_plane(struct lgsrc_state *s, uint32_t ch)
  * are accepted by the wrapper). These are not reconstructed functions. */
 extern uint32_t lgsrc_engine_fixunsdfsi(double);
 extern int32_t lgsrc_engine_fixdfsi(double);
-/* [FLIX] The selected ROM table is copied into the coefficient work area and
- * the per-input-channel lowpass histories cleared by this unrecovered block. */
-extern void lgsrcFast_init_coefficients_FLIX(struct lgsrc_state *, uint32_t);
+/* Resolve a DSP ROM address without embedding the proprietary tables. */
+extern const unsigned char *lgsrc_engine_rom(uint32_t address);
+/* [FLIX] 0x6009e581 initializes the value stored to lowpass histories at
+ * 0x1909c/0x19204 (eight words each, channel stride 36). Its non-branch
+ * bundle is not decoded reliably; do not assume it means floating zero. */
+extern void lgsrcFast_init_history_FLIX(struct lgsrc_state *);
 extern int lgsrcFast_lowpass_filter(struct lgsrc_state *);
 /* [FLIX] Per-output-sample FIR results, including rounding and saturation.
  * phase is Q15; the hook must evaluate the real kernel, not interpolate. */
@@ -69,7 +72,15 @@ void lgsrcFast_init(struct lgsrc_state *s)
     else if (factor < 0.74) table = 0x601039f0;
     else if (factor < 0.99) table = 0x60103a30;
     else table = 0x601039b0;
-    lgsrcFast_init_coefficients_FLIX(s, table);
+    /* 0x6009e560..6009e56e: AE_L32.IP is postincrement; the parallel
+     * store uses a9 before its +4 update. Keep the gap at 0x19074 intact. */
+    const unsigned char *rom = lgsrc_engine_rom(table - 32);
+    for (unsigned i = 0; i < 8; ++i) {
+        memcpy((unsigned char *)s + 0x19078 + i * 4, rom + i * 4, 4);
+        memcpy((unsigned char *)s + 0x19054 + i * 4, rom + 32 + i * 4, 4);
+    }
+    if (src_u32(s, 4) != 0)
+        lgsrcFast_init_history_FLIX(s);
 }
 
 /* @0x6009ed34: history grows backwards and zero-fills its new prefix.

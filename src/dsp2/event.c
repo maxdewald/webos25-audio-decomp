@@ -458,8 +458,7 @@ static void wire_word(unsigned char *p,uint32_t word)
  * Names include NUL; bool uses a 4-byte raw byte value, fractions 8 bytes.
  * Padding is uninitialized, not zeroed. Overflow and unknown-property encoding
  * are not sanitized by the original; supported callers use types0..4.
- * The decoder @0x6006aa98 is NOT reconstructed here: its malformed-input bounds
- * differ from a safe parser, and this serializer alone is not parser validation. */
+ * Decoder below preserves the target's checks, not a hardened wire parser. */
 void *aud_event_serialize(const struct aud_event *e,unsigned *size)
 {
     if(e==NULL) return NULL;
@@ -514,4 +513,64 @@ int check_str_term(const char *s,unsigned size)
 {
     for (unsigned i=0;i<size;++i) if(s[i]=='\0') return 0;
     return -1;
+}
+
+static uint32_t event_wire_read(const unsigned char *p)
+{
+    return (uint32_t)p[0]|(uint32_t)p[1]<<8|(uint32_t)p[2]<<16|(uint32_t)p[3]<<24;
+}
+/* @0x6006aa98: five-word header, payload then padded typed properties.
+ * No magic validation. Bool normalizes nonzero to1. Setter failures ignored.
+ * Preserves target bounds: name check is size >= name_len+word_index*4+4;
+ * value check is size >= value_len+type_word_index*4+8. They do NOT establish
+ * fixed int/fraction lengths, alignment or overflow safety. Some word reads
+ * precede those checks. Call only on an adequately backed buffer; these are
+ * evidence of original behavior, NOT a safe decoder for hostile/truncated data.
+ * Deserialization failure releases the whole partially constructed event. */
+struct aud_event *aud_event_deserialize(const void *buffer,unsigned size)
+{
+    const unsigned char *wire=buffer;
+    if(size<20) return NULL;
+    uint32_t payload=event_wire_read(wire+16);
+    if(size<payload+20u) return NULL;
+    struct aud_event *e=aud_event_new(wire+20,payload);
+    if(e==NULL) return NULL;
+    uint32_t index=((payload+3u)>>2)+5u;
+    e->type=event_wire_read(wire+4); e->flags=event_wire_read(wire+8);
+    uint32_t count=event_wire_read(wire+12);
+    for(uint32_t n=0;n<count;++n) {
+        uint32_t name_length=event_wire_read(wire+index*4u);
+        if(size<name_length+index*4u+4u) goto fail;
+        const char *key=(const char *)wire+index*4u+4u;
+        if(check_str_term(key,name_length)<0) goto fail;
+        uint32_t name_end=index+(name_length>>2);
+        uint32_t type_index=name_end+1;
+        const unsigned char *v=wire+type_index*4u;
+        uint32_t value_length=event_wire_read(v+4),type=event_wire_read(v);
+        if(size<value_length+type_index*4u+8u) goto fail;
+        switch(type) {
+        case 0:
+            aud_event_value_set_int(e,key,(int32_t)event_wire_read(v+8));
+            index=name_end+4; break;
+        case 1:
+            aud_event_value_set_bool(e,key,event_wire_read(v+8)!=0);
+            index=name_end+4; break;
+        case 2:
+            if(check_str_term((const char *)v+8,value_length)<0) goto fail;
+            aud_event_value_set_str(e,key,(const char *)v+8);
+            index=type_index+2u+((value_length+3u)>>2); break;
+        case 3:
+            aud_event_value_set_mem(e,key,v+8,value_length);
+            index=type_index+2u+((value_length+3u)>>2); break;
+        case 4:
+            aud_event_value_set_fraction(e,key,(int32_t)event_wire_read(v+8),
+                                            (int32_t)event_wire_read(v+12));
+            index=name_end+5; break;
+        default: goto fail;
+        }
+    }
+    return e;
+fail:
+    aud_object_put(e);
+    return NULL;
 }

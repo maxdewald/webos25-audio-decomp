@@ -9,7 +9,7 @@
 #include <stdlib.h>
 
 static unsigned char work[0x19370];
-static unsigned coeff_calls, lowpass_calls, sample_calls, zero_calls;
+static unsigned coeff_calls, history_calls, lowpass_calls, sample_calls, zero_calls;
 static uint32_t selected_table, expected_phase[10];
 static int expected_down;
 
@@ -24,8 +24,21 @@ int32_t lgsrc_engine_fixdfsi(double d)
     assert(isfinite(d) && d >= INT32_MIN && d <= INT32_MAX);
     return (int32_t)d;
 }
-void lgsrcFast_init_coefficients_FLIX(struct lgsrc_state *s, uint32_t table)
-{ assert((void *)s == work); ++coeff_calls; selected_table = table; }
+static unsigned char coefficient_rom[64];
+const unsigned char *lgsrc_engine_rom(uint32_t address)
+{
+    ++coeff_calls;
+    selected_table = address + 32;
+    for (unsigned i = 0; i < sizeof(coefficient_rom); ++i)
+        coefficient_rom[i] = (unsigned char)(i * 7 + (address >> 4));
+    return coefficient_rom;
+}
+void lgsrcFast_init_history_FLIX(struct lgsrc_state *s)
+{
+    assert((void *)s == work);
+    ++history_calls;
+    /* Dispatch-only mock: no claim about the undecoded history value. */
+}
 int lgsrcFast_lowpass_filter(struct lgsrc_state *s)
 { assert((void *)s == work); ++lowpass_calls; return -77; }
 int16_t lgsrcNormal_sample_FLIX(struct lgsrc_state *s, uint32_t channel,
@@ -51,7 +64,7 @@ static struct lgsrc_state *setup(double factor, uint32_t channels, uint32_t n)
     src_s32(s, 0x14, channels);
     src_s32(s, 0x1c, n);
     memcpy(work + 0x38, &factor, sizeof(factor));
-    coeff_calls = lowpass_calls = sample_calls = zero_calls = 0;
+    coeff_calls = history_calls = lowpass_calls = sample_calls = zero_calls = 0;
     return s;
 }
 static int16_t at(struct lgsrc_state *s, uint32_t c, unsigned i)
@@ -69,7 +82,12 @@ static void test_fast_config(void)
     for (unsigned i = 0; i < sizeof(factors) / sizeof(factors[0]); ++i) {
         struct lgsrc_state *s = setup(factors[i], 2, 256);
         lgsrcFast_init(s);
-        assert(coeff_calls == 1 && selected_table == tables[i]);
+        assert(coeff_calls == 1 && history_calls == 1 && selected_table == tables[i]);
+        assert(memcmp(work + 0x19078, coefficient_rom, 32) == 0);
+        assert(memcmp(work + 0x19054, coefficient_rom + 32, 32) == 0);
+        assert(src_u32(s, 0x19050) == 0x5a5a5a5a);
+        assert(src_u32(s, 0x19074) == 0x5a5a5a5a);
+        assert(src_u32(s, 0x19098) == 0x5a5a5a5a);
         assert(src_u32(s, 0x2c) == (uint32_t)(32768.0 / factors[i] + 0.5));
         assert(src_u32(s, 0xc) == (uint32_t)(256.0 / factors[i] + 20.0));
         assert(src_u16(s, 0x20) == 10 && src_u16(s, 0x22) == 10);
@@ -87,6 +105,37 @@ static void test_fast_config(void)
         assert(src_u32(s, 0x2c) == 16384 && src_u32(s, 0xc) == 148);
         assert(coeff_calls == 1 && at(s, 0, 0) == 123);
         assert(src_u16(s, 0x20) == 7 && src_u32(s, 0x28) == 44);
+    }
+}
+
+static void test_finite_boundaries(void)
+{
+    static const double cuts[] = {0.27, 0.49, 0.54, 0.74, 0.99};
+    static const uint32_t below[] = {0x60103930, 0x60103970, 0x601039b0,
+                                   0x601039f0, 0x60103a30};
+    static const uint32_t above[] = {0x60103970, 0x601039b0, 0x601039f0,
+                                   0x60103a30, 0x601039b0};
+    for (unsigned i = 0; i < 5; ++i) {
+        for (int side = -1; side <= 1; ++side) {
+            double factor = side == 0 ? cuts[i] :
+                nextafter(cuts[i], side < 0 ? 0.0 : INFINITY);
+            struct lgsrc_state *s = setup(factor, 0, 32);
+            lgsrcFast_init(s);
+            assert(selected_table == (side < 0 ? below[i] : above[i]));
+            assert(coeff_calls == 1 && history_calls == 0);
+        }
+    }
+    /* Exercise the actual double arithmetic either side of a Q15 half-step.
+     * Conversion helpers remain finite-domain mocks, not recovered softfloat. */
+    double center = 32768.0 / 16384.5;
+    for (int side = -1; side <= 1; ++side) {
+        double factor = side == 0 ? center :
+            nextafter(center, side < 0 ? 0.0 : INFINITY);
+        struct lgsrc_state *s = setup(factor, 1, 1);
+        lgsrcFast_changeFs(s);
+        double scaled = (1.0 / factor) * 32768.0;
+        assert(src_u32(s, 0x2c) == (uint32_t)floor(scaled + 0.5));
+        assert(src_u32(s, 0xc) == (uint32_t)floor(1.0 / factor + 20.0));
     }
 }
 
@@ -218,7 +267,7 @@ static void test_guards_and_empty(void)
 
 int main(void)
 {
-    test_fast_config(); test_copy_history(); test_normal_config();
+    test_fast_config(); test_finite_boundaries(); test_copy_history(); test_normal_config();
     test_fast_process(); test_normal_process(); test_guards_and_empty();
     puts("lgsrc_engine: configuration, history, interpolation, FIR dispatch, guards passed");
     return 0;

@@ -20,9 +20,15 @@ int32_t lgsrc_engine_fixdfsi(double n)
 {
     assert(isfinite(n) && n>=INT32_MIN && n<=INT32_MAX); return (int32_t)n;
 }
-void lgsrcFast_init_coefficients_FLIX(struct lgsrc_state *s,uint32_t table)
+const unsigned char *lgsrc_engine_rom(uint32_t address)
 {
-    (void)s; assert(table==0x601039b0);
+    static const unsigned char coefficients[64]={0};
+    assert(address==0x601039b0-32);
+    return coefficients;
+}
+void lgsrcFast_init_history_FLIX(struct lgsrc_state *s)
+{
+    (void)s; /* Unresolved lowpass history; equal-rate path does not read it. */
 }
 int lgsrcFast_lowpass_filter(struct lgsrc_state *s)
 {

@@ -142,7 +142,30 @@ static void test_wire(void)
         if(i==4) assert(read_word(wire+off)==7 && read_word(wire+off+4)==3);
         off+=wire_align(expected_size[i]);
     }
-    assert(off==size); event_free(wire);
+    assert(off==size);
+    struct aud_event *decoded=aud_event_deserialize(wire,size); assert(decoded);
+    assert(decoded->type==5 && decoded->flags==3 && decoded->payload_size==3);
+    assert(!memcmp(decoded->payload,payload,3));
+    assert(aud_event_value_get_int(decoded,"rate",0)==192000);
+    assert(aud_event_value_get_bool(decoded,"es",0)==1);
+    assert(!strcmp(aud_event_value_get_str(decoded,"codec",NULL),"mat"));
+    int32_t num=0,den=0;
+    assert(aud_event_value_get_fraction(decoded,"fraction",&num,&den)==0 && num==7 && den==3);
+    aud_object_put(decoded);
+    wire_word(wire,0); decoded=aud_event_deserialize(wire,size); assert(decoded); aud_object_put(decoded);
+    assert(aud_event_deserialize(wire,19)==NULL);
+    assert(aud_event_deserialize(wire,22)==NULL);
+    /* Backing storage remains full-sized: verify observed failure branches,
+     * never exercise the original decoder's unsafe pre-check word reads. */
+    uint32_t keyspace=read_word(wire+24);
+    memset(wire+28,'x',keyspace);
+    assert(aud_event_deserialize(wire,size)==NULL);
+    memcpy(wire+28,"rate",5);
+    wire_word(wire+28+keyspace,99);
+    assert(aud_event_deserialize(wire,size)==NULL);
+    wire_word(wire+28+keyspace,0);
+    fail_after=0; assert(aud_event_deserialize(wire,size)==NULL); fail_after=-1;
+    event_free(wire);
     size=123; fail_after=0; assert(!aud_event_serialize(e,&size) && size==123); fail_after=-1;
     aud_object_put(e); assert(active==0);
 }

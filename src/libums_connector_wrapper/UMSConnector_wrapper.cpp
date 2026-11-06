@@ -17,12 +17,10 @@
 /* Modified: source-assisted subset of webosose/umediaserver
  * af89f8ac3355027a90d7b299a78fb6fab9b6ffca,
  * src/ums_connector/UMSConnector_wrapper.cpp, checked against shipped ARM bodies
- * and PLT relocations with LLVM (REA unavailable). Imported methods are declared
- * below without inventing the private class layout. No objects are allocated.
- * Create/CreatePrivate are omitted: upstream's constructor has six arguments,
- * the shipped import has five. Subscribe is omitted: upstream returns size_t
- * converted to bool, whereas the shipped wrapper returns the method result
- * without normalization. No exact-GCC instruction match is claimed.
+ * and PLT relocations with LLVM. Creation/subscribe also checked with REA.
+ * The shipped five-argument constructor uses 0x34 opaque bytes; no private
+ * fields are inferred. Unlike OSE's size_t token, shipped subscribe returns
+ * the LSCall success value (libums_connector_impl VA 0xc230 -> 0xc34a).
  */
 #include <string>
 typedef struct _GMainLoop GMainLoop;
@@ -30,6 +28,10 @@ typedef struct _GMainLoop GMainLoop;
 
 class UMSConnector {
 public:
+    unsigned char opaque[0x34];
+    UMSConnector(const std::string &name, GMainLoop *loop, void *context,
+                 UMSConnectorBusType bus = UMS_CONNECTOR_PUBLIC_BUS,
+                 bool use_default_context = false);
     ~UMSConnector();
     bool wait();
     bool addEventHandler(std::string event, UMSConnectorEventFunction func,
@@ -40,6 +42,8 @@ public:
     const char *getSenderServiceName(UMSConnectorMessage *message);
     bool sendMessage(const std::string &uri, const std::string &payload,
                      UMSConnectorEventFunction func, void *ctx);
+    bool subscribe(const std::string &uri, const std::string &payload,
+                   UMSConnectorEventFunction func, void *ctx);
     bool sendSimpleResponse(UMSConnectorHandle *sender, UMSConnectorMessage *message, bool resp);
     bool sendResponse(UMSConnectorHandle *sender, UMSConnectorMessage *message,
                       const std::string &key, const std::string &value);
@@ -51,6 +55,29 @@ public:
     bool sendChangeNotificationJsonString(const std::string &json, const std::string &key = "");
     GMainLoop *getMainLoop();
 };
+
+static_assert(sizeof(UMSConnector) == 0x34, "shipped connector allocation");
+
+/* @0x11518: constructor/string/allocation exceptions return a null handle. */
+UMSConnectorHandle *UMSConnectorCreate(char *name, GMainLoop *mainLoop, void *ctx)
+{
+    try {
+        return reinterpret_cast<UMSConnectorHandle *>(new UMSConnector(name, mainLoop, ctx));
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+/* @0x115d8 */
+UMSConnectorHandle *UMSConnectorCreatePrivate(char *name, GMainLoop *mainLoop, void *ctx)
+{
+    try {
+        return reinterpret_cast<UMSConnectorHandle *>(
+            new UMSConnector(name, mainLoop, ctx, UMS_CONNECTOR_PRIVATE_BUS));
+    } catch (...) {
+        return nullptr;
+    }
+}
 
 /* @0x11694: null-safe destruction; uses unsized operator delete as shipped. */
 bool UMSConnectorDestroy(UMSConnectorHandle *handle)
@@ -142,6 +169,16 @@ bool UMSConnectorSendResponse(UMSConnectorHandle *handle, UMSConnectorHandle *se
     UMSConnector *connector = reinterpret_cast<UMSConnector *>(handle);
     if (connector)
         return connector->sendResponse(sender, message, key, value);
+    return false;
+}
+
+/* @0x11a24: forward the shipped boolean result without token normalization. */
+bool UMSConnectorSubscribe(UMSConnectorHandle *handle, const char *uri, const char *payload,
+                           UMSConnectorEventFunction func, void *ctx)
+{
+    UMSConnector *connector = reinterpret_cast<UMSConnector *>(handle);
+    if (connector)
+        return connector->subscribe(uri, payload, func, ctx);
     return false;
 }
 

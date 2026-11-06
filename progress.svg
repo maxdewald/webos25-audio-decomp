@@ -22,7 +22,7 @@
 </style>
 <rect class="card" x="0.5" y="0.5" width="819" height="925" rx="10"/>
 <text class="title" x="24" y="38">Decompilation progress</text>
-<text class="sub" x="24" y="60">17 original files · 582 of 7,675 KiB of their code reconstructed (7.6%)</text>
+<text class="sub" x="24" y="60">17 original files · 583 of 7,675 KiB of their code reconstructed (7.6%)</text>
 <text class="name" x="24" y="108">libgstdecproxy</text>
 <text class="path" x="24" y="125">/usr/lib/gstreamer-1.0/libgstdecproxy.so</text>
 <rect class="track" x="330" y="102" width="340" height="14" rx="7"/>
@@ -30,54 +30,54 @@
 <rect class="match" x="330" y="102" width="322.1" height="14" rx="7"/>
 <text class="pct" x="686" y="114">100.0%</text>
 <text class="path" x="686" y="130">94.7% match</text>
-<text class="name" x="24" y="154">libaabase</text>
-<text class="path" x="24" y="171">/usr/lib/libaabase.so.1.0.0</text>
+<text class="name" x="24" y="154">libums_connector_wrapper</text>
+<text class="path" x="24" y="171">/usr/lib/libums_connector_wrapper.so.1.0.0</text>
 <rect class="track" x="330" y="148" width="340" height="14" rx="7"/>
 <rect class="cov" x="330" y="148" width="340.0" height="14" rx="7"/>
-<rect class="match" x="330" y="148" width="289.8" height="14" rx="7"/>
+<rect class="match" x="330" y="148" width="319.5" height="14" rx="7"/>
 <text class="pct" x="686" y="160">100.0%</text>
-<text class="path" x="686" y="176">85.2% match</text>
-<text class="name" x="24" y="200">libaudcommon</text>
-<text class="path" x="24" y="217">/usr/lib/libaudcommon.so.1.0.0</text>
+<text class="path" x="686" y="176">94.0% match</text>
+<text class="name" x="24" y="200">libaabase</text>
+<text class="path" x="24" y="217">/usr/lib/libaabase.so.1.0.0</text>
 <rect class="track" x="330" y="194" width="340" height="14" rx="7"/>
 <rect class="cov" x="330" y="194" width="340.0" height="14" rx="7"/>
-<rect class="match" x="330" y="194" width="213.5" height="14" rx="7"/>
+<rect class="match" x="330" y="194" width="289.8" height="14" rx="7"/>
 <text class="pct" x="686" y="206">100.0%</text>
-<text class="path" x="686" y="222">62.8% match</text>
-<text class="name" x="24" y="246">libgstlgaudiodec</text>
-<text class="path" x="24" y="263">/usr/lib/gstreamer-1.0/libgstlgaudiodec.so</text>
+<text class="path" x="686" y="222">85.2% match</text>
+<text class="name" x="24" y="246">libaudcommon</text>
+<text class="path" x="24" y="263">/usr/lib/libaudcommon.so.1.0.0</text>
 <rect class="track" x="330" y="240" width="340" height="14" rx="7"/>
 <rect class="cov" x="330" y="240" width="340.0" height="14" rx="7"/>
-<rect class="match" x="330" y="240" width="199.1" height="14" rx="7"/>
+<rect class="match" x="330" y="240" width="213.5" height="14" rx="7"/>
 <text class="pct" x="686" y="252">100.0%</text>
-<text class="path" x="686" y="268">58.6% match</text>
-<text class="name" x="24" y="292">libgstlgaudiosink</text>
-<text class="path" x="24" y="309">/usr/lib/gstreamer-1.0/libgstlgaudiosink.so</text>
+<text class="path" x="686" y="268">62.8% match</text>
+<text class="name" x="24" y="292">libgstlgaudiodec</text>
+<text class="path" x="24" y="309">/usr/lib/gstreamer-1.0/libgstlgaudiodec.so</text>
 <rect class="track" x="330" y="286" width="340" height="14" rx="7"/>
 <rect class="cov" x="330" y="286" width="340.0" height="14" rx="7"/>
-<rect class="match" x="330" y="286" width="93.7" height="14" rx="7"/>
+<rect class="match" x="330" y="286" width="199.1" height="14" rx="7"/>
 <text class="pct" x="686" y="298">100.0%</text>
-<text class="path" x="686" y="314">27.6% match</text>
-<text class="name" x="24" y="338">kernel</text>
-<text class="path" x="24" y="355">/boot/Image-5.4.268-329.decompressed</text>
+<text class="path" x="686" y="314">58.6% match</text>
+<text class="name" x="24" y="338">libgstlgaudiosink</text>
+<text class="path" x="24" y="355">/usr/lib/gstreamer-1.0/libgstlgaudiosink.so</text>
 <rect class="track" x="330" y="332" width="340" height="14" rx="7"/>
-<rect class="dsp" x="330" y="332" width="340.0" height="14" rx="7"/>
+<rect class="cov" x="330" y="332" width="340.0" height="14" rx="7"/>
+<rect class="match" x="330" y="332" width="93.7" height="14" rx="7"/>
 <text class="pct" x="686" y="344">100.0%</text>
-<text class="path" x="686" y="360">aarch64</text>
-<text class="name" x="24" y="384">libaa</text>
-<text class="path" x="24" y="401">/usr/lib/libaa.so.2.0.0</text>
+<text class="path" x="686" y="360">27.6% match</text>
+<text class="name" x="24" y="384">kernel</text>
+<text class="path" x="24" y="401">/boot/Image-5.4.268-329.decompressed</text>
 <rect class="track" x="330" y="378" width="340" height="14" rx="7"/>
-<rect class="cov" x="330" y="378" width="339.5" height="14" rx="7"/>
-<rect class="match" x="330" y="378" width="184.8" height="14" rx="7"/>
-<text class="pct" x="686" y="390">99.8%</text>
-<text class="path" x="686" y="406">54.3% match</text>
-<text class="name" x="24" y="430">libums_connector_wrapper</text>
-<text class="path" x="24" y="447">/usr/lib/libums_connector_wrapper.so.1.0.0</text>
+<rect class="dsp" x="330" y="378" width="340.0" height="14" rx="7"/>
+<text class="pct" x="686" y="390">100.0%</text>
+<text class="path" x="686" y="406">aarch64</text>
+<text class="name" x="24" y="430">libaa</text>
+<text class="path" x="24" y="447">/usr/lib/libaa.so.2.0.0</text>
 <rect class="track" x="330" y="424" width="340" height="14" rx="7"/>
-<rect class="cov" x="330" y="424" width="240.2" height="14" rx="7"/>
-<rect class="match" x="330" y="424" width="224.7" height="14" rx="7"/>
-<text class="pct" x="686" y="436">70.7%</text>
-<text class="path" x="686" y="452">66.1% match</text>
+<rect class="cov" x="330" y="424" width="339.5" height="14" rx="7"/>
+<rect class="match" x="330" y="424" width="184.8" height="14" rx="7"/>
+<text class="pct" x="686" y="436">99.8%</text>
+<text class="path" x="686" y="452">54.3% match</text>
 <text class="name" x="24" y="476">libmedia-resource-calculator</text>
 <text class="path" x="24" y="493">/usr/lib/libmedia-resource-calculator.so.1</text>
 <rect class="track" x="330" y="470" width="340" height="14" rx="7"/>

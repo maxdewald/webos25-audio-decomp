@@ -35,20 +35,20 @@ static int find_holder(const char *id)
 /* @0x1a5480: caller arbitration. */
 static bool arbitrate(bool mix, const char *caller_id, const char *request_json)
 {
-    int idx = find_holder(caller_id);
+    int holder_index = find_holder(caller_id);
 
     if (!umi_ready())
         return false;
 
     if (mix) {
-        if (idx < 0 && mix_holder_count < MAX_HOLDERS)
+        if (holder_index < 0 && mix_holder_count < MAX_HOLDERS)
             strncpy(mix_holders[mix_holder_count++], caller_id, 63);
         return send_set_mixer(request_json);
     }
 
-    if (idx >= 0) {
-        memmove(mix_holders[idx], mix_holders[idx + 1],
-                (size_t)(mix_holder_count - idx - 1) * sizeof(mix_holders[0]));
+    if (holder_index >= 0) {
+        memmove(mix_holders[holder_index], mix_holders[holder_index + 1],
+                (size_t)(mix_holder_count - holder_index - 1) * sizeof(mix_holders[0]));
         mix_holder_count--;
     }
     /* @0x1a58d0: other holders remain -> swallow the false, reply success. */

@@ -61,12 +61,12 @@ static struct frpll_fout_settings frpll_fout_table[] = {
 
 static struct frpll_fout_settings *_aud_get_frpll_fout_settings (unsigned int sample_rate)
 {
-    int i;
+    int index;
 
-    for (i = 0; i < sizeof (frpll_fout_table) / sizeof (frpll_fout_table[0]); i++)
+    for (index = 0; index < sizeof (frpll_fout_table) / sizeof (frpll_fout_table[0]); index++)
     {
-        if (frpll_fout_table[i].sample_rate == sample_rate)
-            return &frpll_fout_table[i];
+        if (frpll_fout_table[index].sample_rate == sample_rate)
+            return &frpll_fout_table[index];
     }
 
     return &frpll_fout_table[0];

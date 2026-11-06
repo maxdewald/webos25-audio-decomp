@@ -215,10 +215,10 @@ extern const void *const fader_debug_opts;              /* 0x60003ce0 */
 #define WAIT_TIMEOUT_US   500000u          /* 0x6005f0d4 */
 #define BYPASS_IDLE_US    5000u            /* 0x6005f190 */
 
-static const char *state_name(int s)
+static const char *state_name(int state)
 {
-    static const char *const n[] = { "wait", "fadein", "running", "fadeout", "stop" };
-    return (unsigned)s < 5 ? n[s] : "unknown";
+    static const char *const names[] = { "wait", "fadein", "running", "fadeout", "stop" };
+    return (unsigned)state < 5 ? names[state] : "unknown";
 }
 
 static bool is_queue_variant(const struct fader *f) { return f->cls->desc->is_queue == 1; }

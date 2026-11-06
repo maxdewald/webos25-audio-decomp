@@ -34,15 +34,15 @@ struct resource_req { char type[16]; int qty; };
 
 /* @0x9e2d4 smp::ResourceManager::acquireResources (same shape in acquireAdaptiveResources). */
 void acquireResources(const char *soc, bool use_sw_audio, bool use_pcmmc,
-                      struct resource_req *req, int n)
+                      struct resource_req *requests, int request_count)
 {
     if (!isPlatformSupportSoftwareAudioDecoder(soc) || (!use_sw_audio && !use_pcmmc))
         return;
-    for (int i = 0; i < n; i++) {
-        if (strcmp(req[i].type, "ADEC") == 0)
-            strcpy(req[i].type, "PCMMC");        /* log "convert ADEC to PCMMC" */
-        if (strcmp(req[i].type, "ADEC_BANDWIDTH") == 0)
-            req[i].qty = 0;                       /* log "remove ADEC_BANDWIDTH" */
+    for (int index = 0; index < request_count; index++) {
+        if (strcmp(requests[index].type, "ADEC") == 0)
+            strcpy(requests[index].type, "PCMMC");        /* log "convert ADEC to PCMMC" */
+        if (strcmp(requests[index].type, "ADEC_BANDWIDTH") == 0)
+            requests[index].qty = 0;                       /* log "remove ADEC_BANDWIDTH" */
     }
 }
 
@@ -55,13 +55,13 @@ struct acquired { const char *resource; int index; };
  * AirPlayer @0xa3ee8) pass them unchanged as acquired-resource audio-port/mixer-port.
  * The sink's lgao_set_port then uses audio-port as renderer index, or the mixer path
  * only when it is -1; a second booked ADEC is never forwarded. */
-int lowest_resource_index(const struct acquired *res, int n, const char *wanted)
+int lowest_resource_index(const struct acquired *resources, int resource_count, const char *wanted)
 {
-    int best = -1;
-    for (int i = 0; i < n; i++)
-        if (strcmp(res[i].resource, wanted) == 0 && (best == -1 || res[i].index <= best))
-            best = res[i].index;
-    return best;
+    int lowest_index = -1;
+    for (int index = 0; index < resource_count; index++)
+        if (strcmp(resources[index].resource, wanted) == 0 && (lowest_index == -1 || resources[index].index <= lowest_index))
+            lowest_index = resources[index].index;
+    return lowest_index;
 }
 
 /*

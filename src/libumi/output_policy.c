@@ -52,29 +52,29 @@ static bool setEArcOutputType(struct umi_tv_audio *a, int ct, int mo, int cn)
 }
 
 /* @0x4fc24: also writes optic + ARC; ARC writer only accepts ct {1,2,3,4,5,9}. */
-static void setOutputType(struct umi_tv_audio *a, int ct, int mo)
+static void setOutputType(struct umi_tv_audio *a, int output_codec, int mix_option)
 {
-    int cn = 0;
+    int output_channels = 0;
     bool pcm_like = codec_is(a->input_codec, "pcm", "iamf");
 
     /* supportOutputChannel @0x4916c: explicit cn only for pcm/iamf, ct=PCM, mode != "pcm" */
-    if (ct == CT_PCM && pcm_like && strcmp(a->digital_mode, "pcm") != 0) {
-        int in = a->input_channels;
-        if (a->iamf_supported && strcmp(a->input_codec, "iamf") == 0 && is_valid_channel(in)) {
-            cn = in;
-            mo = MO_ALL;
-        } else if (is_valid_channel(in) && is_valid_channel(a->device_pcm_channels)) {
-            cn = in;
-            if (a->device_pcm_channels < in) {   /* clamp to device forces mixing */
-                cn = a->device_pcm_channels;
-                mo = MO_ALL;
+    if (output_codec == CT_PCM && pcm_like && strcmp(a->digital_mode, "pcm") != 0) {
+        int input_channels = a->input_channels;
+        if (a->iamf_supported && strcmp(a->input_codec, "iamf") == 0 && is_valid_channel(input_channels)) {
+            output_channels = input_channels;
+            mix_option = MO_ALL;
+        } else if (is_valid_channel(input_channels) && is_valid_channel(a->device_pcm_channels)) {
+            output_channels = input_channels;
+            if (a->device_pcm_channels < input_channels) {   /* clamp to device forces mixing */
+                output_channels = a->device_pcm_channels;
+                mix_option = MO_ALL;
             }
         } else {
-            cn = 0;
-            mo = MO_ALL;
+            output_channels = 0;
+            mix_option = MO_ALL;
         }
     }
-    setEArcOutputType(a, ct, mo, cn);
+    setEArcOutputType(a, output_codec, mix_option, output_channels);
 }
 
 /* @0x4ff14: DTS fallback when the stream is DTS but direct pass-through is not chosen. */

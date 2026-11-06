@@ -147,20 +147,20 @@ int aud_data_adapter_copy(struct aud_data_adapter *adap, void *data, unsigned in
 {
     unsigned int offset = adap->offset;
     unsigned char *dst = data;
-    struct link *l;
+    struct link *node;
 
     LOGD(aud_bufadp, 0x6eb, "adp%p, copy %d bytes\n", adap, size);
-    for (l = adap->holder.next; l != &adap->holder && size; l = l->next) {
-        struct aud_data_holder *h = link_container(struct aud_data_holder, link, l);
-        unsigned int n = h->data->size - offset;
+    for (node = adap->holder.next; node != &adap->holder && size; node = node->next) {
+        struct aud_data_holder *holder = link_container(struct aud_data_holder, link, node);
+        unsigned int copy_size = holder->data->size - offset;
 
-        if (n > size)
-            n = size;
-        LOGD(aud_bufadp, 0x6f7, "adp%p, copy %d\n", adap, n);
-        memcpy(dst, h->data->data + offset, n);
+        if (copy_size > size)
+            copy_size = size;
+        LOGD(aud_bufadp, 0x6f7, "adp%p, copy %d\n", adap, copy_size);
+        memcpy(dst, holder->data->data + offset, copy_size);
         offset = 0;
-        size -= n;
-        dst += n;
+        size -= copy_size;
+        dst += copy_size;
     }
     if (size) {
         LOGE(aud_bufadp, 0x704, "adp%p, no data. remained size %d\n", adap, size);

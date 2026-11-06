@@ -9,6 +9,7 @@
 """
 import argparse
 import difflib
+import hashlib
 import json
 import re
 import shlex
@@ -301,6 +302,17 @@ def cmd_status(args):
     targets = load_targets()
     ok = args.no_match or score_all(targets)
     rows = [summary(t) for t in targets]
+    if args.snapshot or args.compare:
+        snapshot = make_snapshot(targets)
+        if args.compare:
+            failures = compare_snapshot(json.loads(Path(args.compare).read_text()), snapshot)
+            for failure in failures:
+                print(failure, file=sys.stderr)
+            ok = ok and not failures
+        if args.snapshot:
+            destination = Path(args.snapshot)
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_text(json.dumps(snapshot, indent=2) + '\n')
     if args.json:
         print(json.dumps(rows, indent=2))
         sys.exit(0 if ok else 1)
@@ -318,6 +330,62 @@ def cmd_status(args):
     print(f'\ntotal: {cov}/{tot} bytes reconstructed ({100 * cov / tot:.3f}%), '
           f'{sum(1 for r in rows if not r["symbols"])} targets without a symbol table')
     sys.exit(0 if ok else 1)
+
+
+def make_snapshot(targets):
+    return {
+        'version': 1,
+        'compiler': CFG['compiler'],
+        'targets': {t.name: {
+            'binary_sha256': hashlib.sha256(t.binary.read_bytes()).hexdigest() if t.has_binary else None,
+            'arch': t.arch,
+            'image_bias': t.image_bias,
+            'src_bias': t.src_bias,
+            'cflags_extra': t.cflags_extra,
+            'summary': summary(t),
+            'functions': {f'{f.addr:#x}': {
+                'size': f.size, 'name': f.name, 'src_name': f.src_name,
+                'match': f.match, 'note': f.note,
+            } for f in t.funcs.values() if f.src},
+        } for t in targets},
+    }
+
+
+def compare_snapshot(before, after):
+    failures = []
+    if before.get('version') != after.get('version'):
+        return ['snapshot format changed']
+    if before['compiler'] != after['compiler']:
+        failures.append('compiler configuration changed')
+    for name, baseline in before['targets'].items():
+        current = after['targets'].get(name)
+        if current is None:
+            failures.append(f'{name}: target disappeared')
+            continue
+        for field in ('binary_sha256', 'arch', 'image_bias', 'src_bias', 'cflags_extra'):
+            if baseline[field] != current[field]:
+                failures.append(f'{name}: {field} changed')
+        for field in ('bytes', 'functions'):
+            if baseline['summary'][field] != current['summary'][field]:
+                failures.append(f'{name}: symbol inventory {field} changed')
+        for address, original in baseline['functions'].items():
+            updated = current['functions'].get(address)
+            prefix = f'{name} {address} ({original["name"]})'
+            if updated is None:
+                failures.append(f'{prefix}: reconstruction disappeared')
+                continue
+            if updated['size'] != original['size']:
+                failures.append(f'{prefix}: function size changed')
+            if original['match'] is not None:
+                if not original['note'] and updated['note'] == 'not emitted (inlined or failed to compile)':
+                    failures.append(f'{prefix}: function no longer emitted')
+                if updated['match'] is None:
+                    failures.append(f'{prefix}: match no longer measured')
+                elif updated['match'] < original['match']:
+                    failures.append(f'{prefix}: match decreased {original["match"]} -> {updated["match"]}')
+        if current['summary']['reconstructed_bytes'] < baseline['summary']['reconstructed_bytes']:
+            failures.append(f'{name}: reconstructed bytes decreased')
+    return failures
 
 
 def find(targets, name):
@@ -452,6 +520,8 @@ def main():
     s = sub.add_parser('status')
     s.add_argument('--json', action='store_true')
     s.add_argument('--no-match', action='store_true', help='skip compiling and instruction matching')
+    s.add_argument('--snapshot', help='write function-level baseline JSON')
+    s.add_argument('--compare', help='reject regressions against a baseline JSON')
     s.set_defaults(fn=cmd_status)
     d = sub.add_parser('diff')
     d.add_argument('target')

@@ -134,15 +134,15 @@ void append_string(struct strvec_ctx *ctx, const char *s, size_t len)
 }
 
 /* @0x20920 */
-void aabase_free_vector(char **v)
+void aabase_free_vector(char **vector)
 {
-    char **p;
+    char **entry;
 
-    if (!v)
+    if (!vector)
         return;
-    for (p = v; *p; p++)
-        free(*p);
-    free(v);
+    for (entry = vector; *entry; entry++)
+        free(*entry);
+    free(vector);
 }
 
 /* @0x20944: split at whitespace; '...' and "..." group (and may nest the other kind),

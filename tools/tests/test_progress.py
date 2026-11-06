@@ -16,6 +16,64 @@ spec.loader.exec_module(progress)
 
 
 class ProgressTests(unittest.TestCase):
+    def snapshot(self):
+        target = progress.Target('example', Path('/missing'), 'arm', None, None, 0, 0)
+        target.funcs = {
+            1: progress.Func(1, 100, 'first', src='first.c:1', match=90.123456),
+            2: progress.Func(2, 100, 'second', src='second.c:1', match=50),
+        }
+        return progress.make_snapshot([target])
+
+    def test_snapshot_rejects_individual_loss_despite_aggregate_gain(self):
+        before, after = self.snapshot(), self.snapshot()
+        functions = after['targets']['example']['functions']
+        functions['0x1']['match'] -= 0.000001
+        functions['0x2']['match'] = 100
+        self.assertTrue(any('match decreased' in failure for failure in progress.compare_snapshot(before, after)))
+
+    def test_snapshot_rejects_missing_function_and_unmeasured_match(self):
+        before, after = self.snapshot(), self.snapshot()
+        functions = after['targets']['example']['functions']
+        del functions['0x1']
+        functions['0x2']['match'] = None
+        failures = progress.compare_snapshot(before, after)
+        self.assertTrue(any('reconstruction disappeared' in failure for failure in failures))
+        self.assertTrue(any('no longer measured' in failure for failure in failures))
+
+    def test_snapshot_accepts_improvements_and_new_coverage(self):
+        before, after = self.snapshot(), self.snapshot()
+        functions = after['targets']['example']['functions']
+        functions['0x1']['match'] = 100
+        functions['0x3'] = dict(functions['0x2'])
+        self.assertEqual(progress.compare_snapshot(before, after), [])
+
+    def test_snapshot_rejects_changed_measurement_inputs(self):
+        before, after = self.snapshot(), self.snapshot()
+        after['targets']['example']['cflags_extra'] = ['-O0']
+        self.assertIn('example: cflags_extra changed', progress.compare_snapshot(before, after))
+
+    def test_snapshot_rejects_zero_score_emission_loss(self):
+        before, after = self.snapshot(), self.snapshot()
+        before['targets']['example']['functions']['0x1']['match'] = 0
+        updated = after['targets']['example']['functions']['0x1']
+        updated['match'] = 0
+        updated['note'] = 'not emitted (inlined or failed to compile)'
+        self.assertTrue(any('no longer emitted' in failure for failure in progress.compare_snapshot(before, after)))
+
+    def test_snapshot_rejects_missing_target(self):
+        before, after = self.snapshot(), self.snapshot()
+        del after['targets']['example']
+        self.assertEqual(progress.compare_snapshot(before, after), ['example: target disappeared'])
+
+    def test_snapshot_rejects_changed_binary_and_lost_coverage(self):
+        before, after = self.snapshot(), self.snapshot()
+        target = after['targets']['example']
+        target['binary_sha256'] = 'changed'
+        target['summary']['reconstructed_bytes'] -= 1
+        failures = progress.compare_snapshot(before, after)
+        self.assertIn('example: binary_sha256 changed', failures)
+        self.assertIn('example: reconstructed bytes decreased', failures)
+
     def test_coverage_only_svg_does_not_compile_or_claim_match(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

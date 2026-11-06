@@ -22,25 +22,25 @@ static inline void load_dl(const char *path)
 /* @0x10a08 */
 int dlload_dir(const char *dir)
 {
-    DIR *d;
-    struct dirent *de;
+    DIR *directory;
+    struct dirent *entry;
     size_t dir_len;
 
-    if (!dir || !(d = opendir(dir)))
+    if (!dir || !(directory = opendir(dir)))
         return -1;
 
     dir_len = strlen(dir);
-    while ((de = readdir(d)) != NULL) {
-        if (de->d_name[0] == '.')
+    while ((entry = readdir(directory)) != NULL) {
+        if (entry->d_name[0] == '.')
             continue;
         {
-            char path[dir_len + strlen(de->d_name) + 4];
+            char path[dir_len + strlen(entry->d_name) + 4];
 
-            sprintf(path, "%s/%s", dir, de->d_name);
+            sprintf(path, "%s/%s", dir, entry->d_name);
             load_dl(path);
         }
     }
-    closedir(d);
+    closedir(directory);
     return 0;
 }
 

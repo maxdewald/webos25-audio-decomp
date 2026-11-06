@@ -111,11 +111,11 @@ bool Options::getInt(std::string key, int *value)
 bool Options::loadJSON(std::string json)
 {
     try {
-        std::stringstream stream(json);
-        boost::property_tree::read_json(stream, tree_);
-        for (const auto &item : tree_)
+        std::stringstream json_stream(json);
+        boost::property_tree::read_json(json_stream, tree_);
+        for (const auto &option : tree_)
             PF_LOG_DEBUG(options_log, "options.cpp", "loadJSON", 0x3a, "%s %s",
-                         item.first.c_str(), item.second.get_value<std::string>().c_str());
+                         option.first.c_str(), option.second.get_value<std::string>().c_str());
         return true;
     } catch (const boost::property_tree::json_parser_error &error) {
         PF_LOG_ERROR(options_log, "options.cpp", "loadJSON", 0x3f,

@@ -139,7 +139,7 @@ bool compareAudioUsingValidTrackOrder(const void *, const void *)
 /* @0xe8154: unordered (-1) tracks follow tracks with an explicit order. */
 bool compareAudioUsingValidTrackOrder(const void *left, const void *right)
 {
-    int a = FIELD(int, left, 0x154);
-    int b = FIELD(int, right, 0x154);
-    return a != -1 && (b == -1 || a < b);
+    int left_order = FIELD(int, left, 0x154);
+    int right_order = FIELD(int, right, 0x154);
+    return left_order != -1 && (right_order == -1 || left_order < right_order);
 }

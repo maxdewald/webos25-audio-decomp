@@ -14,7 +14,7 @@
  * lgadec_decoder_set_codec_param (@0x2a414) was recovered from the disassembly (Ghidra
  * failed). The codec feeders are in lgadec_codec.c.
  *
- * The kernel ABI this build was compiled against has no DTS: its audio_decoder_codec
+ * The ioctl ABI recorded in this library's DWARF has no DTS: audio_decoder_codec
  * (DWARF) runs ...FLAC=16, OPUS=17, AAC_BYPASS=18, AAC_ELD=19, RA8=20, IAMF=21, whereas the
  * published lg-opensource/kdriver aud_kapi_decoder.h has DTS=17, DTS_HD=18, OPUS=19...
  * ADEC_IOR_GET_DTS_SUPPORTED / _GET_DTS_BITSTREAM_PASSTHROUGH (24/25) are never issued.
@@ -119,7 +119,7 @@ enum audio_decoder_codec {
     AUDIO_DECODER_CODEC_VORBIS, AUDIO_DECODER_CODEC_AMR_WB, AUDIO_DECODER_CODEC_AMR_NB,
     AUDIO_DECODER_CODEC_ADPCM, AUDIO_DECODER_CODEC_FLAC, AUDIO_DECODER_CODEC_OPUS,
     AUDIO_DECODER_CODEC_AAC_BYPASS, AUDIO_DECODER_CODEC_AAC_ELD, AUDIO_DECODER_CODEC_RA8,
-    AUDIO_DECODER_CODEC_IAMF, AUDIO_DECODER_CODEC_MAX,  /* no DTS in the kernel ABI either */
+    AUDIO_DECODER_CODEC_IAMF, AUDIO_DECODER_CODEC_MAX,  /* this library's DWARF, not the GPL enum */
 };
 
 /* ---- libaudcommon / libaabase / libaa imports (declared locally) -------------- */
@@ -187,7 +187,7 @@ extern struct aud_event *aud_event_new_flush_async(void);
 extern const char *aud_event_name(struct aud_event *e);
 extern char *aud_event_str(struct aud_event *e);
 extern int aud_event_value_get_int(struct aud_event *e, const char *field, int def);
-extern int aud_event_value_get_bool(struct aud_event *e, const char *field, int def);
+extern bool aud_event_value_get_bool(struct aud_event *e, const char *field, bool def);
 extern const char *aud_event_value_get_str(struct aud_event *e, const char *field, const char *def);
 
 
@@ -867,7 +867,7 @@ int lgadec_decoder_disconnect(void *a)
  * the disassembly (tbh jump table over audio_decoder_codec - 1 at 0x1a488). Parameters come
  * from adec->stream_info (filled by the element from caps) plus the stored DRC / DE gain /
  * play speed / downmix settings. MAT, TRUE_HD, AAC_BYPASS and IAMF get no parameter block.
- * Nothing DTS-related: the kernel's DTS codec ids are not even in this enum. */
+ * No DTS members in this library's ioctl enum; parameter defaults do not prove support. */
 int lgadec_decoder_set_codec_param(void *a)
 {
     lgadec *adec = a;
@@ -1088,13 +1088,13 @@ int lgadec_decoder_set_codec_param(void *a)
         const unsigned char *dsi;
 
         ALLOC_PARAM(p, 0x628);
+        memset(p, 0, sizeof(*p));
         p->sampling_rate = si->freq;
         p->channels = si->channels;
         p->bits_per_sample = si->bits_per_sample;
         p->wma_format_tag = si->wma_format_tag;
         p->block_align = si->block_align;
         p->avg_bps = si->avg_bytes_per_sec;
-        p->channel_mask = p->encode_opt = p->adv_encode_opt = p->adv_encode_opt2 = 0;
         LOGI(0x635, "sampling rate: %d, channels: %d, bits per sample: %d, wma format tag: %d, "
              "block align: %d, avg bytes per sec: %d\n", p->sampling_rate, p->channels,
              p->bits_per_sample, p->wma_format_tag, p->block_align, p->avg_bps);
@@ -1536,8 +1536,8 @@ static enum appsink_event_return lgadec_appsink_handle_event(void *priv, int por
     case AUD_EVENT_TYPE_FIRST_AU: {
         LGADEC_AUDIO_CAPS_INFO caps_info;
         int channels, bits_per_sample, rate, acmod, check_downmix, channel_mode, out_channels;
-        int data_rate, gap_correction, es;
-        bool atmos, lfe_enable, dolby, clock_x4, downmix;
+        int data_rate, gap_correction;
+        bool atmos, lfe_enable, dolby, clock_x4, downmix, es;
         const char *codec_str;
 
         memset(&caps_info, 0, sizeof(caps_info));
@@ -1629,8 +1629,8 @@ static enum appsink_event_return lgadec_appsink_handle_event(void *priv, int por
             cur->gap_correction = caps_info.gap_correction;
             if (adec->audio_mode == 5 || cur->channel_mode != caps_info.channel_mode) {
                 /* _lgadec_set_audio_mode, inlined: AUDIO_DECODER_CH_MODE -> LGADEC_MODE */
-                static const int channel_mode_dolby[8] = { 3, 0, 2, 4, 4, 4, 4, 4 };
-                static const int channel_mode_mp3[4] = { 2, 1, 3, 0 };
+                int channel_mode_dolby[8] = { 3, 0, 2, 4, 4, 4, 4, 4 };
+                int channel_mode_mp3[4] = { 2, 1, 3, 0 };
                 int audio_mode = 5;
 
                 if (caps_info.channel_mode >= 0) {
@@ -1963,7 +1963,8 @@ static inline bool lgadec_is_available_bypass_output(LGADEC_CODEC_T codec)
 static inline bool freq_in(int freq, int lo, int hi) { return freq == 0 || (freq >= lo && freq <= hi); }
 
 /* @0x2d444: validate stream info per codec, pick the host-side feeder
- * (selected_codec) and decide whether a DSP decoder is used at all (no_dec). */
+ * (selected_codec) and decide whether a DSP decoder is used at all (no_dec).
+ * MAT has an enum/map entry but no case: it is rejected even with es-bypass enabled. */
 int lgadec_select_codec(void *a, LGADEC_CODEC_INFO_T *codec_info)
 {
     lgadec *adec = a;
@@ -2545,7 +2546,7 @@ int lgadec_set_bypass_decoder(void *a, bool on)
 
 /* @0x30344: control thread. preroll_pipe "preroll" -> LGADEC_EVENT_PREROLL;
  * pipe "stop" ends the task, "SUB0"/"SUB1" switch the ES bypass. */
-void *lgadec_task_run(void *data)
+static void *lgadec_task_run(void *data)
 {
     lgadec *adec = data;
     char buf[8];

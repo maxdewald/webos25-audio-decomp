@@ -31,7 +31,7 @@ typedef enum {
     LGADEC_APP_TYPE_JP4K, LGADEC_APP_TYPE_APPCAST, LGADEC_APP_TYPE_SYE, LGADEC_APP_TYPE_MAX,
 } LGADEC_APP_TYPE_T;
 
-/* No DTS member: lgaudiodec has no DTS decoder/bypass at all (see gstlgaudiodec.c). */
+/* No DTS/TRUE_HD selector. MAT exists here but lgadec_select_codec rejects it. */
 typedef enum {
     LGADEC_CODEC_UNKNOWN = 0, LGADEC_CODEC_PCM = 1, LGADEC_CODEC_AC3 = 2, LGADEC_CODEC_EAC3 = 3,
     LGADEC_CODEC_AAC = 4, LGADEC_CODEC_AAC_ELD = 5, LGADEC_CODEC_DRA = 6, LGADEC_CODEC_MP3 = 7,

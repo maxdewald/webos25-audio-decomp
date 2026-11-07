@@ -41,8 +41,9 @@ struct logmm_module logmm_module_media_event = { 0, 0, 15, &logmm_dummy_mask, "m
         GST_INFO(fmt, ##__VA_ARGS__); \
     } while (0)
 
-/* Ordered by strstr() precedence; table @0x3e84c (22 entries). There is no DTS entry:
- * audio/x-dts never matches and the element reports "Unknown MIME". */
+/* Ordered by strstr() precedence; 22 entries at raw ELF 0x3e84c / Ghidra 0x4e84c.
+ * No DTS, TrueHD or MAT input entry: audio/x-dts, audio/x-true-hd and audio/x-mat
+ * report "Unknown MIME". Decoder-reported codec-str does not select an input codec. */
 static const AUDIO_MIME_MAP_T _g_audio_mime_map[] = {
     { "x-ac3", gst_lg_audiodec_ac3_getinfo },
     { "x-eac3", gst_lg_audiodec_eac3_getinfo },

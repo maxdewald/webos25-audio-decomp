@@ -292,9 +292,10 @@ GstFlowReturn gst_lg_audiodec_aac_getinfo(const GstStructure *s, LGADEC_CODEC_IN
     br = gst_bit_reader_new(map.data, map.size);
     if (gst_bit_reader_get_bits_uint32(br, &object_type, 5)) {
         if (object_type == 31) {
-            if (!gst_bit_reader_get_bits_uint32(br, &object_type, 6))
+            guint32 escaped_type;
+            if (!gst_bit_reader_get_bits_uint32(br, &escaped_type, 6))
                 goto out;
-            object_type += 32;
+            object_type = escaped_type + 32;
         }
         if (object_type == 39) {
             GST_INFO("detect AAC-ELD stream");

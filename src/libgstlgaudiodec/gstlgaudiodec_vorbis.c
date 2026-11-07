@@ -215,39 +215,44 @@ static void gst_lg_audiodec_vorbis_init(GstLgAudioDecVorbis *pAudioDec)
 GstFlowReturn gst_lg_audiodec_vorbis_getinfo(const GstStructure *s, LGADEC_CODEC_INFO_T *codec_info)
 {
     const GValue *streamheader;
-    guint n, i;
-    gsize size = 0, offset = 0;
 
     GST_INFO("Set VORBIS info");
     streamheader = gst_structure_get_value(s, "streamheader");
-    if (!streamheader || !GST_VALUE_HOLDS_ARRAY(streamheader)) {
-        GST_ERROR("VORBIS: streamheader is not exist");
-        goto done;
-    }
-    n = gst_value_array_get_size(streamheader);
-    for (i = 0; i < n; i++)
-        size += gst_buffer_get_size(gst_value_get_buffer(gst_value_array_get_value(streamheader, i)));
-    GST_INFO("vorbis header size = %u", size);
+    if (streamheader && GST_VALUE_HOLDS_ARRAY(streamheader)) {
+        guint n = gst_value_array_get_size(streamheader);
+        guint i;
+        guint size = 0;
 
-    if (codec_info->buffer)
-        free(codec_info->buffer);
-    codec_info->buffer = malloc(size);
-    if (!codec_info->buffer)
-        goto done;
-    codec_info->buf_size = size;
-    for (i = 0; i < n; i++) {
-        GstBuffer *header = gst_value_get_buffer(gst_value_array_get_value(streamheader, i));
-        GstMapInfo bufMapInfo;
+        for (i = 0; i < n; i++)
+            size += gst_buffer_get_size(gst_value_get_buffer(gst_value_array_get_value(streamheader, i)));
+        GST_INFO("vorbis header size = %u", size);
 
-        if (gst_buffer_map(header, &bufMapInfo, GST_MAP_READ) != TRUE) {
-            GST_ERROR("gst_buffer_map() Err");
-            continue;
+        if (codec_info->buffer)
+            free(codec_info->buffer);
+        codec_info->buffer = malloc(size);
+        if (codec_info->buffer) {
+            guint offset = 0;
+
+            codec_info->buf_size = size;
+            for (i = 0; i < n; i++) {
+                GstBuffer *header = gst_value_get_buffer(gst_value_array_get_value(streamheader, i));
+                GstMapInfo bufMapInfo;
+
+                if (gst_buffer_map(header, &bufMapInfo, GST_MAP_READ) == TRUE) {
+                    guint buffer_size = bufMapInfo.size;
+                    guint8 *destination = codec_info->buffer + offset;
+
+                    offset += buffer_size;
+                    memcpy(destination, bufMapInfo.data, buffer_size);
+                    gst_buffer_unmap(header, &bufMapInfo);
+                } else {
+                    GST_ERROR("gst_buffer_map() Err");
+                }
+            }
         }
-        memcpy(codec_info->buffer + offset, bufMapInfo.data, bufMapInfo.size);
-        offset += bufMapInfo.size;
-        gst_buffer_unmap(header, &bufMapInfo);
+    } else {
+        GST_ERROR("VORBIS: streamheader is not exist");
     }
-done:
     codec_info->codec_type = LGADEC_CODEC_VORBIS;
     return GST_FLOW_OK;
 }

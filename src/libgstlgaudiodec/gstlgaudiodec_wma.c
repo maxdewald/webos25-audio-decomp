@@ -213,7 +213,6 @@ static void gst_lg_audiodec_wma_init(GstLgAudioDecWma *pAudioDec)
 GstFlowReturn gst_lg_audiodec_wma_getinfo(const GstStructure *s, LGADEC_CODEC_INFO_T *codec_info)
 {
     gint wmaversion;
-    int format;
 
     GST_INFO("Get WMA info");
     codec_info->codec_type = LGADEC_CODEC_WMA_PRO;
@@ -221,18 +220,21 @@ GstFlowReturn gst_lg_audiodec_wma_getinfo(const GstStructure *s, LGADEC_CODEC_IN
         GST_ERROR("Unknown WMA Format (no wmaversion)");
         return GST_FLOW_ERROR;
     }
-    if (wmaversion == 2) {
-        format = LGADEC_WMA2_FORMAT;
-    } else if (wmaversion == 3) {
-        format = LGADEC_WMA_PRO_FORMAT;
-    } else if (wmaversion == 4) {
-        format = LGADEC_WMA_LOSSLESS_FORMAT;
-    } else {
+    switch (wmaversion) {
+    case 2:
+        codec_info->codec_format = LGADEC_WMA2_FORMAT;
+        break;
+    case 3:
+        codec_info->codec_format = LGADEC_WMA_PRO_FORMAT;
+        break;
+    case 4:
+        codec_info->codec_format = LGADEC_WMA_LOSSLESS_FORMAT;
+        break;
+    default:
         GST_ERROR("Unknown WMA Format");
         codec_info->codec_format = LGADEC_UNKNOWN_FORMAT;
         return GST_FLOW_ERROR;
     }
-    codec_info->codec_format = format;
-    GST_INFO("WMA format tag = %d", format);
+    GST_INFO("WMA format tag = %d", codec_info->codec_format);
     return GST_FLOW_OK;
 }

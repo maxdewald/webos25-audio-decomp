@@ -624,17 +624,14 @@ static inline LGADEC_CODEC_FORMAT_T _aac_detect(const uint8_t *data, uint32_t le
 }
 
 /* inlined: AudioSpecificConfig -> object type / ADTS byte 2 / channel config */
-static inline int _get_aac_info(lgadec *adec, unsigned int *object_type, uint8_t *adts_byte2,
-                                unsigned int *channels)
+static inline int _get_aac_info(void *extra_data, uint32_t len, uint8_t *object_type,
+                                uint8_t *adts_byte2, uint8_t *channels)
 {
-    const uint8_t *dsi = adec->stream_info.dsi_buffer;
-    unsigned int len = adec->stream_info.dsi_buffer_length;
-    unsigned int ot, freq_idx, ch;
+    uint8_t *dsi = extra_data;
+    uint8_t ot, freq_idx, ch;
     uint8_t b2;
 
-    if (!dsi)
-        return -1;
-    if (len < 2) {
+    if (!dsi || len < 2) {
         LOGE(0xc8, "extra_data is NULL or extra_data_len is less than 2!!!");
         return -1;
     }
@@ -672,8 +669,6 @@ static inline int _get_aac_info(lgadec *adec, unsigned int *object_type, uint8_t
         }
     }
     LOGT(0xf5, "objectType = 0x%02X, freqIndex = 0x%02X, ch = 0x%02X", ot, freq_idx, ch);
-    if (ot != 0)
-        b2 |= (ot - 1) << 6;                       /* ADTS profile */
     *object_type = ot;
     *adts_byte2 = b2;
     *channels = ch;
@@ -682,8 +677,59 @@ static inline int _get_aac_info(lgadec *adec, unsigned int *object_type, uint8_t
 
 /* inlined: tells the DSP the AAC config. Layout: ADTS header(7) 0xdeadbeef 0xcafebabe
  * object_type(1) format(1) AudioSpecificConfig(n), timestamp 0. */
-static inline void _aac_first_data(lgadec *adec, AAC_DATA_T *aac, unsigned int object_type)
+static inline int _aac_first_data(lgadec *adec, uint8_t *data, uint32_t len)
 {
+    AAC_DATA_T *aac = adec->codec_data;
+    LGADEC_STREAM_INFO_T *si = &adec->stream_info;
+    uint8_t object_type = si->object_type;
+    uint8_t byte2, channels;
+    unsigned int adts_len = si->dsi_buffer_length + 17;
+
+    if (aac->aac_format == LGADEC_UNKNOWN_FORMAT || adec->app_type != LGADEC_APP_TYPE_APPCAST)
+        aac->aac_format = _aac_detect(data, len);
+    lgadec_decoder_set_aac_format_type(adec, aac->aac_format);
+
+    switch (aac->aac_format) {
+    case LGADEC_AAC_ADTS_FORMAT:
+        aac->aac_adts_header[0] = data[0];
+        aac->aac_adts_header[1] = data[1];
+        aac->aac_adts_header[2] = data[2];
+        aac->aac_adts_header[6] = data[6];
+        _aac_set_adts_length(aac->aac_adts_header, si->channels, adts_len);
+        return 0;
+    case LGADEC_AAC_LOAS_FORMAT:
+        aac->aac_adts_header[0] = 0xff;
+        aac->aac_adts_header[1] = 0xf1;
+        aac->aac_adts_header[2] = (object_type - 1) << 6;
+        aac->aac_adts_header[6] = 0;
+        _aac_set_adts_length(aac->aac_adts_header, si->channels, adts_len);
+        return 0;
+    case LGADEC_RAW_FORMAT:
+        if (!si->dsi_buffer || _get_aac_info(si->dsi_buffer, si->dsi_buffer_length,
+                                            &object_type, &byte2, &channels) != 0) {
+            LOGT(0x1a1, "DSI is NULL(%p) or _get_aac_info() ERR!!! do not create ADTS seq header",
+                 si->dsi_buffer);
+            aac->aac_format = LGADEC_UNKNOWN_FORMAT;
+            return -1;
+        }
+        if (object_type != 0) {
+            uint8_t profile = object_type - 1;
+
+            byte2 |= profile << 6;
+        }
+        if ((uint8_t)(channels - 1) > 6)
+            channels = si->channels;
+        si->channels = channels;
+        aac->aac_adts_header[0] = 0xff;
+        aac->aac_adts_header[1] = 0xf1;
+        aac->aac_adts_header[2] = byte2 | (channels & 7) >> 2;
+        aac->aac_adts_header[6] = 0;
+        _aac_set_adts_length(aac->aac_adts_header, si->channels, adts_len);
+        break;
+    default:
+        return 0;
+    }
+
     unsigned int dsi_len = adec->stream_info.dsi_buffer_length;
     unsigned int size = dsi_len + 17;
     uint8_t *buf = malloc(size);
@@ -691,7 +737,7 @@ static inline void _aac_first_data(lgadec *adec, AAC_DATA_T *aac, unsigned int o
 
     if (!buf) {
         LOGE(0x178, "malloc Err");
-        return;
+        return -1;
     }
     memcpy(buf, aac->aac_adts_header, 7);
     memcpy(buf + 7, magic, 8);
@@ -701,14 +747,16 @@ static inline void _aac_first_data(lgadec *adec, AAC_DATA_T *aac, unsigned int o
         memcpy(buf + 17, adec->stream_info.dsi_buffer, dsi_len);
     LOGN(0x18f, "Tell F/W, object type %d, Data Format %d\n", object_type, aac->aac_format);
     LOGN(0x191, "dsi / total : %d / %d\n", adec->stream_info.dsi_buffer_length, size);
-    if (lgadec_decoder_feed(adec, buf, size, 0) == 0) {
-        free(buf);
-        aac->feed_cnt++;
-        adec->fed_frame_cnt++;
-    } else {
-        free(buf);
+    int ret = lgadec_decoder_feed(adec, buf, size, 0);
+
+    free(buf);
+    if (ret != 0) {
         LOGE(0x19a, "Feed Err (first data)");
+        return -1;
     }
+    aac->feed_cnt++;
+    adec->fed_frame_cnt++;
+    return 0;
 }
 
 /* @0x32174: on the first buffer: frame format from caps (trusted only for APPCAST) or from
@@ -733,54 +781,17 @@ int _aac_feed(lgadec *adec, uint8_t *data, uint32_t len, uint64_t timestamp)
         aac->aac_format = aac->aac_format_from_demux;
 
     if (aac->feed_cnt == 0) {
-        unsigned int adts_len = si->dsi_buffer_length + 17;
-        unsigned int object_type = (uint8_t)si->object_type;
-
-        if (aac->aac_format == LGADEC_UNKNOWN_FORMAT || adec->app_type != LGADEC_APP_TYPE_APPCAST)
-            aac->aac_format = _aac_detect(data, len);
-        lgadec_decoder_set_aac_format_type(adec, aac->aac_format);
-
+        _aac_first_data(adec, data, len);
         switch (aac->aac_format) {
+        case LGADEC_RAW_FORMAT:
+            LOGN(0x1c3, "This stream is AAC - RAW format. transform RAW to ADTS format");
+            break;
         case LGADEC_AAC_ADTS_FORMAT:
-            aac->aac_adts_header[0] = data[0];
-            aac->aac_adts_header[1] = data[1];
-            aac->aac_adts_header[2] = data[2];
-            aac->aac_adts_header[6] = data[6];
-            _aac_set_adts_length(aac->aac_adts_header, si->channels, adts_len);
             LOGN(0x1c7, "This stream is AAC - ADTS format");
             break;
         case LGADEC_AAC_LOAS_FORMAT:
-            aac->aac_adts_header[0] = 0xff;
-            aac->aac_adts_header[1] = 0xf1;
-            aac->aac_adts_header[2] = (object_type - 1) << 6;
-            aac->aac_adts_header[6] = 0;
-            _aac_set_adts_length(aac->aac_adts_header, si->channels, adts_len);
             LOGN(0x1cb, "This stream is AAC - LOAS format");
             break;
-        case LGADEC_RAW_FORMAT: {
-            uint8_t byte2;
-            unsigned int channels;
-
-            if (_get_aac_info(adec, &object_type, &byte2, &channels) != 0) {
-                LOGT(0x1a1, "DSI is NULL(%p) or _get_aac_info() ERR!!! do not create ADTS seq header",
-                     si->dsi_buffer);
-                aac->aac_format = LGADEC_UNKNOWN_FORMAT;
-                LOGE(0x1cf, "This stream is AAC - UNKNOWN format. bypass audio data");
-                break;
-            }
-            if ((uint8_t)(channels - 1) > 6)       /* 0 or > 7: keep the caps value */
-                channels = si->channels;
-            si->channels = channels;
-            aac->aac_adts_header[0] = 0xff;
-            aac->aac_adts_header[1] = 0xf1;
-            aac->aac_adts_header[2] = byte2 | (channels & 7) >> 2;
-            aac->aac_adts_header[6] = 0;
-            _aac_set_adts_length(aac->aac_adts_header, si->channels, adts_len);
-            _aac_first_data(adec, aac, object_type);
-            if (aac->aac_format == LGADEC_RAW_FORMAT)
-                LOGN(0x1c3, "This stream is AAC - RAW format. transform RAW to ADTS format");
-            break;
-        }
         default:
             LOGE(0x1cf, "This stream is AAC - UNKNOWN format. bypass audio data");
             break;
@@ -788,6 +799,7 @@ int _aac_feed(lgadec *adec, uint8_t *data, uint32_t len, uint64_t timestamp)
     }
 
     if (aac->aac_format == LGADEC_RAW_FORMAT) {
+        uint8_t channels = si->channels;
         unsigned int total = len + 7;
         uint8_t *frame = malloc(total);
         int ret;
@@ -796,7 +808,7 @@ int _aac_feed(lgadec *adec, uint8_t *data, uint32_t len, uint64_t timestamp)
             LOGE(0x1df, "malloc Err");
             return -1;
         }
-        _aac_set_adts_length(aac->aac_adts_header, si->channels, total);
+        _aac_set_adts_length(aac->aac_adts_header, channels, total);
         memcpy(frame, aac->aac_adts_header, 7);
         memcpy(frame + 7, data, len);
         ret = lgadec_decoder_feed(adec, frame, total, timestamp);

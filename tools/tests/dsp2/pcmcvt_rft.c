@@ -115,6 +115,56 @@ static void pending_converter_tests(void)
     Pcmcvt_Destructor(&converter);
 }
 
+static void gain_control_tests(void)
+{
+    struct pcmcvt converter = {0};
+    struct rft_config *state = (struct rft_config *)converter.rft;
+    state->gain = 12345;
+    assert(Pcmcvt_Constructor(&converter) == 0);
+    assert(converter.gain == 0x800000 && !converter.gain_enable_property);
+    assert(RFT_GetGainEnable(state) == 0 && RFT_GetGai(state) == 12345);
+
+    uint32_t command[] = {0x800000, 1};
+    assert(Pcmcvt_Cmd(&converter, 0x50040008, command, sizeof(command)) == 0);
+    assert(RFT_GetGainEnable(state) == 1 && RFT_GetGai(state) == 0x800000);
+    assert(set_prop_gain(&converter, NULL, "4194304") == 0);
+    assert(converter.gain == 0x400000 && !converter.gain_enable_property);
+    assert(RFT_GetGainEnable(state) == 1 && RFT_GetGai(state) == 0x400000);
+
+    command[0] = 56789;
+    assert(Pcmcvt_Cmd(&converter, 0x50040008, command, sizeof(command)) == 0);
+    assert(converter.gain == 0x400000 && RFT_GetGai(state) == 56789);
+    assert(set_prop_gain(&converter, NULL, "8388608") == 0);
+    assert(converter.gain == 0x800000 && !converter.gain_enable_property);
+    assert(RFT_GetGainEnable(state) == 0 && RFT_GetGai(state) == 56789);
+    assert(set_prop_gain_enable(&converter, NULL, "true") == 0);
+    assert(RFT_GetGainEnable(state) == 1 && RFT_GetGai(state) == 0x800000);
+    assert(!converter.gain_enable_property);
+
+    uint32_t format[] = {192000, 8, 16, 0, 0, 192000, 8, 16};
+    assert(Pcmcvt_Cmd(&converter, 0x50020020, format, sizeof(format)) == 0);
+    assert(converter.src_bypass == 1);
+    assert(RFT_GetGainEnable(state) == 1 && RFT_GetGai(state) == 0x800000);
+    state->lfe_history[0] = 77;
+    command[0] = 999;
+    command[1] = 2;
+    assert(Pcmcvt_Cmd(&converter, 0x50040008, command, sizeof(command)) == 0);
+    assert(RFT_GetGainEnable(state) == 0 && RFT_GetGai(state) == 0x800000);
+    assert(converter.gain == 0x800000 && state->lfe_history[0] == 77);
+
+    assert(RFT_SetOutSample(state, 256) == 0);
+    struct rft_config before = *state;
+    uint8_t output[4096];
+    int32_t scratch[2048];
+    memset(scratch, 0xa5, sizeof(scratch));
+    assert(LGRFT(state, input_bytes, output, scratch, 0) == 2048);
+    assert(memcmp(output, input_bytes, sizeof(output)) == 0);
+    assert(memcmp(state, &before, sizeof(before)) == 0);
+    for (size_t index = 0; index < sizeof(scratch) / sizeof(scratch[0]); ++index)
+        assert((uint32_t)scratch[index] == UINT32_C(0xa5a5a5a5));
+    Pcmcvt_Destructor(&converter);
+}
+
 static void property_converter_tests(void)
 {
     source = (struct mock_src){.frames = 256};
@@ -206,6 +256,7 @@ int main(void)
     (void)command_tests; (void)event_tests; (void)chain_tests;
     for (unsigned i=0;i<4096;++i) input_bytes[i]=(unsigned char)(i*37u+11u);
     pending_converter_tests();
+    gain_control_tests();
     property_converter_tests();
     for(int bits=16;bits<=32;bits+=16) {
         struct pcmcvt m=fresh();
@@ -248,6 +299,6 @@ int main(void)
         Pcmcvt_Chai(&port,&input);
         assert(dropped==drop+1);
     }
-    puts("PASS bin+pcmcvt+RFT: raw/property equivalence, rate-order trap, FIRST/flush/INIT, 192k 8ch byte-copy, ES rejection");
+    puts("PASS bin+pcmcvt+RFT: gain cache/command ordering, raw/property equivalence, rate-order trap, FIRST/flush/INIT, 192k 8ch byte-copy, ES rejection");
     return 0;
 }

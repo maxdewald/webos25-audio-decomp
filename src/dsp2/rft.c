@@ -158,7 +158,9 @@ void _LGRFT_GenerateLFE2ch(void *config, const int32_t *src, int32_t *dst)
             dst[i * (size_t)r->out_ch + (size_t)ch] = planes[(size_t)ch * n + i];
 }
 
-/* @0x6009dc00: count is total interleaved samples, not frames. [FLIX] multiply
+/* @0x6009dc00: count is total interleaved samples, not frames. The caller, not
+ * this helper, checks gain_enable. Nonpositive count touches no sample storage;
+ * config must still be valid because gain is loaded first. [FLIX] multiply
  * runs even at a nominal unity value; no equality/zero/unity shortcut exists. */
 int _LGRFT_Gai(void *config, const int32_t *src, int32_t *dst, int32_t count)
 {
@@ -433,7 +435,11 @@ int RFT_SetOutChannel(void *p, int ch)
  * every other enable writes +18=0, retaining +1c and histories. No comparison
  * with gain==0x800000 occurs here: PCM's property setter @6009cc6c disables
  * for that nominal-unity constant, whereas explicit SET_GAIN can enable it.
- * Constructor, FIRST, INIT and flush are caller policies, not an RFT reset. */
+ * PCM constructor @6009c182..6009c19f caches 0x800000 and disables here; it
+ * does not initialize the raw RFT gain word. gain-enable @6009ccf8 restores
+ * cached property gain, not the last SET_GAIN word. SET_ALLFMT/FIRST/INIT/flush
+ * do not reset active gain. These are caller policies, not an RFT default or
+ * proof that enabled nominal unity is bit-identical. */
 int RFT_SetGai(void *p, int enable, int gain)
 {
     if (p == NULL) return -1;

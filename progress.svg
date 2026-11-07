@@ -22,7 +22,7 @@
 </style>
 <rect class="card" x="0.5" y="0.5" width="819" height="1155" rx="10"/>
 <text class="title" x="24" y="38">Decompilation progress</text>
-<text class="sub" x="24" y="60">22 original files · 681 of 10,981 KiB of their code reconstructed (6.2%)</text>
+<text class="sub" x="24" y="60">22 original files · 684 of 10,981 KiB of their code reconstructed (6.2%)</text>
 <text class="name" x="24" y="108">libgstdecproxy</text>
 <text class="path" x="24" y="125">/usr/lib/gstreamer-1.0/libgstdecproxy.so</text>
 <rect class="track" x="330" y="102" width="340" height="14" rx="7"/>
@@ -129,8 +129,8 @@
 <text class="name" x="24" y="798">dsp2</text>
 <text class="path" x="24" y="815">/lib/firmware/audio_a0_dsp2.bin</text>
 <rect class="track" x="330" y="792" width="340" height="14" rx="7"/>
-<rect class="dsp" x="330" y="792" width="38.8" height="14" rx="7"/>
-<text class="pct" x="686" y="804">11.4%</text>
+<rect class="dsp" x="330" y="792" width="39.0" height="14" rx="7"/>
+<text class="pct" x="686" y="804">11.5%</text>
 <text class="path" x="686" y="820">xtensa</text>
 <text class="name" x="24" y="844">libumi</text>
 <text class="path" x="24" y="861">/usr/lib/libumi.so.1.0.0</text>
@@ -169,7 +169,7 @@
 <text class="path" x="24" y="1091">/lib/firmware/audio_a0_dsp0.bin</text>
 <rect class="track" x="330" y="1068" width="340" height="14" rx="7"/>
 <rect class="dsp" x="330" y="1068" width="3.0" height="14" rx="7"/>
-<text class="pct" x="686" y="1080">0.0%</text>
+<text class="pct" x="686" y="1080">0.1%</text>
 <text class="path" x="686" y="1096">xtensa</text>
 <rect class="match" x="24" y="1120" width="12" height="12" rx="3"/>
 <text class="legend" x="42" y="1130">matches original instructions</text>

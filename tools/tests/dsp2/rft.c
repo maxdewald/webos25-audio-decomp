@@ -267,6 +267,23 @@ static void channels(void)
     assert(_LGRFT_ConvertAvailableCh(&r, src, NULL) == -1);
 }
 
+static void gain_empty_ranges(void)
+{
+    struct rft_config state = config(4, 8, 4, 8, 256);
+    assert(RFT_SetGai(&state, 1, 0x800000) == 0);
+    state.lfe_history[0] = 12345;
+    struct rft_config before = state;
+    const int32_t counts[] = {0, -1, INT32_MIN};
+    for (size_t index = 0; index < sizeof(counts) / sizeof(counts[0]); ++index) {
+        int32_t output[] = {INT32_MIN, 123, INT32_MAX};
+        const int32_t expected[] = {INT32_MIN, 123, INT32_MAX};
+        assert(_LGRFT_Gai(&state, NULL, output, counts[index]) == 0);
+        assert(memcmp(output, expected, sizeof(output)) == 0);
+        assert(_LGRFT_Gai(&state, NULL, NULL, counts[index]) == 0);
+        assert(memcmp(&state, &before, sizeof(state)) == 0);
+    }
+}
+
 static void properties(void)
 {
     struct rft_config r = {0};
@@ -305,7 +322,7 @@ static void properties(void)
 int main(void)
 {
     formats(); signed16_exhaustive(); copy_bounds_and_failures(); ignored_format_failures();
-    dispatch(); channels(); properties();
+    dispatch(); channels(); gain_empty_ranges(); properties();
     puts("RFT: scalar formats, exhaustive signed16, dispatch, channel policies and properties passed; SIMD mocked");
     return 0;
 }

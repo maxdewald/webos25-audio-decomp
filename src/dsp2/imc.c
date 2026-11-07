@@ -8,6 +8,9 @@
  *   sha256 d1735e7ad803d5da3f4dfd778a5936d3f962a91e1d26f896ec1dba8423b7d3cd
  * Evidence: build/decomp/audio_a0_dsp2.main_60000000.bin.c (0x6006c7a0..0x6006e5a8,
  * 0x60079878..0x6007a7c8), build/scratch/a18/asm/aimc_dispatch.asm, aimc_set_property.asm.
+ * Response recovery: aligned scalar listings and validated FLIX branch slots in
+ * build/scratch/pr23-imc/. REA rejected the raw image; no REA Evidence was issued.
+ * Structures use semantic host pointers; offset comments describe the DSP ABI.
  *
  * Command path (observed):
  *   IPC irq -> aimc_process -> IMC_ProcessHeader(hdr)
@@ -47,6 +50,20 @@
 #define REG_CMD_ADD_DONE       0x80030000u      /* DAT_6005e0c0 */
 
 typedef int (*imc_fn)(void *ctx, unsigned cmd, void *a, void *b, int c);
+typedef void (*imc_response_fn)(int result, void *param, unsigned len, void *arg);
+
+struct imc_response_link {
+    struct imc_response_link *prev, *next;
+};
+
+struct imc_pending_response {             /* 0x20 bytes on DSP */
+    struct imc_response_link link;        /* +0x00/+0x04 */
+    unsigned _8, _c;
+    imc_response_fn fn;                   /* +0x10 */
+    void *arg;                           /* +0x14, borrowed */
+    unsigned seq;                        /* +0x18 */
+    unsigned _1c;
+};
 
 struct imc_handler {                     /* 0x14 bytes */
     struct imc_handler *next;
@@ -58,11 +75,13 @@ struct imc_handler {                     /* 0x14 bytes */
 
 struct imc {                             /* 0x50 bytes */
     struct imc *self0, *self1;           /* +0x00 action list head */
-    void *resp_head, *resp_tail;         /* +0x08 pending responses */
+    struct imc_response_link responses; /* +0x08 pending responses */
     int   lock[7];                       /* +0x10 */
     void *notif_head, *notif_tail;       /* +0x2c */
+    unsigned _34;
     void *rbtree;                        /* +0x38 named events */
     unsigned seq;                        /* +0x3c */
+    unsigned _40;
     int   unread;                        /* +0x44 */
     int   platform;                      /* +0x48 */
     void *tracer;                        /* +0x4c */
@@ -81,9 +100,23 @@ struct imc_cmd {                         /* IMC_SendCommand parameter */
     unsigned target;                     /* +0x04 */
     unsigned source;                     /* +0x08 */
     int   want_resp;                     /* +0x0c */
-    int   _10, cb, cb_arg;               /* +0x10..+0x18 */
+    int   _10;
+    imc_response_fn cb;                  /* +0x14 */
+    void *cb_arg;                        /* +0x18 */
     int   len;                           /* +0x1c */
     void *param;                         /* +0x20 */
+};
+
+struct imc_response {                    /* IMC_Response parameter, 0x28 on DSP */
+    unsigned source;                    /* +0x00 response recipient */
+    int me, _8;                         /* +0x04/+0x08, unused by IMC_Response */
+    unsigned seq;                       /* +0x0c pending response ID */
+    unsigned uid;                       /* +0x10 responding command target */
+    int one;                            /* +0x14, unused by IMC_Response */
+    unsigned cmd;                       /* +0x18 */
+    int result;                         /* +0x1c handler result */
+    void *param;                        /* +0x20 borrowed payload */
+    unsigned len;                       /* +0x24 payload bytes */
 };
 
 extern struct aimc_state *aimc;                         /* DAT_6005e040 */
@@ -107,13 +140,15 @@ extern void  BufMonitor_AddBufferRef(void *dst, const char *src, unsigned n); /*
 extern int   vsnprintf_(char *, unsigned, const char *, va_list); /* @0x600ea9b8 ("IPC_Init" in syms) */
 extern int   snprintf(char *, size_t, const char *, ...);
 extern void  aud_mutex_init(void *), aud_mutex_lock(void *), aud_mutex_unlock(void *);
+extern unsigned irq_raise_level(void);
+extern void irq_restore(unsigned);
 extern int   aud_who_am_i(void);
 extern int   ModuleList_GetPlatform(void);
 extern void  ModuleList_SetPlatform(int);
 extern int   ModuleList_FindModule(unsigned uid);
 extern void *RBTree_CreateTree(void *root, void *cmp);
 extern int   IPC_ReadHeaderAddr(void *h, void *out), IPC_ReadHeaderDone(void *h);
-extern int   IPC_WriteCommand(void *h, void *msg, int len, int irq);
+extern int   IPC_WriteCommand(void *h, void *msg, void *param, int irq);
 extern int   ConnectionMng_ShBufCmd(int id, const int *p);
 extern int   IMC_RaiseEvent(struct imc *, int, int, void *);
 extern int   IMC_RegisterNamedEvent(void *, int, int, int, int, int);
@@ -169,7 +204,7 @@ int IMC_Init(struct imc *imc, int platform)
     imc->platform = platform ? platform : ModuleList_GetPlatform();
     r = RBTree_CreateTree(&imc->rbtree, imc_rbtree_cmp);
     imc->self0 = imc->self1 = imc;
-    imc->resp_head = imc->resp_tail = &imc->resp_head;
+    imc->responses.prev = imc->responses.next = &imc->responses;
     imc->notif_head = imc->notif_tail = &imc->notif_head;
     imc->unread = 0;
     aud_mutex_init(imc->lock);
@@ -179,8 +214,10 @@ int IMC_Init(struct imc *imc, int platform)
 int aimc_dispatch_command(struct imc *imc, unsigned uid, unsigned cmd, void *param, int len,
                           unsigned source, unsigned seq, unsigned flags);
 
-/* @0x6006cbd4 IMC_SendCommand: local send. If a response is wanted, a pending
- * entry {cb, cb_arg, seq} is queued, then the command is dispatched in place. */
+/* @0x6006cbd4 IMC_SendCommand: local-send reconstruction; the remote-send
+ * branch remains [FLIX]. Pending entries are prepended before dispatch.
+ * Allocation failure still dispatches with want_resp and returns 0, as does
+ * handler failure. The response callback/argument are borrowed pointers. */
 int IMC_SendCommand(struct imc *imc, const struct imc_cmd *c, unsigned *seq_out)
 {
     extern unsigned imc_seq_mask;                      /* DAT_6005d19c */
@@ -195,14 +232,22 @@ int IMC_SendCommand(struct imc *imc, const struct imc_cmd *c, unsigned *seq_out)
     if (seq_out)
         *seq_out = seq;
     if (c->want_resp) {
-        int *p = aud_malloc(0x20);                     /* under raised interrupt level */
-        if (p) {
-            AuiLogger_Init(p, 0, 0x20);
-            p[4] = c->cb;
-            p[5] = c->cb_arg;
-            p[6] = (int)seq;
-            /* append to imc->resp list */
+        unsigned ps = irq_raise_level();
+        struct imc_pending_response *pending = aud_malloc(sizeof(*pending));
+
+        if (pending) {
+            AuiLogger_Init(pending, 0, sizeof(*pending));
+            pending->fn = c->cb;
+            pending->arg = c->cb_arg;
+            pending->seq = seq;
+            pending->link.next = imc->responses.next;
+            pending->link.prev = &imc->responses;
+            imc->responses.next->prev = &pending->link;
+            imc->responses.next = &pending->link;
+        } else if (*imc_log_mask & 1) {
+            logmm_printl(imc_log_ctx, 0, "_IMC_InsertResponseToList", 0x1aa, "no mem\n");
         }
+        irq_restore(ps);
     }
     aimc_dispatch_command(imc, c->target, c->cmd, c->param, c->len, c->source, seq, c->want_resp != 0);
     return 0;
@@ -216,8 +261,82 @@ int IMC_RegisterCmdProcessor(struct imc *imc, unsigned uid, imc_fn fn, void *ctx
     return -aimc__register_command_handler(imc, uid, fn, ctx);
 }
 
-/* @0x6006da08 IMC_ProcessHeader: only type-1 headers (commands) are observed;
- * responses/events/named events go through a FLIX switch [FLIX] (-> 0xf) */
+/* @0x6006c94c _IMC_FindAndClearResponse: search newest first by sequence only.
+ * Unlink/copy/free the pending entry under IRQ exclusion, then restore PS.
+ * The callback argument is borrowed, not freed with the entry. */
+static int _IMC_FindAndClearResponse(struct imc *imc, unsigned seq,
+                                     struct imc_pending_response *out)
+{
+    unsigned ps = irq_raise_level();
+    struct imc_response_link *link;
+
+    for (link = imc->responses.next; link != &imc->responses; link = link->next) {
+        struct imc_pending_response *pending = (struct imc_pending_response *)link;
+
+        if (pending->seq != seq)
+            continue;
+        if (link->prev) {
+            link->prev->next = link->next;
+            link->next->prev = link->prev;
+        }
+        out->link = pending->link;
+        out->_8 = pending->_8;
+        out->_c = pending->_c;
+        out->fn = pending->fn;
+        out->arg = pending->arg;
+        out->seq = pending->seq;
+        aud_free(pending);
+        irq_restore(ps);
+        return 0;
+    }
+    if (*imc_log_mask & 1)
+        logmm_printl(imc_log_ctx, 0, "_IMC_FindAndClearResponse", 0x270, "not found\n");
+    irq_restore(ps);
+    return 0x13;
+}
+
+int aimc_ipc_send(void *imc, int to, void *msg, void *param);
+
+/* @0x6006cde4 IMC_Response: local callbacks consume a pending entry; remote
+ * responses carry {cmd, seq, uid, 2, result, source, 0, len}. Only the remote
+ * path asserts len <= 0xfd7 (unsigned); it returns the transport result without
+ * taking ownership of param. Local callbacks run after pending-entry free. */
+int IMC_Response(struct imc *imc, void *response)
+{
+    const struct imc_response *resp = response;
+    struct imc_pending_response pending;
+    int platform, result;
+
+    if (!imc)
+        __assert_failed("IMC_Response", 0x36c, "_imc != NULL");
+    platform = ModuleList_FindModule(resp->source);
+    if (imc->platform != platform) {
+        unsigned header[8] = { resp->cmd, resp->seq, resp->uid, 2,
+                               (unsigned)resp->result, resp->source, 0, resp->len };
+
+        if (resp->len > 0xfd7u)
+            __assert_failed("IMC_Response", 0x392,
+                            "_ImcResponseParameter->paramLen < ADEC_CNST_IPC_MAX_PARAM_SIZE - 4");
+        return aimc_ipc_send(imc, platform, header, resp->param);
+    }
+    result = _IMC_FindAndClearResponse(imc, resp->seq, &pending);
+    if (result) {
+        if (*imc_log_mask & 1)
+            logmm_printl(imc_log_ctx, 0, "IMC_Response", 0x376,
+                         "Fail to find response (%d)\n", result);
+        return result;
+    }
+    if (pending.fn)
+        pending.fn(resp->result, resp->param, resp->len, pending.arg);
+    return 0;
+}
+
+/* @0x6006da08 IMC_ProcessHeader: type 2 @0x6006dae8 consumes hdr[1].
+ * Callback(result=hdr[4], borrowed hdr+8, bytes=hdr[7], borrowed argument)
+ * runs after entry free and IRQ restore; its return value is ignored. No
+ * command/source/target check or payload-length validation occurs here.
+ * IPC storage remains owned by the reader until aimc_ipc_header_done. This
+ * response alone does not establish asynchronous FIRST/data completion. */
 int IMC_ProcessHeader(struct imc *imc, const unsigned *hdr)
 {
     if (*imc_log_mask & 0x20)
@@ -228,7 +347,21 @@ int IMC_ProcessHeader(struct imc *imc, const unsigned *hdr)
         return -aimc_dispatch_command(imc, hdr[5], hdr[0], (void *)(hdr + 8), (int)hdr[7], hdr[2],
                                       hdr[1], hdr[4] & 1);
     }
-    /* [FLIX] types 2..8 */
+    if (hdr[3] == 2) {
+        struct imc_pending_response pending;
+        int result = _IMC_FindAndClearResponse(imc, hdr[1], &pending);
+
+        if (result) {
+            if (*imc_log_mask & 1)
+                logmm_printl(imc_log_ctx, 0, "process_response", 0x607,
+                             "Fail to find response (%d)\n", result);
+            return result;
+        }
+        if (pending.fn)
+            pending.fn((int32_t)hdr[4], (void *)(hdr + 8), hdr[7], pending.arg);
+        return 0;
+    }
+    /* [FLIX] types 3..8 */
     return 0xf;
 }
 
@@ -613,7 +746,11 @@ void aimc_response_param(void *param, int len)
     aimc->resp_param = param;
 }
 
-/* @0x6007a450 aimc_dispatch_command */
+/* @0x6007a450 aimc_dispatch_command: normal handlers respond only after fn
+ * returns, with its result and optional payload. IMC_Response's error is
+ * ignored; the payload is freed and cleared even when sending fails. This
+ * acknowledges handler return, not asynchronous FIRST handling or data flow.
+ * Legacy handlers receive the request and control their own responses. */
 int aimc_dispatch_command(struct imc *imc, unsigned uid, unsigned cmd, void *param, int len,
                           unsigned source, unsigned seq, unsigned flags)
 {
@@ -640,11 +777,8 @@ int aimc_dispatch_command(struct imc *imc, unsigned uid, unsigned cmd, void *par
         aimc_response_param(NULL, 0);
         r = fn(ctx, cmd, param, (void *)(intptr_t)len, 0);
         if (flags & 1) {
-            struct {
-                unsigned source; int me; int _8; unsigned seq; unsigned uid; int one;
-                unsigned cmd; int result; void *rp; int rl;
-            } resp = { source, aud_who_am_i() + 2, 0, seq, uid, 1, cmd, r,
-                       aimc->resp_param, aimc->resp_len };
+            struct imc_response resp = { source, aud_who_am_i() + 2, 0, seq, uid, 1, cmd, r,
+                                         aimc->resp_param, (unsigned)aimc->resp_len };
             IMC_Response(imc, &resp);
         }
         if (aimc->resp_param)
@@ -668,15 +802,15 @@ int aimc_dispatch_command(struct imc *imc, unsigned uid, unsigned cmd, void *par
     return -r;
 }
 
-/* @0x6007a6b4 aimc_ipc_send */
-int aimc_ipc_send(void *imc, int to, void *msg, int len)
+/* @0x6007a6b4 aimc_ipc_send: param is a payload pointer, length is msg[7]. */
+int aimc_ipc_send(void *imc, int to, void *msg, void *param)
 {
     int me = aud_who_am_i();
     void *h = aimc_get_handle(me, to, 1);
 
     (void)imc;
     if (h)
-        return -IPC_WriteCommand(h, msg, len, 1);
+        return -IPC_WriteCommand(h, msg, param, 1);
     ALOG(0, "no handle dsp num %d from %d\n", me, to);
     return -1;
 }

@@ -1,7 +1,10 @@
 /* Mocked semantics, not firmware execution. Run tools/runtests.py dsp2/lipsync. */
 #include "../../../src/dsp2/lipsync.c"
 #include <assert.h>
+#include <signal.h>
 #include <stdio.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 struct first_event {
     struct aud_event event;
@@ -474,6 +477,128 @@ static void test_carrier_first_fields(void)
     }
 }
 
+static void test_set_base(void)
+{
+    struct aud_event first = {.type = 1};
+    struct lipsync ls = {.first = &first, .first_sent = 1, .dataType = 1,
+        .bytePerSample = 2, .nSamplePerFrame = 1536, .channels = 8, .fs = 192,
+        .adapter_in = 99, .adapter_out = 11, .action = LS_REPEAT, .idle_cnt = 7,
+        .drop_count = 8, .discard_param = 3, .first_output_sent = 1,
+        .BaseCT = 31, .BaseST = 47, .BaseCT_copy = 9, .BaseST_copy = 10};
+    int32_t base[] = {31, 47};
+    reset_observations();
+    assert(_lipsync_cmd(&ls, 0x52030008, base, 0) == 0);
+    assert(!ls.state_changed && ls.BaseCT_copy == 31 && ls.BaseST_copy == 47);
+    assert(ls.action == LS_REPEAT && ls.idle_cnt == 7 && ls.drop_count == 8);
+    for (unsigned index = 0; index < 2; ++index) {
+        base[index] = index ? INT32_MIN : INT32_MAX;
+        ls.state_changed = false;
+        assert(_lipsync_cmd(&ls, 0x52030008, base, sizeof(base)) == 0);
+        assert(ls.state_changed && ls.BaseCT == base[0] && ls.BaseST == base[1]);
+        assert(ls.BaseCT_copy == base[0] && ls.BaseST_copy == base[1]);
+        assert(ls.action == LS_REPEAT && ls.idle_cnt == 7 && ls.drop_count == 8);
+        assert(_lipsync_cmd(&ls, 0x52030008, base, sizeof(base)) == 0);
+        assert(ls.state_changed);
+    }
+    assert(!flushes && !metadata_flushes && !defaults && !events && !put_count && !get_count);
+    assert(ls.first == &first && ls.first_sent && ls.first_output_sent);
+    assert(ls.adapter_in == 99 && ls.adapter_out == 11);
+    assert(ls.dataType == 1 && ls.bytePerSample == 2 && ls.nSamplePerFrame == 1536);
+    assert(ls.channels == 8 && ls.fs == 192);
+    assert(_lipsync_state(&ls) == LS_OFF);
+    assert(!ls.state_changed && ls.action == LS_IDLE && !ls.idle_cnt && ls.drop_count == 3);
+    assert(ls.first == &first && ls.first_sent && ls.first_output_sent);
+    assert(ls.adapter_in == 99 && ls.adapter_out == 11 && !flushes && !put_count);
+}
+
+static void test_set_base_null(void)
+{
+    pid_t child = fork();
+    assert(child >= 0);
+    if (!child) {
+        struct lipsync ls = {0};
+        _lipsync_cmd(&ls, 0x52030008, NULL, 0);
+        _exit(0);
+    }
+    int child_status = 0;
+    assert(waitpid(child, &child_status, 0) == child);
+    assert(WIFSIGNALED(child_status) && WTERMSIG(child_status) == SIGABRT);
+}
+
+static void test_gap_timestamps(void)
+{
+    const struct { uint64_t timestamp; uint32_t expected; } cases[] = {
+        {0, 0}, {11111, 0}, {11112, 1}, {1000000000, 90000},
+        {UINT64_C(0x100000000), 386547},
+        {UINT64_C(47721858844445), 0},
+        {UINT64_C(0x8000000000000000), (uint32_t)UINT64_C(92233720368547)},
+        {UINT64_MAX, (uint32_t)UINT64_C(184467440737095)}
+    };
+    struct aud_event first = {.type = 1};
+    struct lipsync ls = {.first = &first, .first_sent = 1, .dataType = 1,
+        .bytePerSample = 2, .nSamplePerFrame = 1536, .channels = 8, .fs = 192,
+        .adapter_in = 99, .adapter_out = 11, .action = LS_REPEAT,
+        .drop_count = 8, .first_output_sent = 1, .BaseCT = 17, .BaseST = 23};
+    reset_observations();
+    for (unsigned index = 0; index < sizeof(cases) / sizeof(cases[0]); ++index) {
+        unsigned other = (index + 3u) % (sizeof(cases) / sizeof(cases[0]));
+        uint32_t timestamps[] = {(uint32_t)cases[index].timestamp,
+            (uint32_t)(cases[index].timestamp >> 32), (uint32_t)cases[other].timestamp,
+            (uint32_t)(cases[other].timestamp >> 32)};
+        assert(_lipsync_cmd(&ls, 0x10210010, timestamps, 0) == 0);
+        assert((uint32_t)ls.start_pts == cases[index].expected);
+        assert((uint32_t)ls.end_pts == cases[other].expected && ls.gap_handling == 1);
+        assert(ls.first == &first && ls.first_sent && ls.first_output_sent);
+        assert(ls.adapter_in == 99 && ls.adapter_out == 11);
+        assert(ls.action == LS_REPEAT && ls.drop_count == 8 && !ls.state_changed);
+        assert(ls.BaseCT == 17 && ls.BaseST == 23 && ls.dataType == 1);
+    }
+    assert(!flushes && !metadata_flushes && !defaults && !events && !put_count && !get_count);
+    assert(_lipsync_cmd(&ls, 0x1021000f, NULL, 0) == 29 && defaults == 1);
+    assert(ls.gap_handling == 1 && ls.first == &first && ls.adapter_out == 11);
+}
+
+static void test_idle_boundary(void)
+{
+    struct aud_event first = {.type = 1};
+    struct lipsync ls = {.first = &first, .first_sent = 1, .dataType = 1,
+        .adapter_in = 99, .adapter_out = 11, .action = LS_IDLE,
+        .LipsyncOnOff = 1, .clockType = 0x100, .idle_cnt = 1, .idle_time = 3};
+    reset_observations();
+    assert(_lipsync_state(&ls) == LS_IDLE && ls.idle_cnt == 2);
+    int escaped = _lipsync_state(&ls);
+    assert((escaped == LS_REPEAT || escaped == LS_FREE_RUN) && ls.idle_cnt == 3);
+    ls.idle_cnt = 1;
+    ls.discontinuity = 1;
+    assert(_lipsync_state(&ls) == LS_IDLE && ls.idle_cnt == 0);
+    ls.idle_cnt = 1;
+    ls.discontinuity = 2;
+    assert(_lipsync_state(&ls) == LS_IDLE && ls.idle_cnt == 2);
+    const struct { int clock; uint32_t timestamp; int count, limit, expected_limit; } gates[] = {
+        {0x100, 0x0fffffff, 0, 0, 11}, {0x100, 0xffffffff, 0, 0, 11},
+        {0x100, 0x0ffffffe, 0, 0, 0}, {0x101, 0x0fffffff, 0, 0, 0},
+        {0x100, 0x0fffffff, 1, 0, 0}, {0x100, 0x0fffffff, 0, 7, 7},
+        {0x100, 0, INT32_MAX, 3, 3}
+    };
+    for (unsigned index = 0; index < sizeof(gates) / sizeof(gates[0]); ++index) {
+        ls.clockType = gates[index].clock;
+        ls.out_ts = gates[index].timestamp;
+        ls.idle_cnt = gates[index].count;
+        ls.idle_time = gates[index].limit;
+        int action = _lipsync_state(&ls);
+        assert(ls.idle_time == gates[index].expected_limit);
+        if (index == 6)
+            assert(action == LS_IDLE && ls.idle_cnt == INT32_MIN);
+        else if (ls.idle_time > 1)
+            assert(action == LS_IDLE);
+        else
+            assert(action == LS_REPEAT || action == LS_FREE_RUN);
+    }
+    assert(ls.first == &first && ls.first_sent && ls.dataType == 1);
+    assert(ls.adapter_in == 99 && ls.adapter_out == 11);
+    assert(!flushes && !metadata_flushes && !events && !put_count && !get_count);
+}
+
 static void test_commands_and_replay(void)
 {
     struct first_event mat = {.event = {.type = 1}, .codec = "mat", .channels = 8,
@@ -504,6 +629,7 @@ static void test_commands_and_replay(void)
     assert(ls.action == LS_IDLE && ls.state_changed && ls.drop_count == 7);
     assert(ls.first == &mat.event && ls.first_sent && ls.dataType == 1);
     assert(!ls.first_output_sent && !events && !put_count && !flushes && !defaults);
+    assert(_lipsync_state(&ls) == LS_OFF && !ls.state_changed && !ls.drop_count);
     ls.discard_param = 3;
     assert(_lipsync_cmd(&ls, 0x10010000, NULL, 0) == 0 && ls.drop_count == 3);
     assert(_lipsync_state(&ls) == LS_OFF && !ls.state_changed && ls.drop_count == 3);
@@ -573,7 +699,11 @@ int main(void)
     test_last_and_flush();
     test_frame_dispatch();
     test_carrier_first_fields();
+    test_set_base();
+    test_set_base_null();
+    test_gap_timestamps();
+    test_idle_boundary();
     test_commands_and_replay();
-    puts("lipsync: FIRST format/ownership/replay, frame guards, type/fade/drop dispatch and resets: PASS");
+    puts("lipsync: FIRST/data ownership, dispatch, SET_BASE/reset, timestamp wrap and bounded IDLE branches: PASS");
     return 0;
 }

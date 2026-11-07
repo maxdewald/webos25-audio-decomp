@@ -22,15 +22,16 @@
  *    IDLE(6); REPEAT(4) holds it; over_protection!=0 or a pending drop count
  *    (+0x140 = discard_param after a state/offset change) drops in write_output.
  *  - Every "state="/"offset="/"BaseCT="/"BaseST=" write resets the action to IDLE
- *    and drop_count to discard_param. With LipsyncOnOff == 1 the first idle_time
- *    frames after renderer_postconnect's "state=1" are discarded; with sync off
- *    _lipsync_state returns LIPSYNC_OFF and data is output at once.
+ *    and drop_count to discard_param. With LipsyncOnOff == 1, IDLE actions discard
+ *    frames; the escape count/gap branches are only partly recovered below. With
+ *    sync off, _lipsync_state returns LIPSYNC_OFF (subject to clock/no-delay paths).
  *  - No output port connected -> all input thrown away ("so throw away..").
  *  - FIRST is held back and only forwarded with the first real output buffer;
  *    LAST is swallowed if nothing was ever output.
  *  - The kernel's "drop_output_data=1/0" (underscores) is not a dsp2 property
  *    name (core uses "drop-output-data"), so it changes nothing (module_core.c).
  */
+#include <assert.h>
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -109,6 +110,7 @@ struct lipsync {
     int   offset;                /* +0x1f4 "offset"/"ConstantOffset" */
     int   clockType;             /* +0x200 0x100 pcr, 0x200 audio master */
     int   BaseCT, BaseST;        /* +0x204/+0x208 */
+    int   BaseCT_copy, BaseST_copy; /* +0x20c/+0x210 */
     int   NodelayOnOff;          /* +0x214 */
     int   over_protection;       /* +0x218 */
     int   gap_handling;          /* +0x220 */
@@ -509,6 +511,11 @@ int _lipsync_core(struct lipsync *ls)
  *    lvl 2), then escapes ("[%s] first gap : %d(ms) idle->%d", lvl 4) to REPEAT(4)
  *    or FR-RUN(5); NORMAL/ESNORM(2/8) @0x600a2af1, SKIP(3) @0x600a2a48 -> IDLE when
  *    discontinuity, etc.
+ *    Validated @0x600a2b64: a nonzero idle_cnt escapes when its increment is >=
+ *    idle_time, not >. While holding IDLE, discontinuity==1 resets idle_cnt to
+ *    zero (@0x600a2b6f ->2a59). Default 11 requires idle_cnt/idle_time both zero,
+ *    clockType==0x100 and all low 28 out_ts bits set (@0x600a2ccf..2cf1).
+ *    Gap-dependent escape arithmetic remains [GAP].
  *  - clockType 0x200 (audio master): "base line Noti(audio master mode)" raises
  *    "adec_master_info" and returns FREERUN_WITHNOTI(12); no-PCR baseline raises
  *    LIPSYNC_EVT_NOPCR_BASELINE.
@@ -537,10 +544,15 @@ int _lipsync_state(struct lipsync *ls)
     }
     switch (ls->action) {                             /* table @0x60007380 */
     case LS_IDLE:                                     /* 0x600a2b57 */
-        if (ls->idle_cnt == 0 && ls->idle_time == 0)
+        if (ls->idle_cnt == 0 && ls->idle_time == 0 && ls->clockType == 0x100 &&
+            (ls->out_ts & 0x0fffffffu) == 0x0fffffffu)
             ls->idle_time = 0xb;                      /* "Set default escape num" */
-        if (++ls->idle_cnt <= ls->idle_time)          /* [FLIX?] @0x600a2b64 */
+        ls->idle_cnt = (int32_t)((uint32_t)ls->idle_cnt + 1u);
+        if (ls->idle_cnt < ls->idle_time) {           /* bge.w18 @0x600a2b64 escapes */
+            if (ls->discontinuity == 1)
+                ls->idle_cnt = 0;
             return LS_IDLE;
+        }
         return LS_REPEAT;                             /* or FR-RUN by gap sign [FLIX?] */
     default:
         return LS_NORMAL;                             /* bounds vs diff [GAP] */
@@ -553,13 +565,39 @@ int _lipsync_state(struct lipsync *ls)
  * 0x10150000 @0x600a1500 are no-ops. 0x1003002c @0x600a163f..1647 requests
  * next-chain flush (first_received), not a format reset or immediate flush.
  * Debug reset @0x600a1564..1582 clears gap/debug fields, not cached FIRST.
- * Remaining LIPSYNC_CMD_* dispatch (including SET_BASE) is [GAP], not a no-op. */
+ * SET_BASE(0x52030008) @0x600a119a..11bf reads two 32-bit words: clockbase,
+ * streambase, without length validation or conversion. Only a changed pair sets
+ * state_changed (@0x600a11a3/11a9); both copies are refreshed even if unchanged
+ * (@0x600a164e..1657). It retains queued data, FIRST, format and output latches;
+ * the state/chain reset is deferred. ADEC_CMD_SET_GAP_INFO(0x10210010), selected
+ * @0x600a13f4/1402, reads start/end as low/high word pairs. @0x600a1457..1489
+ * multiplies each by 9 (64-bit wrap), unsigned-divides by 100000, stores the low
+ * 32 bits and enables gap handling. Neither command checks len; gap info has no
+ * explicit null check. Other LIPSYNC_CMD_* dispatch is [GAP]. */
 int _lipsync_cmd(struct lipsync *ls, unsigned cmd, void *param, unsigned len)
 {
     aud_mutex_lock(ls->mutex);
     aud_cond_signal(ls->cond);
     aud_mutex_unlock(ls->mutex);
     switch (cmd) {
+    case 0x10210010: {
+        const uint32_t *timestamps = param;
+        uint64_t start = (uint64_t)timestamps[0] | ((uint64_t)timestamps[1] << 32);
+        uint64_t end = (uint64_t)timestamps[2] | ((uint64_t)timestamps[3] << 32);
+        ls->start_pts = (int32_t)(uint32_t)((start * 9u) / 100000u);
+        ls->end_pts = (int32_t)(uint32_t)((end * 9u) / 100000u);
+        ls->gap_handling = 1;
+        return 0;
+    }
+    case 0x52030008: {
+        const int32_t *base = param;
+        assert(base != NULL);
+        if (ls->BaseCT != base[0] || ls->BaseST != base[1])
+            ls->state_changed = true;
+        ls->BaseCT = ls->BaseCT_copy = base[0];
+        ls->BaseST = ls->BaseST_copy = base[1];
+        return 0;
+    }
     case 0x10010000:
         ls->idle_cnt = ls->idle_total = 0;
         ls->action = LS_IDLE;

@@ -23,13 +23,13 @@ static int encoded_codec(umi_tv_audio *a, bool wow)
     return cap(a, "DD") ? CT_DD : CT_PCM;
 }
 
-/* @0x49440: AAC preference, optional forced Dolby, then MAT > DD+ > DD > PCM. */
+/* Semantic model of 0x49440; native matching body is in arc_policy.cpp. */
 int getEarcAndARCOutputCodec(umi_tv_audio *a)
 {
     return encoded_codec(a, false);
 }
 
-/* @0x49670: same priorities as eARC, using independent wowcast capabilities. */
+/* Semantic model of 0x49670; independent wowcast capabilities. */
 int getWowcastOutputCodec(umi_tv_audio *a)
 {
     return encoded_codec(a, true);
@@ -76,7 +76,8 @@ static int channel_and_mix(umi_tv_audio *a, int ct, int device_channels, int *mo
     return channels;
 }
 
-/* @0x41b64: cache request and eARC state BEFORE ALSA write, even on failure.
+/* Semantic model of 0x41b64; native matching body is in arc_output.cpp.
+ * Cache request and eARC state BEFORE ALSA write, even on failure.
  * [2,ct,cn,0,mo], then optional SP50; delay notification only after success.
  * Sole writer of the control; libumi never reads it back. The shipped kernel
  * rejects ct 10/11 (-EINVAL), so it keeps the previous [st,ct,cn,sr,mo]. */
@@ -100,7 +101,7 @@ bool setEArcOutputType(umi_tv_audio *a, int ct, int mo, int cn)
     return true;
 }
 
-/* @0x41f9c: unsupported ARC ct is silently ignored with SUCCESS (not failure). */
+/* Semantic model of 0x41f9c; unsupported ARC ct succeeds without a write. */
 bool setArcOutputType(umi_tv_audio *a, int ct, int mo, int cn)
 {
     int words[5] = {2, ct, cn, 0, mo};
@@ -114,7 +115,7 @@ bool setArcOutputType(umi_tv_audio *a, int ct, int mo, int cn)
     return true;
 }
 
-/* @0x422e8: optic supports ct 1..4; both channel/rate words always zero. */
+/* Semantic model of 0x422e8; optic ct 1..4, channel/rate words always zero. */
 bool setOpticOutputType(umi_tv_audio *a, int ct, int mo)
 {
     int words[5] = {2, ct, 0, 0, mo};
@@ -139,7 +140,8 @@ void setWowCastOutputType(umi_tv_audio *a, int ct, int mo)
     if (isWowCastSoundOutput(a)) umi_ops.delay_codec(a, ct);
 }
 
-/* @0x4fc24: optic first, then ARC/eARC. mix=false can survive only when PCM
+/* Semantic model of 0x4fc24; optic first, then ARC/eARC.
+ * mix=false can survive only when PCM
  * channels 2/6/8 and device channels 2/6/8 with device>=input. Missing/invalid
  * channels, clamping, or supported IAMF FORCE mo=1, without changing +0x7c.
  * Raw 0x3fd7c/0x3fe20 sets r7=1; 0x3fe38..0x3fe44 only sets it on dev<input.
@@ -160,7 +162,7 @@ static int dts_fallback(umi_tv_audio *a, bool wow)
     return cap(a, "DTS") ? CT_DTS : CT_PCM;
 }
 
-/* @0x4ff14: both outputs always rewritten; fallback never uses mixer byte. */
+/* Semantic model of 0x4ff14; both outputs rewritten without the mixer byte. */
 bool setOutputTypeForDTS(umi_tv_audio *a)
 {
     setOutputType(a, dts_fallback(a, false), MO_ALL);
@@ -168,7 +170,7 @@ bool setOutputTypeForDTS(umi_tv_audio *a)
     return true;
 }
 
-/* @0x4feec: Dolby fallback is separately selected for eARC and wowcast. */
+/* Semantic model of 0x4feec; independent eARC and wowcast Dolby fallbacks. */
 bool setOutputTypeForDolby(umi_tv_audio *a)
 {
     setOutputType(a, getEarcAndARCOutputCodec(a), MO_ALL);
@@ -176,7 +178,7 @@ bool setOutputTypeForDolby(umi_tv_audio *a)
     return true;
 }
 
-/* @0x50180: unknown/case-mismatched DTS names take the non-DTS fallback. */
+/* Semantic model of 0x50180; unknown DTS names take the non-DTS fallback. */
 bool checkReEncodePriority(umi_tv_audio *a)
 {
     return is_input_dts(getInputCodecType(a)) ? setOutputTypeForDTS(a) : setOutputTypeForDolby(a);
@@ -206,7 +208,8 @@ static int direct_codec(umi_tv_audio *a, bool wow)
     return 0;
 }
 
-/* @0x501a0: direct mo comes from +0x7c, but capability lookup is INDEPENDENT
+/* Semantic model of 0x501a0; direct mo comes from +0x7c.
+ * Capability lookup is INDEPENDENT
  * for eARC and wowcast. A miss calls checkReEncodePriority, which rewrites BOTH
  * outputs; an eARC miss falls back first, and a wowcast miss falls back again
  * (two fallbacks when BOTH miss). Final direct eARC write follows fallback.

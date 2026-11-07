@@ -7,6 +7,7 @@ class umiTVAudio {
 public:
     int getPassThroughArcMode();
     int getAutoArcMode();
+    int getPassThroughOpticMode();
     bool isCountryCodeJP();
     bool getSupportBnoModel();
 
@@ -42,23 +43,31 @@ int umiTVAudio::getPassThroughArcMode()
 /* @0x593ec: mode id for ARC "auto"; forceOutputDDPLUS (+0x7d) short-circuits. */
 int umiTVAudio::getAutoArcMode()
 {
-    int mode;
+    int mode = 1;
     if (arcProfile.compare("EAC3") == 0 || arcProfile.compare("ATMOS") == 0) {
         mode = 11;
         if (!forceDDPlus) {
-            if (isCountryCodeJP() && !getSupportBnoModel())
-                return mixer ? 9 : 5;
-            return mixer ? 8 : 4;
+            if (!isCountryCodeJP() || getSupportBnoModel())
+                mode = mixer ? 8 : 4;
+            else
+                mode = mixer ? 9 : 5;
         }
-    } else {
-        if (arcProfile.compare("PCM") == 0)
-            return 1;
+    } else if (arcProfile.compare("PCM") != 0) {
         mode = 10;
         if (!forceDDPlus) {
-            if (isCountryCodeJP() && !getSupportBnoModel())
-                return mixer ? 7 : 3;
-            return mixer ? 6 : 2;
+            if (!isCountryCodeJP() || getSupportBnoModel())
+                mode = mixer ? 6 : 2;
+            else
+                mode = mixer ? 7 : 3;
         }
     }
     return mode;
+}
+
+/* @0x59594: optical pass-through uses JP and mixer only, without the ARC BNO exception. */
+int umiTVAudio::getPassThroughOpticMode()
+{
+    if (!isCountryCodeJP())
+        return mixer ? 2 : 7;
+    return mixer ? 3 : 8;
 }

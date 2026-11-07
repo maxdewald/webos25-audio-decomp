@@ -51,9 +51,19 @@ extern void *srcbin_class_descriptor;                     /* 0x60103458 */
  * FIRST chooses ONLY on boolean "dolby" (default false): pcmcvt vs mssrc,
  * not es/codec/rate. Changed selection destroys the bin contents through the
  * parent's destructor, creates the selected child, wires input/output port 0,
- * registers command propagation and replays pending commands BEFORE the same
+ * registers command propagation and drains pending commands BEFORE the same
  * FIRST reaches the parent event handler. No FIRST fields are rewritten here.
- * Creation failure still delegates the event; dolby cache is not updated.
+ * Cleanup @0x6007164c drops targets/pending, not the +11c child pointer. Failed
+ * replacement retains that stale pointer and old dolby cache; same-old-dolby
+ * FIRST then skips recreation. Live commands are not retained for replacement.
+ * Wiring/registration/replay returns are ignored; failed target allocation can
+ * drain queued commands without delivery. Child pointer and dolby cache commit
+ * AFTER replay, BEFORE parent delegation. Only the parent's event result wins.
+ * NULL ports and non-FIRST events delegate without selecting/retrying a child.
+ * Sample data uses inherited bin_chain @0x600712a4, not this event callback:
+ * missing input mappings drop data; a cached converter alone is not a route.
+ * Outer aud_module_chain @0x6007496c can synthesize FIRST before chaining data
+ * when the port lacks one; it ignores the event result before continuing.
  * See calls 0x60099a60/6b/72/77 and delegation 0x60099916. */
 int srcbin_event(struct srcbin *bin, struct aud_port *port, struct aud_event *event)
 {
@@ -77,7 +87,7 @@ int srcbin_event(struct srcbin *bin, struct aud_port *port, struct aud_event *ev
     return parent->event(bin, port, event);
 }
 
-/* @0x60099aa4 */
+/* @0x60099aa4: parent constructor result is ignored; resets cache, creates no child. */
 int srcbin_constructor(struct srcbin *bin)
 {
     if (bin->parent->constructor != NULL)
@@ -87,7 +97,7 @@ int srcbin_constructor(struct srcbin *bin)
     return 0;
 }
 
-/* @0x60099ae4 */
+/* @0x60099ae4: parent cleanup precedes pointer reset; dolby cache is unchanged. */
 void srcbin_destructor(struct srcbin *bin)
 {
     if (bin->parent->destructor != NULL)
@@ -96,13 +106,14 @@ void srcbin_destructor(struct srcbin *bin)
 }
 
 /* @0x60099b1c
- * This entire callback only logs integer/bool/string changes and returns 0.
- * It does NOT configure the child or forward properties. Do not confuse it
- * with pending COMMAND replay above. Class @0x60103458 has no own property
- * table; parent bin_command @0x60071290 calls bin_cmd @0x60070ee8 (misnamed
- * aud_module_bin_add in the export), which queues command/length/payload;
- * aud_module_bin_propagate_pending @0x60071e7c invokes child command handlers.
- * This does not establish arbitrary property-name forwarding to the child. */
+ * Logs only. Class @0x60103458 has no own properties. Direct set_prop on this
+ * object searches only its own/default/runtime tables (@0x600759cc), not child
+ * properties. BUT SET_PROP/SET_PROP_SINGLE commands (10180004/101c0004) DO reach
+ * the child through inherited bin_command, live or queued; see bin.c.
+ * Proc /prop uses SET_PROP (@0xffffffc010c91dc0), so valid child names
+ * work via srcbin despite this callback. Unknown names silently do nothing.
+ * A parent property miss does not undo the child write. Raw child-only commands can
+ * similarly succeed there yet return the parent's default -1. */
 int srcbin_prop_updated(struct srcbin *bin, const struct srcbin_property *property)
 {
     (void)bin;

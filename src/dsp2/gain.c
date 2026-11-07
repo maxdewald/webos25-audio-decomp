@@ -313,11 +313,14 @@ static void gain_calc_fade_delta(struct gain_module *m)
     m->gain_changed = true;
 }
 
-/* [FLIX] PCM body 0x60088950..0x60088d2c is not reconstructed. This explicit
- * unresolved dependency prevents returning uninitialized PCM as successful output. */
+/* [FLIX] PCM transitions/fade arithmetic remain unresolved. */
 extern int gain_chain_pcm_unrecovered(struct gain_module *, struct aud_data *, int muted);
 
-/* @0x6008874c: ES-complete gain_chain; PCM delegates to an unresolved dependency. */
+/* @0x6008874c: ES-complete gain_chain. Steady muted PCM with a settled fade
+ * selects aud_data_new_zero(size) @0x600889ca/60088b7b, copies index/timestamp
+ * @0x600889da..e8, skips sample writes @0x60088bd3, releases input then pushes
+ * zeros @0x60088cd5..d06. FIRST.es does not select this PCM path. Muting is not
+ * a PCM drop (except allocation failure); transitions/fade math remain [FLIX]. */
 int gain_chain(struct aud_port *port, struct aud_data *d)
 {
     struct gain_module *m = (struct gain_module *)port->module;
@@ -345,6 +348,25 @@ int gain_chain(struct aud_port *port, struct aud_data *d)
     if (d->type != AUD_DATA_PCM)                               /* 0x60088898 */
         return gain_handle_nonpcm(m, d, muted);
 
+    if (muted && m->prev_muted == 1 && !m->gain_changed &&
+        m->delta_g == 0 && m->fade_gain == m->fade_target && m->channel > 0 &&
+        d->size >= sizeof(int32_t) && d->size <= INT32_MAX) {
+        struct aud_data *out = aud_data_new_zero(d->size);
+        if (!out) {
+            aud_object_put(d);
+            return -1;
+        }
+        out->index = d->index;
+        out->ts = d->ts;
+        aud_object_put(d);
+        aud_module_push_data(m, 0, out);
+        m->final_gain = 0;
+        m->prev_muted = muted;
+        m->gain_changed = false;
+        m->delay_changed = false;
+        return 0;
+    }
+
     /* PCM scalar gates decoded (tools/xtobjdump.sh):
      * 60088955: delay_changed && prev_muted==1 && !muted skips one unmute,
      *           keeping prev_muted for this PCM buffer; does NOT affect ES.
@@ -358,7 +380,9 @@ int gain_chain(struct aud_port *port, struct aud_data *d)
     return gain_chain_pcm_unrecovered(m, d, muted);
 }
 
-/* @0x60089084: gain_event */
+/* @0x60089084: FIRST reads es @0x60089173, not codec, to select ES zero/drop
+ * policy. It caches/replaces FIRSTs and channels but does not reset gain/fades,
+ * mute properties, or ES packet position/zero state. No mute snapshot/restore. */
 int gain_event(struct gain_module *m, struct aud_port *port, struct aud_event *e)
 {
     if (gain_log_mask & 8)

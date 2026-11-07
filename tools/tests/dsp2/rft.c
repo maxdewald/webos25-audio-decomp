@@ -96,6 +96,79 @@ static void signed16_exhaustive(void)
     assert(LGRFT(&r, input, output, NULL, 0) == -1);
 }
 
+static void copy_bounds_and_failures(void)
+{
+    uint8_t input[122], output[124];
+    int32_t scratch[30];
+    const int enables[] = {-1, 0, 2};
+    for (size_t index = 0; index < sizeof(input); ++index)
+        input[index] = (uint8_t)(index * 197u + 19u);
+    for (int bytes = 1; bytes <= 5; ++bytes) {
+        for (size_t mode = 0; mode < sizeof(enables) / sizeof(enables[0]); ++mode) {
+            for (int available = 0; available <= 1; ++available) {
+                struct rft_config state = config(bytes, 8, bytes, 8, 3);
+                state.gain_enable = enables[mode];
+                state.gain = 0x800000;
+                state.acmod = 1;
+                state.gen_lfe = 1;
+                struct rft_config before = state;
+                memset(output, 0xa5, sizeof(output));
+                memset(scratch, 0x5a, sizeof(scratch));
+                assert(LGRFT(&state, input + 1, output + 2, scratch, available) == 24);
+                size_t length = 24u * (unsigned)bytes;
+                assert(memcmp(output + 2, input + 1, length) == 0);
+                assert(output[0] == 0xa5 && output[1] == 0xa5);
+                for (size_t index = length + 2; index < sizeof(output); ++index)
+                    assert(output[index] == 0xa5);
+                for (size_t index = 0; index < sizeof(scratch) / sizeof(scratch[0]); ++index)
+                    assert(scratch[index] == INT32_C(0x5a5a5a5a));
+                assert(memcmp(&state, &before, sizeof(state)) == 0);
+            }
+        }
+    }
+    for (int failure = 0; failure < 6; ++failure) {
+        struct rft_config state = config(2, failure == 4 ? 11 : 8,
+                                         2, failure == 5 ? 11 : 8, 3);
+        memset(output, 0xa5, sizeof(output));
+        memset(scratch, 0x5a, sizeof(scratch));
+        assert(LGRFT(failure == 0 ? NULL : &state,
+                     failure == 1 ? NULL : input + 1,
+                     failure == 2 ? NULL : output + 2,
+                     failure == 3 ? NULL : scratch, 0) == -1);
+        for (size_t index = 0; index < sizeof(output); ++index)
+            assert(output[index] == 0xa5);
+        for (size_t index = 0; index < sizeof(scratch) / sizeof(scratch[0]); ++index)
+            assert(scratch[index] == INT32_C(0x5a5a5a5a));
+    }
+    struct rft_config empty = config(2, 8, 2, 8, 0);
+    assert(LGRFT(&empty, input + 1, output + 2, scratch, 0) == 0);
+    for (size_t index = 0; index < sizeof(output); ++index)
+        assert(output[index] == 0xa5);
+    for (size_t index = 0; index < sizeof(input); ++index)
+        assert(input[index] == (uint8_t)(index * 197u + 19u));
+}
+
+static void ignored_format_failures(void)
+{
+    const uint8_t input[] = {0x34, 0x92, 0x56, 0x78, 0x9a};
+    uint8_t output[8];
+    int32_t scratch = INT32_C(0x12345678);
+    struct rft_config state = config(5, 1, 2, 1, 1);
+    memset(output, 0xa5, sizeof(output));
+    assert(LGRFT(&state, input, output + 1, &scratch, 0) == 1);
+    assert(scratch == INT32_C(0x12345678));
+    assert(output[0] == 0xa5 && output[1] == 0x34 && output[2] == 0x12);
+    for (size_t index = 3; index < sizeof(output); ++index)
+        assert(output[index] == 0xa5);
+    state.in_bytes = 2;
+    state.out_bytes = 5;
+    memset(output, 0xa5, sizeof(output));
+    assert(LGRFT(&state, input, output + 1, &scratch, 0) == 1);
+    assert((uint32_t)scratch == UINT32_C(0x92340000));
+    for (size_t index = 0; index < sizeof(output); ++index)
+        assert(output[index] == 0xa5);
+}
+
 static void dispatch(void)
 {
     uint16_t input[16] = {0x1234, 0x8000, 0xffff};
@@ -231,7 +304,8 @@ static void properties(void)
 
 int main(void)
 {
-    formats(); signed16_exhaustive(); dispatch(); channels(); properties();
+    formats(); signed16_exhaustive(); copy_bounds_and_failures(); ignored_format_failures();
+    dispatch(); channels(); properties();
     puts("RFT: scalar formats, exhaustive signed16, dispatch, channel policies and properties passed; SIMD mocked");
     return 0;
 }

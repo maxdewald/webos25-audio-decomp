@@ -189,6 +189,8 @@ static bool rts_process(struct ts_module *m)
 
 /* @0x600a54f4: Events take priority over PCM. PCM is forwarded byte-for-byte;
  * skipping drops whole objects. Empty-queue wake sets the initial buffering gate.
+ * Cached FIRST is not in the event list: @0x600a56e3 is reached only after the
+ * PCM buffering gate. ES-only input cannot cause FIRST to be forwarded.
  * All worker FLIX slots were scalar branches; no hidden sample/SIMD operation. */
 int ts_thread_work(struct ts_module *m)
 {

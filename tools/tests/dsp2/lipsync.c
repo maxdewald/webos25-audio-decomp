@@ -1,8 +1,4 @@
-/* Standalone mocked semantics, not execution of the DSP firmware.
- * macOS: cc -std=c11 -Wall -Wextra -Werror -ffunction-sections -fdata-sections \
- *   -Wl,-dead_strip tools/tests/dsp2/lipsync.c -o build/scratch/test-lipsync
- * Linux: replace -Wl,-dead_strip with -Wl,--gc-sections. Run that executable.
- */
+/* Mocked semantics, not firmware execution. Run tools/runtests.py dsp2/lipsync. */
 #include "../../../src/dsp2/lipsync.c"
 #include <assert.h>
 #include <stdio.h>
@@ -11,6 +7,8 @@ struct first_event {
     struct aud_event event;
     const char *codec;
     int channels, bits, rate, samples, gap, seamless;
+    int data_rate, data_channels, data_bps, acmod;
+    bool es, clock_x4;
     bool explicit_values;
 };
 static unsigned get_count, put_count, events, data_pushes, syncs, defaults, signals;
@@ -21,6 +19,24 @@ static struct aud_event *last_event;
 static struct aud_data *last_data;
 static char order[16];
 static unsigned order_size;
+static int selected_action;
+static struct lipsync *adapter_owner;
+static struct aud_data frame_data;
+static bool fail_frame;
+static unsigned fadeins, fadeouts;
+static bool active_output;
+
+static int selected_state(struct lipsync *ls) { (void)ls; return selected_action; }
+#define _lipsync_state selected_state
+#define _lipsync_core test_lipsync_core
+// @extract src/dsp2/lipsync.c _lipsync_core
+#undef _lipsync_core
+#undef _lipsync_state
+#define _lipsync_chain test_lipsync_chain
+#define _lipsync_core test_lipsync_core
+// @extract src/dsp2/lipsync.c _lipsync_chain
+#undef _lipsync_core
+#undef _lipsync_chain
 
 static void record(char c)
 {
@@ -36,6 +52,10 @@ static void reset_observations(void)
     last_event = NULL;
     last_data = NULL;
     order_size = 0;
+    adapter_owner = NULL;
+    fail_frame = false;
+    fadeins = fadeouts = 0;
+    active_output = true;
 }
 void *aud_object_get(void *p)
 {
@@ -82,14 +102,79 @@ int aud_module_default_event(void *m, struct aud_port *p, struct aud_event *e)
     defaults++;
     return 23;
 }
+int aud_module_default_command(void *m, unsigned command, void *param, unsigned size)
+{
+    (void)m; (void)command; (void)param; (void)size;
+    defaults++;
+    return 29;
+}
+int aud_module_have_active_output(void *module) { (void)module; return active_output; }
+int aud_data_adapter_push(void *adapter, struct aud_data *data)
+{
+    assert(adapter_owner && adapter == adapter_owner->adapter);
+    adapter_owner->adapter_in += data->size;
+    return 0;
+}
+int msf_process_metadata(void *metadata, void *buf, unsigned size)
+{
+    (void)metadata; (void)buf; (void)size;
+    return 0;
+}
 void aud_mutex_lock(void *m) { (void)m; assert(locks++ == 0); }
 void aud_mutex_unlock(void *m) { (void)m; assert(--locks == 0); }
 void aud_cond_signal(void *c) { (void)c; assert(locks == 1); signals++; }
+void aud_cond_wait_timeout(void *cond, void *mutex, int ms)
+{
+    (void)cond; (void)mutex;
+    assert(locks == 1 && ms == 1000);
+}
 void aud_data_adapter_flush(void *a, unsigned n)
 {
     (void)a;
     flushes++;
     flushed_bytes = n;
+    if (adapter_owner) {
+        assert(a == adapter_owner->adapter);
+        assert(n <= adapter_owner->adapter_in - adapter_owner->adapter_out);
+        adapter_owner->adapter_out += n;
+    }
+}
+struct aud_data *aud_data_adapter_get_data(void *adapter, unsigned size)
+{
+    assert(adapter_owner && adapter == adapter_owner->adapter);
+    assert(size <= adapter_owner->adapter_in - adapter_owner->adapter_out);
+    frame_data.size = size;
+    return fail_frame ? NULL : &frame_data;
+}
+int aud_data_adapter_peep(void *adapter, uint32_t *ts)
+{
+    (void)adapter;
+    *ts = 0;
+    return 1;
+}
+void lipsync_fadein(int channels, void *buf, unsigned size)
+{
+    assert(channels == 8 && size && buf);
+    ++fadeins;
+    memset(buf, 0x11, size);
+}
+void lipsync_fadeout(int channels, void *buf, unsigned size)
+{
+    assert(channels == 8 && size && buf);
+    ++fadeouts;
+    memset(buf, 0x22, size);
+}
+void _lipsync_write_lipsync_state(struct lipsync *ls, int action)
+{
+    (void)ls;
+    (void)action;
+}
+void *IMC_GetLocalImc(int index) { assert(!index); return NULL; }
+int IMC_RaiseEvent(void *imc, unsigned event, void *dst, void *param)
+{
+    (void)imc; (void)dst;
+    assert(event == LIPSYNC_EVT_FIRST_OUTPUT && param);
+    return 0;
 }
 void msf_flush_metadata(void *m) { (void)m; metadata_flushes++; }
 void aimc_raise_named_event(void *imc, int uid, const char *name, void *p, int size)
@@ -300,6 +385,184 @@ static void test_last_and_flush(void)
     assert(!flushes && !metadata_flushes && !put_count && defaults == 1 && signals == 1);
 }
 
+static void test_frame_dispatch(void)
+{
+    unsigned char payload[64], saved[sizeof(payload)];
+    memset(saved, 0xa5, sizeof(saved));
+    const int actions[] = {LS_OFF, LS_IDLE, LS_SKIP, LS_TONORM, LS_E_NORM};
+    for (unsigned index = 0; index < sizeof(actions) / sizeof(actions[0]); ++index) {
+        for (int datatype = 0; datatype < 2; ++datatype) {
+            struct aud_event first = {.type = 1};
+            struct lipsync ls = {.channels = 8, .nSamplePerFrame = 2,
+                .bytePerSample = datatype == 1 ? 2 : 4, .dataType = datatype,
+                .first = &first, .out_ts = 42};
+            unsigned frame = 2u * 8u * (unsigned)ls.bytePerSample;
+            selected_action = actions[index];
+            reset_observations();
+            adapter_owner = &ls;
+            ls.adapter_in = frame - 1;
+            frame_data = (struct aud_data){.type = datatype == 1 ? 0 : 1,
+                                          .buf = payload};
+            memcpy(payload, saved, sizeof(payload));
+            assert(test_lipsync_core(&ls) == 1);
+            assert(!ls.adapter_out && !ls.first_sent && !events && !data_pushes);
+            assert(!flushes && !put_count && !fadeins && !fadeouts && ls.print_cnt == 1);
+            assert(!memcmp(payload, saved, sizeof(payload)));
+            ls.adapter_in++;
+            assert(test_lipsync_core(&ls) == 0);
+            assert(ls.adapter_out == frame && ls.bytes_in == frame);
+            assert(ls.action == selected_action);
+            if (selected_action == LS_IDLE || selected_action == LS_SKIP) {
+                assert(!events && !data_pushes && !ls.first_sent);
+            } else {
+                assert(events == 1 && data_pushes == 1 && ls.first_sent);
+                assert(frame_data.type == datatype && frame_data.size == frame);
+                assert(frame_data.timestamp == 42 && last_data == &frame_data);
+            }
+            assert(fadeins == (unsigned)(datatype == 0 && selected_action == LS_TONORM));
+            assert(fadeouts == (unsigned)(datatype == 0 && selected_action == LS_E_NORM));
+            if (datatype == 1 || (!fadeins && !fadeouts))
+                assert(!memcmp(payload, saved, sizeof(payload)));
+        }
+    }
+    const int held[] = {LS_RUN, LS_REPEAT, 14, -1};
+    for (unsigned index = 0; index < sizeof(held) / sizeof(held[0]); ++index) {
+        struct lipsync ls = {.channels = 8, .nSamplePerFrame = 2, .bytePerSample = 2};
+        reset_observations();
+        selected_action = held[index];
+        assert(test_lipsync_core(&ls) == 0);
+        assert(!flushes && !data_pushes && !events && !put_count && !ls.adapter_out);
+    }
+    struct lipsync ls = {.channels = 8, .nSamplePerFrame = 2, .bytePerSample = 2,
+                         .adapter_in = 32};
+    reset_observations();
+    adapter_owner = &ls;
+    selected_action = LS_OFF;
+    fail_frame = true;
+    assert(test_lipsync_core(&ls) == 1 && !flushes && !put_count && !data_pushes);
+    assert(ls.adapter_out == 0 && ls.adapter_in == 32);
+}
+
+static void test_carrier_first_fields(void)
+{
+    const char *codecs[] = {"mat", "pcm"};
+    for (unsigned codec = 0; codec < 2; ++codec) {
+        for (int clock_x4 = 0; clock_x4 < 2; ++clock_x4) {
+            struct first_event first = {.event = {.type = 1}, .codec = codecs[codec],
+                .channels = 8, .bits = 16, .rate = clock_x4 ? 48000 : 192000,
+                .samples = 1536, .data_rate = 192000, .data_channels = 2,
+                .data_bps = 32, .acmod = 7, .es = codec == 1,
+                .clock_x4 = clock_x4, .explicit_values = true};
+            struct first_event saved = first;
+            struct lipsync ls = {0};
+            reset_observations();
+            _lipsync_set_prop_datatype(&ls, codec);
+            assert(_lipsync_event(&ls, NULL, &first.event) == 0);
+            assert(ls.dataType == (codec == 0) && ls.is_pcm == (codec == 1));
+            assert(ls.channels == 8 && ls.fs == (clock_x4 ? 48 : 192));
+            assert(ls.bytePerSample == (codec == 0 ? 2 : 4));
+            assert(ls.nSamplePerFrame == (codec == 0 ? 1536 : 256));
+            assert(!memcmp(&first, &saved, sizeof(first)));
+            unsigned char payload[16];
+            memset(payload, 0xa5, sizeof(payload));
+            struct aud_data data = {.type = codec, .size = sizeof(payload), .buf = payload};
+            assert(_lipsync_write_output(&ls, &data) == 0);
+            assert(data.type == (codec == 0) && last_event == &first.event);
+            for (unsigned index = 0; index < sizeof(payload); ++index)
+                assert(payload[index] == 0xa5);
+        }
+    }
+}
+
+static void test_commands_and_replay(void)
+{
+    struct first_event mat = {.event = {.type = 1}, .codec = "mat", .channels = 8,
+        .bits = 16, .rate = 192000, .samples = 2, .explicit_values = true};
+    struct first_event pcm = mat;
+    pcm.codec = "pcm";
+    unsigned char payload[64];
+    memset(payload, 0xa5, sizeof(payload));
+    struct lipsync ls = {0};
+    struct aud_port port = {.module = &ls};
+    struct aud_data carrier = {.type = 0, .size = 32, .buf = payload};
+    reset_observations();
+    adapter_owner = &ls;
+    selected_action = LS_OFF;
+    frame_data = carrier;
+    assert(_lipsync_event(&ls, &port, &mat.event) == 0);
+    assert(test_lipsync_chain(&port, &carrier) == 1);
+    assert(events == 1 && data_pushes == 1 && ls.first_sent && !ls.first_received);
+    assert(ls.dataType == 1 && ls.fs == 192 && ls.channels == 8);
+    assert(frame_data.type == 1 && frame_data.size == 32 && last_event == &mat.event);
+
+    reset_observations();
+    adapter_owner = &ls;
+    ls.first_output_sent = 1;
+    ls.drop_count = 7;
+    ls.discard_param = 0;
+    assert(_lipsync_cmd(&ls, 0x10010000, NULL, 0) == 0);
+    assert(ls.action == LS_IDLE && ls.state_changed && ls.drop_count == 7);
+    assert(ls.first == &mat.event && ls.first_sent && ls.dataType == 1);
+    assert(!ls.first_output_sent && !events && !put_count && !flushes && !defaults);
+    ls.discard_param = 3;
+    assert(_lipsync_cmd(&ls, 0x10010000, NULL, 0) == 0 && ls.drop_count == 3);
+    assert(_lipsync_state(&ls) == LS_OFF && !ls.state_changed && ls.drop_count == 3);
+    struct lipsync saved = ls;
+    assert(_lipsync_cmd(&ls, 0x10020000, NULL, 0) == 0);
+    assert(_lipsync_cmd(&ls, 0x10150000, NULL, 0) == 0);
+    assert(!memcmp(&ls, &saved, sizeof(ls)));
+    ls.start_pts = 11;
+    ls.end_pts = 22;
+    ls.gap_handling = ls.gap_correction = ls.unknown_234 = 1;
+    ls.debug_count[0] = 99;
+    assert(_lipsync_cmd(&ls, 0x10000000, NULL, 0) == 0);
+    assert(!ls.start_pts && !ls.end_pts && !ls.gap_handling && !ls.gap_correction);
+    assert(!ls.debug_count[0] && !ls.unknown_234 && ls.first == &mat.event);
+    assert(ls.dataType == 1 && ls.bytePerSample == 2 && ls.nSamplePerFrame == 2);
+    assert(_lipsync_cmd(&ls, 0xdeadbeef, NULL, 0) == 29);
+
+    _lipsync_set_prop_offset(&ls, 123);
+    _lipsync_set_baseCT(&ls, 11);
+    _lipsync_set_baseST(&ls, 22);
+    _lipsync_set_state(&ls, 0);
+    assert(ls.offset_changed && ls.state_changed && ls.state == 0);
+    ls.drop_count = 0;
+    assert(_lipsync_state(&ls) == LS_OFF && ls.action == LS_IDLE && ls.drop_count == 3);
+    assert(!ls.offset_changed && !ls.state_changed && ls.first == &mat.event);
+    assert(ls.first_sent && ls.dataType == 1 && ls.channels == 8 && ls.fs == 192);
+    assert(ls.bytePerSample == 2 && ls.nSamplePerFrame == 2);
+
+    reset_observations();
+    adapter_owner = &ls;
+    ls.discard_param = ls.drop_count = 0;
+    ls.adapter_in = 40;
+    ls.adapter_out = 32;
+    assert(_lipsync_cmd(&ls, 0x1003002c, NULL, 0) == 0);
+    assert(ls.first_received && !flushes && ls.first_sent && ls.first == &mat.event);
+    assert(test_lipsync_chain(&port, &carrier) == 1);
+    assert(ls.adapter_in == ls.adapter_out && !ls.first_received);
+    assert(events == 1 && last_event == &mat.event && data_pushes == 1);
+    struct aud_event flush = {.type = 7, .flags = 2};
+    assert(_lipsync_event(&ls, &port, &flush) == 23);
+    assert(!ls.first_sent && ls.first == &mat.event && ls.dataType == 1);
+    assert(test_lipsync_chain(&port, &carrier) == 1);
+    assert(events == 2 && last_event == &mat.event && data_pushes == 2);
+
+    reset_observations();
+    adapter_owner = &ls;
+    assert(_lipsync_event(&ls, &port, &pcm.event) == 0);
+    assert(events == 1 && last_event == &pcm.event && ls.first_received);
+    assert(ls.first_sent && ls.dataType == 0 && ls.bytePerSample == 4);
+    carrier.size = 0;
+    assert(test_lipsync_chain(&port, &carrier) == 1);
+    assert(!ls.first_sent && !ls.first_received && events == 1 && !data_pushes);
+    struct aud_event last = {.type = 2};
+    assert(_lipsync_event(&ls, &port, &last) == 0 && ls.first == &pcm.event);
+    ls.first_sent = 1;
+    assert(_lipsync_event(&ls, &port, &last) == 23 && !ls.first);
+    assert(ls.dataType == 0 && ls.channels == 8 && ls.fs == 192 && ls.bytePerSample == 4);
+}
+
 int main(void)
 {
     _Static_assert(offsetof(struct aud_event, flags) == 0x10, "event flags offset");
@@ -308,6 +571,9 @@ int main(void)
     test_metadata_first();
     test_datatype();
     test_last_and_flush();
-    puts("lipsync: FIRST ownership/selection, output bytes/type, internal datatype and FLUSH/LAST: PASS");
+    test_frame_dispatch();
+    test_carrier_first_fields();
+    test_commands_and_replay();
+    puts("lipsync: FIRST format/ownership/replay, frame guards, type/fade/drop dispatch and resets: PASS");
     return 0;
 }

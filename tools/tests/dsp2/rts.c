@@ -10,6 +10,7 @@ static void *test_calloc(size_t, size_t);
 
 struct event_values {
     struct aud_event event;
+    const char *codec;
     int channels, bits, rate, acmod, front_padding;
     bool dolby, es;
     unsigned marker;
@@ -19,6 +20,7 @@ static struct aud_event rate_event;
 static struct aud_data *fifo[16];
 static unsigned head, tail, waits, signals, locks, releases, duplicates, event_pushes;
 static unsigned data_pushes, syncs, creates, destroys, defaults, requested_rate;
+static unsigned events_before_data;
 static unsigned created_stack, created_priority;
 static bool fail_alloc, fail_dup, fail_thread, fail_rate, stop_after_push;
 static struct aud_event *last_event;
@@ -129,6 +131,7 @@ int aud_module_push_event(struct ts_module *m, int port, struct aud_event *e)
 int aud_module_push_data(struct ts_module *m, int port, struct aud_data *d)
 {
     assert(!port && !locks);
+    events_before_data = event_pushes;
     ++data_pushes;
     last_data = d;
     if (stop_after_push)
@@ -165,6 +168,7 @@ static void reset(struct ts_module *m)
     memset(m, 0, sizeof(*m));
     waits = signals = locks = releases = duplicates = event_pushes = data_pushes = 0;
     syncs = creates = destroys = defaults = requested_rate = 0;
+    events_before_data = 0;
     fail_alloc = fail_dup = fail_thread = fail_rate = stop_after_push = false;
     last_put = NULL;
     last_event = NULL;
@@ -177,7 +181,8 @@ static void reset(struct ts_module *m)
 static struct event_values first(int channels, int bits, int rate)
 {
     struct event_values e = {.event = {.type = 1}, .channels = channels,
-        .bits = bits, .rate = rate, .dolby = true, .es = true, .marker = 0xdecafbad};
+        .codec = "pcm", .bits = bits, .rate = rate, .dolby = true,
+        .es = true, .marker = 0xdecafbad};
     return e;
 }
 static void release_full_queue(struct aud_cond *p)
@@ -358,6 +363,39 @@ static void test_worker(void)
     ts_thread_work(&m);
     assert(m.state == 3 && m.dropped_count == 1 && releases == 1 && !data_pushes);
 }
+static void test_first_requires_pcm(void)
+{
+    const char *codecs[] = {"mat", "pcm"};
+    for (unsigned codec = 0; codec < 2; ++codec) {
+        struct ts_module m;
+        reset(&m);
+        struct aud_port port = {.module = &m};
+        struct event_values e = first(8, 16, 192000);
+        e.codec = codecs[codec];
+        assert(ts_event(&m, &port, &e.event) == 0);
+        struct aud_data es = {.type = 1, .size = 8192};
+        ts_chai(&port, &es);
+        on_wait = stop_worker;
+        ts_thread_work(&m);
+        assert(releases == 1 && last_put == &es && !m.input_count);
+        assert(m.first == &e.event && !m.first_sent && !duplicates && !event_pushes);
+
+        struct aud_data carrier = {.type = 0, .index = 7, .size = 8192};
+        carrier.reserved[0] = 0x12345678;
+        struct aud_data original = carrier;
+        ts_chai(&port, &carrier);
+        m.running = stop_after_push = true;
+        ts_thread_work(&m);
+        assert(events_before_data == 1 && data_pushes == 1 && last_data == &carrier);
+        assert(!memcmp(&carrier, &original, sizeof(carrier)) && releases == 1);
+        assert(duplicate.codec == e.codec && duplicate.es && !duplicate.dolby);
+        assert(duplicate.channels == 8 && duplicate.bits == 16 && duplicate.rate == 192000);
+        assert(duplicate.acmod == 2 && duplicate.front_padding == 1024);
+        assert(m.first == &e.event && m.first_sent && m.input_count == 1);
+        ts_destructor(&m);
+        assert(releases == 2 && last_put == &e.event && !m.first);
+    }
+}
 static void test_state_and_commands(void)
 {
     struct ts_module m;
@@ -440,6 +478,7 @@ int main(void)
     test_copy();
     test_chain_and_flush();
     test_worker();
+    test_first_requires_pcm();
     test_state_and_commands();
     puts("dsp2 rts tests passed");
     return 0;

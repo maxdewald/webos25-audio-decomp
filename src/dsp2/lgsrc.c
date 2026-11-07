@@ -51,6 +51,11 @@ extern int lgsrcIo_writeData(void *, struct lgsrc_state *);      /* @0x6009f360 
 /* @0x600a0b18: only unsigned rate<=384000 and requested samples<=512 are
  * checked. Zero rates are accepted: division is the firmware's double division,
  * not a guarded or clamped ratio. Factor changes even if sample validation fails.
+ * Every successful explicit init resets the selected engine even at unchanged
+ * rates/mode: fast @6009e4a8 seeds ten buffered/history samples; normal
+ * @6009efd0 rebuilds history and phase through @6009ee94. This is not create's
+ * blanket memset. Format/channel/filter setters do not call it; a changed
+ * run mode does. Rate changes use changeFs rather than this full reset.
  */
 int lgsrc_init(struct lgsrc *h)
 {
@@ -106,6 +111,13 @@ int _lgsrc_ChangeState(struct lgsrc *h)
  * bounds here are SIGNED (unlike init/changeFs); return is actual produced
  * samples * output channels, not bytes or the requested output_samples.
  * All three callees' return values (including invalid I/O format) are ignored.
+ * PCM @6009be40 first executes RFT, then calls this iff its +fc!=1. Its
+ * @6009adec equality predicate compares SRC in/out channels, rates and bits,
+ * not RFT in/out formats, sign, endian, gain or LFE. SRC in/out channels/bits
+ * both describe RFT OUTPUT, so same-rate SRC bypass still allows 16->32 RFT.
+ * When called, I/O @6009f120/@6009f360 uses signed16 internal planes: 24/32
+ * input loses low 8/16 bits and output restores zeros there. Neither this
+ * entry nor RFT performs an arbitrary channel map or fade.
  */
 uint32_t lgsrc_process(struct lgsrc *h, const void *input, void *output)
 {

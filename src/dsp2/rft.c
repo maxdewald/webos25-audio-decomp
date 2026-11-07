@@ -323,13 +323,22 @@ void _LGRFT_UpMix(void *config, int32_t *dst, const int32_t *src)
 }
 
 /* @0x6009ce6c: returns total output samples, not bytes/frames. Scratch is
- * mandatory even on copy path. @cf5d..cf66 proves Ghidra omitted gain==1 test:
- * equal widths/channels, native endian, signed input copies ONLY gain!=1.
- * Thus 8ch signed16->16 is proven byte-copy when gain!=1 (at ANY rate).
- * gain==1 forces alignment + unresolved gain + writeout even with equal formats;
+ * mandatory even on copy path. @cf5d..cf66 proves Ghidra omitted enable==1:
+ * equal widths/channels, endian==0, unsigned==0 copies ONLY gain_enable!=1.
+ * @cf6e..cf7b passes frames*in_ch*in_bytes to memcpy alias 0x600fb7fc;
+ * no width/frame/capacity check accompanies that length. Null arguments or
+ * signed channels>10 fail before writes; helper format failures are ignored.
+ * Copy alias @600fb86c assembles unaligned source words without PCM math;
+ * its aligned loads can read around the logical range despite exact writes.
+ * Thus 8ch signed16->16 is proven byte-copy when gain_enable!=1 (ANY rate).
+ * Copy precedes acmod/LFE/available policy: none remaps equal-format 8ch PCM.
+ * gain_enable==1 forces alignment + unresolved gain + writeout even with equal formats;
  * its byte identity cannot be asserted. 16->32 without gain/channel/endian
  * changes is exact signed sample bits <<16, all scalar. LFE special path bypasses
- * endian swap entirely. available_mode!=0 selects truncation/zero-fill policy. */
+ * endian swap entirely. available_mode!=0 selects truncation/zero-fill policy.
+ * PCM caller @6009be40 always invokes this before its SRC-bypass test. There
+ * is no rate, channel map, fade or initialization/reset operation in this entry;
+ * RFT_SetGenLFE alone explicitly clears its histories in this setter family. */
 int LGRFT(void *config, const void *input, void *output, void *scratch, int available_mode)
 {
     struct rft_config *r = config;
@@ -368,7 +377,9 @@ int LGRFT(void *config, const void *input, void *output, void *scratch, int avai
     return out_count;
 }
 
-/* @0x6009dc5c: setters store bits >>3, without validating format. */
+/* @0x6009dc5c: signed arithmetic bits>>3 to +00; output setter stores +10.
+ * No width validation or gain/history reset. Conversion implements 1..4 bytes,
+ * but the earlier LGRFT copy path accepts any equal stored widths. */
 int RFT_SetInPCMFormat(void *p, int bits)
 {
     if (p == NULL) return -1;
@@ -418,7 +429,11 @@ int RFT_SetOutChannel(void *p, int ch)
     if (p == NULL) return -1;
     ((struct rft_config *)p)->out_ch = ch; return 0;
 }
-/* @0x6009de40: only enable==1 stores gain; disabling leaves prior gain. */
+/* @0x6009de40: only enable==1 stores gain at +1c and enable=1 at +18;
+ * every other enable writes +18=0, retaining +1c and histories. No comparison
+ * with gain==0x800000 occurs here: PCM's property setter @6009cc6c disables
+ * for that nominal-unity constant, whereas explicit SET_GAIN can enable it.
+ * Constructor, FIRST, INIT and flush are caller policies, not an RFT reset. */
 int RFT_SetGai(void *p, int enable, int gain)
 {
     if (p == NULL) return -1;

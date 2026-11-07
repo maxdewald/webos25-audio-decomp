@@ -16,6 +16,9 @@ volatile uint32_t gain_log_mask;
 const void *const gain_log = NULL;
 static int pushed, freed, first_kind, fail_alloc;
 static struct aud_data *last;
+static unsigned char zero_payload[32768];
+static void *last_released;
+static bool first_es = true;
 static struct aud_event original, muted_first;
 void logmm_printl(const void *p, int l, const char *f, int n, const char *s, ...)
 {
@@ -28,7 +31,7 @@ void logmm_printl(const void *p, int l, const char *f, int n, const char *s, ...
 void *aud_object_get(void *p) { return p; }
 void aud_object_put(void *p)
 {
-    (void)p;
+    last_released = p;
     ++freed;
 }
 int aud_module_push_data(struct gain_module *m, int p, struct aud_data *d)
@@ -56,8 +59,11 @@ struct aud_data *aud_data_new_zero(unsigned n)
     static struct aud_data z;
     if (fail_alloc)
         return NULL;
+    assert(n <= sizeof(zero_payload));
+    memset(zero_payload, 0, n);
     memset(&z, 0, sizeof(z));
     z.size = n;
+    z.ptr = zero_payload;
     return &z;
 }
 void aud_mutex_lock(struct aud_mutex *m) { (void)m; }
@@ -70,7 +76,7 @@ int aud_event_value_get_int(struct aud_event *e, const char *k, int d)
 bool aud_event_value_get_bool(struct aud_event *e, const char *k, bool d)
 {
     (void)e;
-    return !strcmp(k, "es") ? true : d;
+    return !strcmp(k, "es") ? first_es : d;
 }
 const char *aud_event_value_get_str(struct aud_event *e, const char *k, const char *d)
 {
@@ -101,6 +107,83 @@ static void reset(void)
 {
     pushed = freed = first_kind = fail_alloc = 0;
     last = NULL;
+    last_released = NULL;
+}
+static void test_steady_muted_pcm(void)
+{
+    unsigned char payload[67], saved[sizeof(payload)];
+    memset(payload, 0xa5, sizeof(payload));
+    memcpy(saved, payload, sizeof(saved));
+    for (int es_mode = 0; es_mode < 2; ++es_mode) {
+        struct gain_module m = {.channel = 8, .current_gain = GAIN_UNITY,
+            .gain = -1, .fadetime_ms = -1, .fade_gain = GAIN_UNITY,
+            .fade_target = GAIN_UNITY, .target_gain = 123,
+            .prev_muted = 1, .mute_input = true,
+            .es_mode = es_mode, .es_unit_per_packet = 3, .es_pkt_pos = 2,
+            .es_zero_state = 2, .delay_changed = true};
+        struct aud_port port = {.module = (void *)&m};
+        struct aud_data data = {.type = AUD_DATA_PCM, .index = 17, .ts = 123,
+                               .ptr = payload, .size = sizeof(payload)};
+        reset();
+        assert(gain_chain(&port, &data) == 0);
+        assert(pushed == 1 && freed == 1 && last_released == &data && last != &data);
+        assert(last->type == AUD_DATA_PCM && last->size == data.size);
+        assert(last->index == data.index && last->ts == data.ts);
+        for (unsigned index = 0; index < data.size; ++index)
+            assert(((unsigned char *)last->ptr)[index] == 0);
+        assert(!memcmp(payload, saved, sizeof(payload)) && !first_kind);
+        assert(!m.final_gain && m.prev_muted == 1 && !m.delay_changed);
+        assert(m.es_pkt_pos == 2 && m.es_zero_state == 2);
+        reset();
+        fail_alloc = 1;
+        m.final_gain = 99;
+        m.delay_changed = true;
+        assert(gain_chain(&port, &data) == -1);
+        assert(!pushed && freed == 1 && last_released == &data);
+        assert(m.final_gain == 99 && m.delay_changed && m.es_pkt_pos == 2);
+    }
+}
+static void test_first_mute_policy(void)
+{
+    unsigned char payload[32], saved[sizeof(payload)];
+    memset(payload, 0xa5, sizeof(payload));
+    memcpy(saved, payload, sizeof(saved));
+    for (int es_mode = 0; es_mode < 2; ++es_mode) {
+        struct gain_module m = {.current_gain = GAIN_UNITY, .gain = -1,
+            .fadetime_ms = -1, .fade_gain = 0x400000, .fade_target = 0x600000,
+            .target_gain = 0x700000, .fade_pos = 17, .delta_g = 3, .delta_s = 2,
+            .prev_muted = 1, .mute_input = true, .es_unit_per_packet = 1};
+        struct aud_port port = {.module = (void *)&m};
+        struct aud_data data = {.type = AUD_DATA_ES, .size = sizeof(payload), .ptr = payload};
+        first_es = es_mode;
+        reset();
+        gain_event(&m, &port, &original);
+        assert(m.es_mode == (bool)es_mode && first_kind == 1);
+        assert(m.mute_input && !m.mute_output && m.current_gain == GAIN_UNITY);
+        assert(m.fade_gain == 0x400000 && m.fade_target == 0x600000);
+        assert(m.target_gain == 0x700000 && m.fade_pos == 17 && m.delta_g == 3 && m.delta_s == 2);
+        reset();
+        assert(gain_chain(&port, &data) == 0);
+        assert(freed == 1 && last_released == &data);
+        assert(pushed == es_mode && (!es_mode || (last != &data && last->size == data.size)));
+        if (es_mode) {
+            assert(last->type == AUD_DATA_ES);
+            for (unsigned index = 0; index < data.size; ++index)
+                assert(((unsigned char *)last->ptr)[index] == 0);
+        }
+        assert(!memcmp(payload, saved, sizeof(payload)));
+        reset();
+        m.mute_input = false;
+        assert(gain_chain(&port, &data) == 0 && pushed == 1 && last == &data && !freed);
+        assert(m.fade_gain == 0x400000 && m.delta_g == 3 && m.fade_pos == 17);
+        assert(first_kind == 2 && !m.es_zero_state);
+        m.es_pkt_pos = 2;
+        m.es_zero_state = 2;
+        reset();
+        gain_event(&m, &port, &original);
+        assert(m.es_pkt_pos == 2 && m.es_zero_state == 2);
+    }
+    first_es = true;
 }
 int main(void)
 {
@@ -171,7 +254,9 @@ int main(void)
     reset();
     assert(gain_chain(&p, &d) == 0 && last == &d);
     assert(m.current_gain == 0x800000 && m.gain == -1);
+    test_steady_muted_pcm();
+    test_first_mute_policy();
     puts("gain ES: pass/zero/drop, 3-unit unmute boundary, allocation failure, FIRST/chain mute "
-         "threshold and pending gain: PASS");
+         "threshold, fade persistence and settled PCM zeroing: PASS");
     return 0;
 }

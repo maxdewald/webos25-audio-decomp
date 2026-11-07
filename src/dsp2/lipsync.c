@@ -95,7 +95,10 @@ struct lipsync {
     int   idle_time;             /* +0x188 */
     int   idle_total;            /* +0x18c */
     int   print_cnt;             /* +0x194 frames since last action log (vs print-interval) */
+    int   unknown_190;
     int   first_output_sent;     /* +0x198 LIPSYNC_EVT_FIRST_OUTPUT raised */
+    int   unknown_19c;
+    unsigned debug_count[4];     /* +0x1a0..1ac */
     int   discontinuity;         /* +0x1c8 */
     uint32_t out_ts;             /* +0x1d0 */
     int   dataType;              /* +0x1d4 0 pcm, 1 es */
@@ -114,6 +117,7 @@ struct lipsync {
     bool  offset_changed;        /* +0x230 */
     bool  state_changed;         /* +0x231 also set by BaseCT/BaseST/SET_BASE */
     bool  speed_changed;         /* +0x232 */
+    int   unknown_234;
     struct aud_event *first;     /* +0x238 held FIRST event */
     char  mutex[0x1c];           /* +0x23c */
     char  cond[0x10];            /* +0x258 */
@@ -158,7 +162,8 @@ int _lipsync_core(struct lipsync *ls);
 
 /* ------------------------------------------------------------------------ */
 
-/* @0x600a10a4 _lipsync_flush: "do flush..." (lvl 3) */
+/* @0x600a10a4: Flush bytes/metadata and rearm FIRST replay. Retains the event,
+ * codec-derived dataType/format, action, drop_count and first-output latch. */
 void _lipsync_flush(struct lipsync *ls)
 {
     aud_data_adapter_flush(ls->adapter, ls->adapter_in - ls->adapter_out);
@@ -234,6 +239,8 @@ int _lipsync_write_output(struct lipsync *ls, struct aud_data *d)
  * internal samples / 256 samples per frame; any other codec forces ES / 2-byte
  * samples / sample-number (default 1536). The incoming bits-per-sample is read
  * but overwritten in BOTH branches (@0x600a1dfb,1e2e).
+ * Reads channels/rate, NOT es/data-rate/data-channels/data-bps/acmod/clock-x4;
+ * those fields survive in the retained event but do not choose this format.
  * FIRST replaces the owned +0x238 reference (@0x600a1d80..1d86,1e40), without
  * duplication or mutation, and is normally retained until output. If +0x110 is
  * already set, a reference to this SAME new FIRST is pushed immediately
@@ -396,9 +403,10 @@ int _lipsync_chain(struct aud_port *port, struct aud_data *d)
  *   ESNORM(8) -> 0x600a38d3: "ESNORMAL state is impossible" (lvl 1), return 0xff
  *   TONORM(9) -> 0x600a38b9 -> 0x600a39f2: fadein (PCM only) + output
  *   E-NORM(13)-> 0x600a388b -> 0x600a39b8: fadeout (PCM only) + output
- * Each dispatch site starts with a FLIX whose condition is [FLIX?] "a full frame is
- * queued"; if not, return 1. print_cnt (+0x194) counts frames while
- * over_protection == 0. */
+ * Validated bge.w18 @0x600a388b/38a7/38b9/38ea/3904 compares signed queued
+ * bytes against the internal frame size; short frames return 1 without consume,
+ * FIRST, or fades. RUN/REPEAT/out-of-range actions have no such gate.
+ * print_cnt (+0x194) counts frames while over_protection == 0. */
 int _lipsync_core(struct lipsync *ls)
 {
     uint32_t pts;
@@ -416,7 +424,15 @@ int _lipsync_core(struct lipsync *ls)
     /* "[%s] p:[%10u][%10u] s:[%10u][%10u] d:%4d(ms) action:%s[%d]->%s[%d] r:%d(ms)"
      * (lvl 2) when print-interval elapsed or action changed */
 
+    if ((unsigned)action < 14 && action != LS_RUN && action != LS_REPEAT &&
+        action != LS_ESNORM &&
+        (int32_t)(ls->adapter_in - ls->adapter_out) < (int32_t)frame) {
+        if (!ls->over_protection)
+            ls->print_cnt++;
+        return 1;
+    }
     switch (action) {
+    default:
     case LS_RUN:
     case LS_REPEAT:
         break;                                        /* hold: adapter untouched */
@@ -436,7 +452,15 @@ int _lipsync_core(struct lipsync *ls)
         if (!ls->over_protection)
             ls->print_cnt++;
         return 0xff;
-    default:                                          /* output a frame */
+    case LS_OFF:
+    case LS_NORMAL:
+    case LS_FREE_RUN:
+    case LS_EXCEPT:
+    case LS_TONORM:
+    case LS_NODELAY:
+    case LS_WRONG:
+    case LS_FREERUN_WITHNOTI:
+    case LS_E_NORM:
         d = aud_data_adapter_get_data(ls->adapter, frame);
         if (!d) {                                     /* "get data error" (lvl 0) */
             if (!ls->over_protection)
@@ -523,14 +547,43 @@ int _lipsync_state(struct lipsync *ls)
     }
 }
 
-/* @0x600a1100 _lipsync_cmd: LIPSYNC_CMD_* (SET_BASE logs "clockbase : %d" and sets
- * state_changed) and 0x10000000 (reset debug counters); else default command. */
+/* @0x600a1100: Scalar reset dispatch validated with xtobjdump. START
+ * @0x600a13a7..13ed resets action/counters, not FIRST, dataType or format;
+ * discard_param==0 preserves an existing drop_count. STOP @0x600a1670 and
+ * 0x10150000 @0x600a1500 are no-ops. 0x1003002c @0x600a163f..1647 requests
+ * next-chain flush (first_received), not a format reset or immediate flush.
+ * Debug reset @0x600a1564..1582 clears gap/debug fields, not cached FIRST.
+ * Remaining LIPSYNC_CMD_* dispatch (including SET_BASE) is [GAP], not a no-op. */
 int _lipsync_cmd(struct lipsync *ls, unsigned cmd, void *param, unsigned len)
 {
     aud_mutex_lock(ls->mutex);
     aud_cond_signal(ls->cond);
     aud_mutex_unlock(ls->mutex);
-    /* [FLIX] dispatch of LIPSYNC_CMD_* ids */
+    switch (cmd) {
+    case 0x10010000:
+        ls->idle_cnt = ls->idle_total = 0;
+        ls->action = LS_IDLE;
+        ls->disconnecting = ls->seamless = false;
+        ls->state_changed = true;
+        ls->unknown_190 = 1;
+        ls->first_output_sent = ls->unknown_19c = 0;
+        ls->repeat_cnt = ls->skip_cnt = ls->cnt150 = ls->last_diff = ls->print_cnt = 0;
+        if (ls->discard_param)
+            ls->drop_count = ls->discard_param;
+        ls->bytes_in = ls->bytes_out = 0;
+        return 0;
+    case 0x10020000:
+    case 0x10150000:
+        return 0;
+    case 0x1003002c:
+        ls->first_received = true;
+        return 0;
+    case 0x10000000:
+        memset(ls->debug_count, 0, sizeof(ls->debug_count));
+        ls->start_pts = ls->end_pts = ls->gap_handling = ls->gap_correction = 0;
+        ls->unknown_234 = 0;
+        return 0;
+    }
     return aud_module_default_command(ls, cmd, param, len);
 }
 

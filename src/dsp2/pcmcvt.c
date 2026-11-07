@@ -145,6 +145,9 @@ static int src_formats_equal(struct pcmcvt *m)
  * RFT conversion can set +0xfc=1 when rates match (tail @0x6009adec).
  * No endian/sign/gain/LFE/available check exists in the SRC bypass predicate.
  * Setting properties does not flush queued input; FIRST handles that separately.
+ * Each format property applies the whole cache, even at the same value: a
+ * multi-property update exposes intermediate formats, not an allfmt transaction.
+ * RFT_SetGenLFE clears filter history on EVERY apply, even unchanged/disabled.
  * Does NOT apply m->gain or gain_enable_property: active RFT gain survives format
  * properties, FIRST, SET_ALLFMT and flush, even if the property cache disagrees. */
 int Pcmcvt_SetParamToLibs(struct pcmcvt *m)
@@ -171,7 +174,8 @@ int Pcmcvt_SetParamToLibs(struct pcmcvt *m)
     return 0;
 }
 
-/* @0x6009a990: resets SRC and restores settings, but not timestamps/totals. */
+/* @0x6009a990: drains input, resets SRC, restores cached formats/acmod/LFE
+ * (clearing LFE history), but not active gain, timestamps or sample totals. */
 int Pcmcvt_Cmd_Flush(struct pcmcvt *m)
 {
     flush_adapter(m, false);
@@ -189,7 +193,9 @@ int Pcmcvt_Cmd_SetOverprotect(struct pcmcvt *m, unsigned value)
 
 /* @0x6009aeb4
  * Changing rate clears SRC bypass even if the normalized rate is equal to the
- * input. Cache keeps the raw command rate; a later SetParamToLibs reapplies it. */
+ * input. Cache keeps the raw command rate; a later SetParamToLibs reapplies it.
+ * An already-active rate returns before updating either cache or bypass, so a
+ * previous CHANGE_FS can leave the property cache stale even after success. */
 int Pcmcvt_SetOutFs(struct pcmcvt *m, int rate)
 {
     if (rate < 1 || rate > 384000) return -1;
@@ -201,7 +207,8 @@ int Pcmcvt_SetOutFs(struct pcmcvt *m, int rate)
     return 0;
 }
 
-/* @0x6009af4c: only zero is rejected; size/buffer cap not checked here. */
+/* @0x6009af4c: only zero is rejected; SRC rejects >512 but its error is ignored,
+ * so the property cache can disagree with the active output frame count. */
 int Pcmcvt_Cmd_SetOutSample(struct pcmcvt *m, unsigned samples)
 {
     if (samples == 0) return -1;
@@ -499,10 +506,13 @@ void Pcmcvt_Destructor(struct pcmcvt *m)
  * rate, acmod, check-downmix, then pushes the duplicate before final settings
  * application. es, codec, data-rate and other fields are not touched here.
  * Thus metadata can survive even though Chai drops ES buffers / emits PCM.
+ * FIRST replaces input ch/bits/rate and acmod (default 2), not cached output
+ * bits/rate, sign/endian or active gain. Final apply clears LFE history.
  * Input channels/bits/rate default -1 (leave cache). out-channels 1..10 also
  * updates output and triggers an early SetParamToLibs @0x6009c604.
  * Flush predicate compares input channels, out-channels and input RATE only,
- * not sample width. Outgoing bits/rate are snapshots of the output cache at
+ * not sample width: queued bytes can be reinterpreted at the new width.
+ * Outgoing bits/rate are snapshots of the output cache at
  * entry, not read back from SRC or inferred from input/codec.
  */
 int Pcmcvt_Event(struct pcmcvt *m, struct aud_port *port, struct aud_event *event)
@@ -677,15 +687,16 @@ int set_prop_gain_enable(struct pcmcvt *m, const void *prop, const char *s)
     RFT_SetGai(m->rft, parse_bool(s), m->gain);
     return 0;
 }
-/* @0x6009cd64 */
+/* @0x6009cd64: numeric parser despite BOOL descriptor; FIRST replaces acmod. */
 int set_prop_acmod(struct pcmcvt *m, const void *prop, const char *s)
 {
     (void)prop;
-    m->acmod = parse_int(s);
-    RFT_SetAcmod(m->rft, m->acmod);
+    int acmod = parse_int(s);
+    RFT_SetAcmod(m->rft, acmod);
+    m->acmod = acmod;
     return 0;
 }
-/* @0x6009cdb4 */
+/* @0x6009cdb4: numeric nonzero, not true/yes/1; Chai passes it to LGRFT. */
 int set_prop_available(struct pcmcvt *m, const void *prop, const char *s)
 {
     (void)prop;
@@ -700,7 +711,8 @@ char *pcmcvt_gets_internal_buf_size(struct pcmcvt *m)
 /* Literal table @60103630..601038d7, reached through impl+30 @60103600.
  * Firmware descriptors are 0x28 bytes; this is a semantic host view. Offsets
  * are getter metadata, NOT stores performed before a custom set callback.
- * module_core set_prop @60075109..60075140 calls the callback instead of store. */
+ * module_core set_prop @60075109..60075140 calls the callback instead of store.
+ * Types: 1=BOOL, 2=INT; type 0 internal_buf_size uses only its custom getter. */
 struct pcmcvt_property {
     const char *name;
     unsigned type, firmware_offset, flags;

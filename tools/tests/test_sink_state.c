@@ -71,7 +71,7 @@ static int parent_change(void *ptr,int transition)
     if(parent_destroys) s->ao=NULL;
     return parent_result;
 }
-// @extract src/libgstlgaudiosink/render_props.c gst_lg_audio_render_change_state gst_lg_audio_render_finalize
+// @extract src/libgstlgaudiosink/render_element.c gst_lg_audio_render_change_state gst_lg_audio_render_finalize
 static void reset(GstLgAudioRender *s)
 {
     *s=(GstLgAudioRender){0};s->segment.rate=1.0;s->segment.base=200;s->segment.start=700;s->base_time=100;

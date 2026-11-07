@@ -72,7 +72,7 @@ static int record_pcm(const char *name,void *ao,int value) { ++pcm_calls;last_ao
 #define lgao_set_queue_max_length(...) record("lgao_set_queue_max_length")
 #define lgao_set_rts(...) record("lgao_set_rts")
 #define lgao_set_vsp_mode(...) record("lgao_set_vsp_mode")
-// @extract src/libgstlgaudiosink/render_props.c _gst_lg_audio_render_set_preconditions
+// @extract src/libgstlgaudiosink/render_element.c _gst_lg_audio_render_set_preconditions
 #define replay _gst_lg_audio_render_set_preconditions
 int main(void) {
     int token;

@@ -68,7 +68,7 @@ static void gst_base_sink_set_ts_offset(GstLgAudioRender *self, int64_t n) {
 #define lgao_get_queue_max_length(ao,out) read_int("lgao_get_queue_max_length",out)
 #define lgao_get_rts(ao,kind,out) read_int("lgao_get_rts",out)
 // @extract src/libgstlgaudiosink/lgao.c lgao_get_mode_mixer lgao_get_port
-// @extract src/libgstlgaudiosink/render_props.c gst_lg_audio_render_get_property
+// @extract src/libgstlgaudiosink/render_element.c gst_lg_audio_render_get_property
 // @extract src/libgstlgaudiosink/render_element.c gst_lg_audio_render_update_ts_offset
 #define get gst_lg_audio_render_get_property
 #define update gst_lg_audio_render_update_ts_offset

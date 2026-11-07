@@ -180,7 +180,7 @@ int lgao_eos(void *a) { record('E'); return eos_result; }
 int lgao_audio_gap(void *a, unsigned long long b, unsigned long long e) { record('G'); return 0; }
 int lgao_feed(void *a, void *data, unsigned len, unsigned long long pts, LGAO_DATA_TYPE_T t) { assert(feeds < 16); assert(data == payload + offsets[copies-1]); sizes[feeds] = len; timestamps[feeds] = pts; types[feeds++] = t; record('H'); return feed_result; }
 
-// @match src/libgstlgaudiosink/render_element.c (?s)#define LG_BUFFER_FLAG_METADATA .*?(?=static const char \*\nout_type_name)
+// @match src/libgstlgaudiosink/render_element.c (?s)#define LG_BUFFER_FLAG_METADATA .*?#define CHAIN_MAX_FEED_SIZE[^\n]*
 // @extract src/libgstlgaudiosink/render_element.c gst_lg_audio_render_set_caps gst_lg_audio_render_event gst_lg_audio_render_chain
 
 static GstLgAudioRender reset(void) {

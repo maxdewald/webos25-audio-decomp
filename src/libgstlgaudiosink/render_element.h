@@ -20,6 +20,10 @@
 
 G_BEGIN_DECLS
 
+#ifndef LG_SINK_LOCAL
+#define LG_SINK_LOCAL
+#endif
+
 #define GST_TYPE_LG_AUDIO_RENDER   (gst_lg_audio_render_get_type ())
 #define GST_LG_AUDIO_RENDER(obj) \
     (G_TYPE_CHECK_INSTANCE_CAST ((obj), GST_TYPE_LG_AUDIO_RENDER, GstLgAudioRender))
@@ -42,10 +46,8 @@ typedef struct {
 #define GST_LG_BASE_SINK_CLASS_EXT(k) ((GstLgBaseSinkClassExt *) GST_BASE_SINK_CLASS (k))
 
 struct _GstLgAudioRender {
-    union {
-        GstBaseSink parent;
-        guint8      _lg_parent[LG_BASE_SINK_SIZE];
-    };
+    GstBaseSink parent;
+    guint8 _lg_parent_padding[LG_BASE_SINK_SIZE - sizeof (GstBaseSink)];
 
     /* Per-instance association: NULL_TO_READY stores lgao_open's result here;
      * stop closes it and writes NULL. Object refs keep the sink, NOT ao or its
@@ -188,9 +190,9 @@ _Static_assert(G_STRUCT_OFFSET(GstLgAudioRenderClass, es_bypass_done) == 0x1a4, 
 _Static_assert(sizeof(GstLgAudioRenderClass) == 0x1a8, "class size");
 #endif
 
-GType gst_lg_audio_render_get_type (void);
+GType gst_lg_audio_render_get_type (void) G_GNUC_CONST;
 
-/* ---- shared element globals (defined in render_props.c) ----------------- */
+/* ---- shared element globals ------------------------------------------- */
 #ifndef LOGMM_MODULE_DEFINED
 #define LOGMM_MODULE_DEFINED
 struct logmm_module {
@@ -219,7 +221,7 @@ extern guint               gst_lg_audio_render_signals[LAST_SIGNAL];
  * and the GStreamer category; the two levels are chosen independently.
  * line = __LINE__ of the original gstlgaudiosink.c, kept as evidence. */
 #define SINK_LOGM(mlvl, line, fmt, ...) do { \
-        if (G_UNLIKELY (*logmm_module_media_event.mask & (1u << (mlvl)))) \
+    if (*logmm_module_media_event.mask & (1u << (mlvl))) \
             logmm_printl (&logmm_module_media_event, (mlvl), __func__, (line), \
                           "<audio_sink> " fmt, ##__VA_ARGS__); \
     } while (0)
@@ -239,23 +241,23 @@ extern guint               gst_lg_audio_render_signals[LAST_SIGNAL];
     } while (0)
 
 /* ---- render_element.c (data flow); installed by class_init ------------- */
-void          gst_lg_audio_render_clock_calibrated (GstLgAudioRender *pAudioRen);
-void          gst_lg_audio_render_update_ts_offset (GstLgAudioRender *pAudioRen, gint playspeed);
-void          gst_lg_audio_render_update_clock (GstLgAudioRender *pAudioRen, gint64 base,
+LG_SINK_LOCAL void          gst_lg_audio_render_clock_calibrated (GstLgAudioRender *pAudioRen);
+LG_SINK_LOCAL void          gst_lg_audio_render_update_ts_offset (GstLgAudioRender *pAudioRen, gint playspeed);
+LG_SINK_LOCAL void          gst_lg_audio_render_update_clock (GstLgAudioRender *pAudioRen, gint64 base,
                                                 gint64 start);
-gboolean      gst_lg_audio_render_prepared_instant_rate_change (GstBaseSink *sink,
+LG_SINK_LOCAL gboolean      gst_lg_audio_render_prepared_instant_rate_change (GstBaseSink *sink,
                                                                 gdouble rate_multiplier);
-void          gst_lg_audio_render_dump_open (GstLgAudioRender *pAudioRen);
-void          gst_lg_audio_render_callback_task (void *data);
-GstClock     *gst_lg_audio_render_provide_clock (GstElement *element);
-gboolean      gst_lg_audio_render_prepare_seamless_seek (GstBaseSink *sink, GstSegment *segment,
+LG_SINK_LOCAL void          gst_lg_audio_render_dump_open (GstLgAudioRender *pAudioRen);
+LG_SINK_LOCAL void          gst_lg_audio_render_callback_task (void *data);
+LG_SINK_LOCAL GstClock     *gst_lg_audio_render_provide_clock (GstElement *element);
+LG_SINK_LOCAL gboolean      gst_lg_audio_render_prepare_seamless_seek (GstBaseSink *sink, GstSegment *segment,
                                                          GstClockTime new_base_time);
-GstFlowReturn gst_lg_audio_render_preroll (GstBaseSink *sink, GstBuffer *buffer);
-gboolean      gst_lg_audio_render_event (GstBaseSink *sink, GstEvent *event);
-GstFlowReturn gst_lg_audio_render_chain (GstBaseSink *sink, GstBuffer *buffer);
-gboolean      gst_lg_audio_render_stop (GstBaseSink *sink);
-gboolean      gst_lg_audio_render_start (GstBaseSink *sink);
-gboolean      gst_lg_audio_render_query (GstBaseSink *sink, GstQuery *query);
+LG_SINK_LOCAL GstFlowReturn gst_lg_audio_render_preroll (GstBaseSink *sink, GstBuffer *buffer);
+LG_SINK_LOCAL gboolean      gst_lg_audio_render_event (GstBaseSink *sink, GstEvent *event);
+LG_SINK_LOCAL GstFlowReturn gst_lg_audio_render_chain (GstBaseSink *sink, GstBuffer *buffer);
+LG_SINK_LOCAL gboolean      gst_lg_audio_render_stop (GstBaseSink *sink);
+LG_SINK_LOCAL gboolean      gst_lg_audio_render_start (GstBaseSink *sink);
+LG_SINK_LOCAL gboolean      gst_lg_audio_render_query (GstBaseSink *sink, GstQuery *query);
 
 G_END_DECLS
 

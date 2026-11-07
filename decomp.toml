@@ -30,7 +30,7 @@ binary = "orig/usr/lib/gstreamer-1.0/libgstlgaudiosink.so"
 symbols = "symbols/libgstlgaudiosink.so.functions.tsv"
 src = "src/libgstlgaudiosink"
 src_addr_bias = 0x10000
-cflags_extra = ["-Isrc/include/gst-gen", "-isystem", "/usr/include/glib-2.0",
+cflags_extra = ["-mcpu=cortex-a9", "-mtune=cortex-a9", "-march=armv7-a+mp+sec+simd", "-funwind-tables", "-Isrc/include/gst-gen", "-isystem", "/usr/include/glib-2.0",
                 "-isystem", "/usr/include/gstreamer-1.0"]
 
 [[target]]

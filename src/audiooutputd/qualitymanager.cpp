@@ -13,7 +13,13 @@ static bool infoEnabled()
  * [GAP] TV role/permission files were not supplied; OSE's policy is not TV evidence. */
 QualityManager::QualityManager(LS::Handle& h, umiClient* c):handle(&h),client(c)
 {
-    registerCategory(*handle, "/quality", qualityMethods, this);
+    try {
+        registerCategory(*handle, "/quality", qualityMethods, this);
+    } catch (LS::Error& error) {
+        if (!getPmLogContext() || *static_cast<int*>(getPmLogContext()) > 2)
+            _PmLogMsgKV(getPmLogContext(), 3, 0, "LS2_SUBSCRIBE_FAILED", 0, 0, 0,
+                        "%s - QualityManager API's registration Failed.", error.what());
+    }
 }
 
 /* @0x1a7f8 = _ZN14QualityManager15isValidCategoryERNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEE */
@@ -32,9 +38,11 @@ bool QualityManager::isValidCategory(std::string&)
 int QualityManager::setSettings(const std::string& category, JValue value)
 {
     JValue copy(value);
-    if (infoEnabled())
-        _PmLogMsgKV(getPmLogContext(), 6, 0, "AUDIO_SET_SETTINGS_CALL", 0, 0, 0,
+    if (infoEnabled()) {
+        void* context = getPmLogContext();
+        _PmLogMsgKV(context, 6, 0, "AUDIO_SET_SETTINGS_CALL", 0, 0, 0,
                     "setSettings request for category:%s with value:%s", category.c_str(), copy.stringify().c_str());
+    }
     int status = client ? client->setSettings(category, copy) : 2;
     if (infoEnabled())
         _PmLogMsgKV(getPmLogContext(), 6, 0, "AUDIO_SET_SETTINGS_CALL", 0, 0, 0,
@@ -107,10 +115,41 @@ bool QualityManager::setSettings(LSMessage& message)
 {
     LS::Message requestMessage(message);
     JValue payload;
-    if (!request(requestMessage, qualitySetSchema, payload)) return true;
-    std::string category = text(payload["category"]);
-    JValue response = result(setSettings(category, payload["value"]));
-    if (boolean(response["returnValue"])) response.put("category", category);
+    int code = 0;
+    std::string category;
+    JValue value;
+    const char* file = "/usr/src/debug/lib32-audiooutputd/1.0.0-1.jcl4tv.23-r1/git/src/qualitymanager.cpp";
+    if (!getPmLogContext() || *static_cast<int*>(getPmLogContext()) > 6)
+        _PmLogMsgKV(getPmLogContext(), 7, 0, nullptr, 0, 0, 0,
+                    "%s:%s() Quality setSettings  call", file, "setSettings");
+    std::string schema = R"({"type":"object","properties":{"category":{"type":"string"},"value":{"type":"object"}},"required":["category","value"],"additionalProperties":false})";
+    if (!parse(LSMessageGetPayload(&message), payload, schema, code)) {
+        respondError(requestMessage, schemaError, 3);
+        if (!getPmLogContext() || *static_cast<int*>(getPmLogContext()) > 5)
+            _PmLogMsgKV(getPmLogContext(), 6, 0, "JSON_PARSE_ERROR", 0, 0, 0, "error for schema");
+        return true;
+    }
+    category = text(payload["category"]);
+    value = payload["value"];
+    if (!getPmLogContext() || *static_cast<int*>(getPmLogContext()) > 6) {
+        void* context = getPmLogContext();
+        _PmLogMsgKV(context, 7, 0, nullptr, 0, 0, 0,
+                    "%s:%s() Quality setSettings Request for category %s, value %s",
+                    file, "setSettings", category.c_str(), value.stringify().c_str());
+    }
+    JValue response = pbnjson::Object();
+    if (!setSettings(category, value)) {
+        if (!getPmLogContext() || *static_cast<int*>(getPmLogContext()) > 6)
+            _PmLogMsgKV(getPmLogContext(), 7, 0, nullptr, 0, 0, 0,
+                        "%s:%s() umi setSettings for category %s is success",
+                        file, "setSettings", category.c_str());
+        response.put("returnValue", true);
+        response.put("category", category);
+    } else {
+        response.put("returnValue", false);
+        response.put("errorText", driverError);
+        response.put("errorCode", 20);
+    }
     respond(requestMessage, response);
     return true;
 }
@@ -122,8 +161,19 @@ bool QualityManager::getSettings(LSMessage& message)
 {
     LS::Message requestMessage(message);
     JValue payload;
-    if (!request(requestMessage, qualityGetSchema, payload)) return true;
-    respond(requestMessage, getSettings(text(payload["category"]), payload["settings"]));
+    std::string category;
+    JValue settings;
+    int code = 0;
+    std::string schema = R"({"type":"object","properties":{"category":{"type":"string"},"settings":{"type":"object"}},"additionalProperties":false})";
+    if (!parse(LSMessageGetPayload(&message), payload, schema, code)) {
+        respondError(requestMessage, schemaError, 3);
+        return true;
+    }
+    category = text(payload["category"]);
+    settings = payload["settings"];
+    JValue response = pbnjson::Object();
+    response = getSettings(category, settings);
+    respond(requestMessage, response);
     return true;
 }
 
@@ -134,7 +184,27 @@ bool QualityManager::setQualityAttribute(LSMessage& message)
 {
     LS::Message requestMessage(message);
     JValue payload;
-    if (!request(requestMessage, qualityAttributeSchema, payload)) return true;
-    respond(requestMessage, result(setQualityAttribute(payload)));
+    int code = 0;
+    if (!getPmLogContext() || *static_cast<int*>(getPmLogContext()) > 6)
+        _PmLogMsgKV(getPmLogContext(), 7, 0, nullptr, 0, 0, 0,
+                    "%s:%s() QualityManager::setQualityAttribute call",
+                    "/usr/src/debug/lib32-audiooutputd/1.0.0-1.jcl4tv.23-r1/git/src/qualitymanager.cpp",
+                    "setQualityAttribute");
+    std::string schema = R"({"type":"object","properties":{"categoryType":{"type":"string"},"requestType":{"type":"string"},"categoryInfo":{"type":"object"},"isGameMode":{"type":"boolean"},"pipelineInfo":{"type":"object"},"activeState":{"type":"boolean"}},"required":["categoryType","requestType"],"additionalProperties":false})";
+    if (!parse(LSMessageGetPayload(&message), payload, schema, code)) {
+        respondError(requestMessage, schemaError, 3);
+        if (!getPmLogContext() || *static_cast<int*>(getPmLogContext()) > 5)
+            _PmLogMsgKV(getPmLogContext(), 6, 0, "JSON_PARSE_ERROR", 0, 0, 0, "error for schema");
+        return true;
+    }
+    JValue response = pbnjson::Object();
+    if (!setQualityAttribute(payload)) {
+        response.put("returnValue", true);
+    } else {
+        response.put("returnValue", false);
+        response.put("errorText", driverError);
+        response.put("errorCode", 20);
+    }
+    respond(requestMessage, response);
     return true;
 }

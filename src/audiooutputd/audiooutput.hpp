@@ -13,6 +13,7 @@
 #else
 extern "C" void* jarray_create(void*);
 namespace pbnjson {
+class JValueArrayElement;
 class JValue {
 public:
     virtual ~JValue();
@@ -23,20 +24,26 @@ public:
     JValue(const char*);
     JValue(const std::string&);
     bool put(const std::string&, const JValue&);
+    bool put(const char* key, const JValue& input) { return put(std::string(key), input); }
     bool append(const JValue&);
-    JValue operator[](const char*) const;
+    JValueArrayElement operator[](const char*) const;
     bool operator==(bool) const;
     int asBool(bool&) const;
     int asString(std::string&) const;
     template<class T> T asNumber() const;
     std::string stringify(const char* = nullptr);
-    JValue& operator=(JValue other) { std::swap(schema, other.schema); std::swap(value, other.value); return *this; }
+    JValue& operator=(JValue&& other) { std::swap(schema, other.schema); std::swap(value, other.value); return *this; }
+    JValue& operator=(const JValue& other) { JValue copy(other); return *this = std::move(copy); }
     static JValue JNULL;
 protected:
     friend class JArray;
     JValue(void* s, void* v):schema(s),value(v){}
     void* schema;
     void* value;
+};
+class JValueArrayElement : public JValue {
+public:
+    ~JValueArrayElement() override = default;
 };
 JValue Object();
 class JArray : public JValue {
@@ -107,8 +114,9 @@ class Error : public std::exception {
 public:
     LSError error;
     Error() { LSErrorInit(&error); }
-    Error(const Error& other):std::exception(other),error(other.error) { LSErrorInit(const_cast<LSError*>(&other.error)); }
+    __attribute__((noinline)) Error(const Error& other):std::exception(other),error(other.error) { LSErrorInit(const_cast<LSError*>(&other.error)); }
     ~Error() noexcept override { LSErrorFree(&error); }
+    const char* what() const noexcept override { return error.message; }
 };
 struct Message {
     LSMessage* message;
@@ -192,7 +200,6 @@ class ConnectionManager : public LS::SubscriptionPoint {
     unsigned timer;
     bool headphone;
     std::string internalStatus, externalStatus;
-    JValue headphoneResponse();
 public:
     ConnectionManager(LS::Handle&, VolumeManager&, umiClient*);
     ~ConnectionManager();
@@ -223,6 +230,12 @@ public:
 void* getPmLogContext();
 int setPmLogContext(const char*);
 namespace Contract {
+const std::string schemaError = "Failed to validate against schema";
+const std::string volumeError = "Volume out of range";
+const std::string limitError = "Volume already at max/min";
+const std::string connectionError = "Audio not connected";
+const std::string driverError = "Driver error while executing the command";
+const std::string duplicateError = "Connection not possible";
 bool parse(const std::string&, JValue&, const std::string&, int&) __asm__("audiooutput_parse");
 void respond(LS::Message&, const JValue&) __asm__("audiooutput_respond");
 void respondError(LS::Message&, const std::string&, int, bool) __asm__("audiooutput_error");
@@ -231,13 +244,27 @@ extern const char *const qualitySetSchema, *const qualityGetSchema, *const quali
 extern const char *const connectionSchema, *const pairSchema, *const inputVolumeSchema, *const inputMuteSchema;
 extern const char *const soundOutSchema, *const pipelineSchema, *const headphoneSchema, *const emptySchema;
 extern const char *const volumeSchema, *const volumeOutputSchema, *const volumeMuteSchema;
-std::string text(const JValue&);
-bool boolean(const JValue&);
+inline std::string text(const JValue& value)
+{
+    std::string out;
+    value.asString(out);
+    return out;
+}
+inline bool boolean(const JValue& value)
+{
+    bool out = false;
+    value.asBool(out);
+    return out;
+}
 JValue array();
 bool parse(const std::string&, JValue&, const std::string&, int&);
 bool request(LS::Message&, const char*, JValue&);
 void respond(LS::Message&, const JValue&);
 void respondError(LS::Message&, const std::string&, int, bool = false);
 JValue result(int);
-void registerCategory(LS::Handle&, const char*, const LSMethod*, void*);
+__attribute__((always_inline)) inline void registerCategory(LS::Handle& h, const char* category, const LSMethod* methods, void* data)
+{
+    { LS::Error error; if (!LSRegisterCategory(h.handle, category, methods, nullptr, nullptr, &error.error)) throw error; }
+    { LS::Error error; if (!LSCategorySetData(h.handle, category, data, &error.error)) throw error; }
+}
 }

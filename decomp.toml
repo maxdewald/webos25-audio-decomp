@@ -58,6 +58,7 @@ name = "audiooutputd"
 binary = "orig/usr/sbin/audiooutputd"
 symbols = "symbols/audiooutputd.functions.tsv"
 src = "src/audiooutputd"
+cflags_extra = ["-mtune=cortex-a9", "-fPIE"]
 
 [[target]]
 name = "umediaserver"

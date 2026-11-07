@@ -22,7 +22,7 @@
 </style>
 <rect class="card" x="0.5" y="0.5" width="819" height="1109" rx="10"/>
 <text class="title" x="24" y="38">Decompilation progress</text>
-<text class="sub" x="24" y="60">21 original files · 680 of 7,705 KiB of their code reconstructed (8.8%)</text>
+<text class="sub" x="24" y="60">21 original files · 681 of 7,705 KiB of their code reconstructed (8.8%)</text>
 <text class="name" x="24" y="108">libgstdecproxy</text>
 <text class="path" x="24" y="125">/usr/lib/gstreamer-1.0/libgstdecproxy.so</text>
 <rect class="track" x="330" y="102" width="340" height="14" rx="7"/>
@@ -102,10 +102,10 @@
 <text class="name" x="24" y="614">audiooutputd</text>
 <text class="path" x="24" y="631">/usr/sbin/audiooutputd</text>
 <rect class="track" x="330" y="608" width="340" height="14" rx="7"/>
-<rect class="cov" x="330" y="608" width="321.5" height="14" rx="7"/>
-<rect class="match" x="330" y="608" width="51.4" height="14" rx="7"/>
-<text class="pct" x="686" y="620">94.6%</text>
-<text class="path" x="686" y="636">15.1% match</text>
+<rect class="cov" x="330" y="608" width="332.0" height="14" rx="7"/>
+<rect class="match" x="330" y="608" width="277.0" height="14" rx="7"/>
+<text class="pct" x="686" y="620">97.7%</text>
+<text class="path" x="686" y="636">81.5% match</text>
 <text class="name" x="24" y="660">libmedia-resource-calculator</text>
 <text class="path" x="24" y="677">/usr/lib/libmedia-resource-calculator.so.1</text>
 <rect class="track" x="330" y="654" width="340" height="14" rx="7"/>

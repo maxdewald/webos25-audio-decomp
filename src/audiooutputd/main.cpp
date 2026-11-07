@@ -63,10 +63,19 @@ static unsigned setupSignals()
     sigaddset(&mask, SIGUSR1);
     if (sigprocmask(SIG_BLOCK, &mask, nullptr) < 0) {
         std::cerr << "Failed to set signal mask";
+        if (!getPmLogContext() || *static_cast<int*>(getPmLogContext()) > 2)
+            _PmLogMsgKV(getPmLogContext(), 3, 0, "SIGNAL_HANDLER_ERROR", 0, 0, 0,
+                        "Failed to set signal mask");
         return 0;
     }
     int fd = signalfd(-1, &mask, 0);
-    if (fd < 0) { std::cerr << "Failed to create signal descriptor"; return 0; }
+    if (fd < 0) {
+        std::cerr << "Failed to create signal descriptor";
+        if (!getPmLogContext() || *static_cast<int*>(getPmLogContext()) > 2)
+            _PmLogMsgKV(getPmLogContext(), 3, 0, "SIGNAL_HANDLER_ERROR", 0, 0, 0,
+                        "Failed to create signal descriptor");
+        return 0;
+    }
     void* channel = g_io_channel_unix_new(fd);
     g_io_channel_set_close_on_unref(channel, 1);
     g_io_channel_set_encoding(channel, nullptr, nullptr);
@@ -103,20 +112,29 @@ int main(int argc, char** argv)
     void* optionsContext = g_option_context_new(nullptr);
     g_option_context_add_main_entries(optionsContext, options, nullptr);
     if (!g_option_context_parse(optionsContext, &argc, &argv, &error)) {
-        std::cerr << "[audiooutputd] " << (error ? error->message : "An unknown error occurred") << std::endl;
-        if (error) g_error_free(error);
+        if (error) {
+            std::cerr << "[audiooutputd] " << error->message << std::endl;
+            g_error_free(error);
+        } else {
+            std::cerr << "[audiooutputd] " << "An unknown error occurred" << std::endl;
+        }
         std::exit(1);
     }
     g_option_context_free(optionsContext);
     if (setPmLogContext("audiooutputd")) {
-        std::cerr << "[audiooutputd] Failed to setup up log context audiooutputd" << std::endl;
+        std::cerr << "[audiooutputd] " << "Failed to setup up log context " << "audiooutputd" << std::endl;
         std::exit(1);
     }
     loop = g_main_loop_new(nullptr, 0);
     unsigned signals = setupSignals();
     umiClient* client = umiClient::getInstance();
     try {
-        if (!client || !client->initialize()) throw "stop AudiooutputD Service";
+        if (!client || !client->initialize()) {
+            if (!getPmLogContext() || *static_cast<int*>(getPmLogContext()) > 2)
+                _PmLogMsgKV(getPmLogContext(), 3, 0, "HAL_INIT_ERROR", 0, 0, 0,
+                            "UMI init failed!stop AudiooutputD Service.");
+            throw "stop AudiooutputD Service";
+        }
         BusOwner bus{};
         { LS::Error e; if (!LSRegister("com.webos.service.audiooutput", &bus.handle, &e.error)) throw e; }
         VolumeManager volume(bus, client);
@@ -132,9 +150,11 @@ int main(int argc, char** argv)
         std::cerr << "[audiooutputd] Caught exception, exiting" << std::endl;
         std::exit(1);
     }
+    if (!getPmLogContext() || *static_cast<int*>(getPmLogContext()) > 5)
+        _PmLogMsgKV(getPmLogContext(), 6, 0, "TERMINATING", 0, 0, 0, "Terminating");
     g_source_remove(signals);
     g_main_loop_unref(loop);
-    if (!client->deinitialize())
+    if (!client->deinitialize() && (!getPmLogContext() || *static_cast<int*>(getPmLogContext()) > 2))
         _PmLogMsgKV(getPmLogContext(), 3, 0, "HAL_DEINIT_ERROR", 0, 0, 0,
                     "UMI deinitialization error. See logs for details.");
     return 0;

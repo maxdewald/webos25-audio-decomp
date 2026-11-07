@@ -12,6 +12,7 @@ static std::map<std::string,void*> contexts;
 static std::string category, first, second;
 static JValue forwarded, getter = pbnjson::Object();
 static int calls, driverStatus, posts, subscriptions, timerCalls, cancelled;
+static bool rejectRegistration, rejectCategoryData;
 static unsigned interval;
 static bool hp;
 static std::string internal = "disconnected", external = "disconnected";
@@ -22,8 +23,8 @@ static std::string str(const JValue& v){return Contract::text(v);}
 extern "C" {
 void LSErrorInit(LSError* e){std::memset(e,0,sizeof(*e));}
 void LSErrorFree(LSError*){}
-bool LSRegisterCategory(LSHandle*, const char* c,const LSMethod* m,void*,void*,LSError*){ registrations[c]=m; return true; }
-bool LSCategorySetData(LSHandle*,const char* c,void* data,LSError*){contexts[c]=data;return true;}
+bool LSRegisterCategory(LSHandle*, const char* c,const LSMethod* m,void*,void*,LSError* error){ if(rejectRegistration){error->message="registration failed";return false;} registrations[c]=m; return true; }
+bool LSCategorySetData(LSHandle*,const char* c,void* data,LSError* error){if(rejectCategoryData){error->message="category data failed";return false;} contexts[c]=data;return true;}
 const char* LSMessageGetPayload(LSMessage* m){return m->payload.c_str();}
 void LSMessageRef(LSMessage* m){++m->refs;}
 void LSMessageUnref(LSMessage* m){--m->refs;}
@@ -61,6 +62,18 @@ static JValue call(const char* c,const char* method,const std::string& payload){
 }
 int main(){
     LSHandle raw; LS::Handle h{&raw}; umiClient client;
+    for(int failure=0;failure<2;++failure){
+        rejectRegistration=failure==0;
+        rejectCategoryData=failure==1;
+        VolumeManager failedVolume(h,&client);
+        QualityManager failedQuality(h,&client);
+        ConnectionManager failedConnection(h,failedVolume,&client);
+        assert(failedVolume.getSoundOutputVolume("untracked")==100);
+        assert(failedQuality.setSettings("setMixer",pbnjson::Object())==0);
+        assert(!failedConnection.findAudioConnection("source","sink"));
+    }
+    rejectRegistration=false;
+    rejectCategoryData=false;
     VolumeManager volume(h,&client);
     {
         ConnectionManager connection(h,volume,&client); QualityManager quality(h,&client);
@@ -111,6 +124,28 @@ int main(){
         r=call("/audio","setInputVolume",R"({"source":"not-connected","sink":"main","volume":256})");assert(truth(r["returnValue"])&&forwarded.asNumber<int>()==0);
         r=call("/audio","getStatus",R"({"subscribe":true})");assert(!truth(r["returnValue"]));
         driverStatus=3;r=call("/audio","disconnect",R"({"source":"media","sink":"main"})");assert(!truth(r["returnValue"])&&!connection.findAudioConnection("media","main"));driverStatus=0;
+        std::vector<std::string> sources;
+        for(int index=0;index<20;++index){
+            sources.push_back(std::string(40,'s')+std::to_string(index));
+            r=call("/audio","connect",std::string("{\"source\":\"")+sources.back()+"\",\"sink\":\"main\"}");
+            assert(truth(r["returnValue"]));
+        }
+        for(int removed:{0,10,19}){
+            connection.removeAudioConnection(sources[removed],"main");
+            assert(!connection.findAudioConnection(sources[removed],"main"));
+        }
+        for(int index=0;index<20;++index){
+            if(index==0||index==10||index==19)continue;
+            auto* remaining=connection.findAudioConnection(sources[index],"main");
+            assert(remaining&&remaining->source==sources[index]&&remaining->sink=="main");
+        }
+        r=call("/audio","getStatus","{}");
+        auto expected=pbnjson::JArray();
+        for(int index=0;index<20;++index){
+            if(index==0||index==10||index==19)continue;
+            expected.append(connection.buildAudioStatus(*connection.findAudioConnection(sources[index],"main")));
+        }
+        assert(r["audio"].stringify()==expected.stringify());
         r=call("/audio","getHeadphoneStatus",R"({"subscribe":true})");assert(subscriptions==1&&timerCalls==1&&interval==500&&str(r["headPhoneStatus"]).empty());
         assert(category=="headphoneDetectionMute"&&truth(forwarded["mute"]));
         before=calls;ConnectionManager::_headphoneStatusUpdateCallBack(&connection);assert(posts==0&&calls==before);

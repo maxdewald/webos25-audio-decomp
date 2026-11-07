@@ -48,24 +48,7 @@ const LSMethod volumeMethods[] = {
     {"muteSoundOut", dispatch<VolumeManager, &VolumeManager::muteSoundOut>, 0},
     {nullptr, nullptr, 0}
 };
-std::string text(const JValue& value)
-{
-    std::string out;
-    value.asString(out);
-    return out;
-}
-bool boolean(const JValue& value)
-{
-    bool out = false;
-    value.asBool(out);
-    return out;
-}
 JValue array() { return pbnjson::JArray(); }
-void registerCategory(LS::Handle& h, const char* category, const LSMethod* methods, void* data)
-{
-    { LS::Error error; if (!LSRegisterCategory(h.handle, category, methods, nullptr, nullptr, &error.error)) throw error; }
-    { LS::Error error; if (!LSCategorySetData(h.handle, category, data, &error.error)) throw error; }
-}
 JValue result(int status)
 {
     JValue out = pbnjson::Object();
@@ -111,8 +94,10 @@ bool request(LS::Message& message, const char* schema, JValue& payload)
 void respond(LS::Message& message, const JValue& value)
 {
     std::string wire;
-    pbnjson::JGenerator generator(nullptr);
-    generator.toString(value, pbnjson::JSchema::AllSchema(), wire);
+    {
+        pbnjson::JGenerator generator(nullptr);
+        generator.toString(value, pbnjson::JSchema::AllSchema(), wire);
+    }
     LS::Error error;
     if (!LSMessageRespond(message.message, wire.c_str(), &error.error)) throw error;
 }
@@ -126,7 +111,13 @@ void respondError(LS::Message& message, const std::string& text, int code, bool 
     response.put("returnValue", false);
     response.put("errorText", text);
     response.put("errorCode", code);
-    respond(message, response);
+    std::string wire;
+    {
+        pbnjson::JGenerator generator(nullptr);
+        generator.toString(response, pbnjson::JSchema::AllSchema(), wire);
+    }
+    LS::Error error;
+    if (!LSMessageRespond(message.message, wire.c_str(), &error.error)) throw error;
 }
 }
 

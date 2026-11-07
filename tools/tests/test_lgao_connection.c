@@ -23,6 +23,19 @@ static int opens, closes, initialized, signaled, creates, connects, callbacks;
 static int destroyed, disconnected, fail_create, fail_lookup, fail_connect, fail_open;
 static unsigned generation, selected_index, proc_id, bypass_requests, kernel_bypass;
 static unsigned source[3], destination[3], source_port[3], commands[16], ncommands;
+struct aimc { int live; };
+struct registry { int live; };
+struct aud_connector { int live; };
+static struct aimc imc_instance;
+static struct registry registry_instance;
+static struct aud_connector connector_instance;
+static lgao *initializing;
+static int fail_init, finalized, registry_cleaned;
+
+static void unpublished(void)
+{
+    assert(initializing && !initializing->imc && !initializing->reg && !initializing->con);
+}
 
 static int mock_open(const char *file, int flags)
 {
@@ -52,12 +65,58 @@ static int mock_ioctl(int fd, unsigned request, ...)
     }
     return -1; /* The shipped implementation ignores all these ioctl results. */
 }
-static void _lgao_aimc_init(lgao *ao)
+static struct aimc *aimc_create(void)
 {
+    unpublished();
     ++initialized;
-    ao->imc = (struct aimc *)(uintptr_t)1;
+    if (fail_init == 1) return NULL;
+    assert(!imc_instance.live);
+    imc_instance.live = 1;
+    return &imc_instance;
 }
-static unsigned aimc_get_processor_id(struct aimc *imc) { return 3; }
+static int aimc_create_handler(struct aimc *imc)
+{
+    unpublished();
+    assert(imc == &imc_instance && imc->live);
+    return -1;
+}
+static struct registry *ModuleRegistry_Init(struct aimc *imc)
+{
+    unpublished();
+    assert(imc == &imc_instance && imc->live && !registry_instance.live);
+    if (fail_init == 2) return NULL;
+    registry_instance.live = 1;
+    return &registry_instance;
+}
+static unsigned aimc_get_processor_id(struct aimc *imc)
+{
+    assert(imc == &imc_instance && imc->live);
+    return 3;
+}
+static struct aud_connector *Connector_Create(int processor, struct aimc *imc)
+{
+    unpublished();
+    assert(processor == 3 && imc == &imc_instance && imc->live);
+    assert(registry_instance.live && !connector_instance.live);
+    if (fail_init == 3) return NULL;
+    connector_instance.live = 1;
+    return &connector_instance;
+}
+static void ModuleRegistry_Cleanup(struct registry *reg)
+{
+    unpublished();
+    assert(reg == &registry_instance && reg->live && !connector_instance.live);
+    reg->live = 0;
+    ++registry_cleaned;
+}
+static void aimc_finalize(struct aimc *imc)
+{
+    unpublished();
+    assert(imc == &imc_instance && imc->live);
+    assert(!registry_instance.live && !connector_instance.live);
+    imc->live = 0;
+    ++finalized;
+}
 static unsigned aimc_module_create(struct aimc *imc, const char *name, int processor)
 {
     assert(!processor && creates < 3);
@@ -96,7 +155,7 @@ static void _lgao_set_msgpid_to_signal(lgao *ao) { ++signaled; }
 #define close mock_close
 #define ioctl mock_ioctl
 
-// @extract src/libgstlgaudiosink/lgao.c _lgao_open_renderer _lgao_connect_renderer lgao_disconnect_renderer lgao_close_renderer lgao_open_renderer lgao_compare_audio_info
+// @extract src/libgstlgaudiosink/lgao.c _lgao_aimc_init _lgao_open_renderer _lgao_connect_renderer lgao_disconnect_renderer lgao_close_renderer lgao_open_renderer lgao_compare_audio_info
 
 static lgao reset(void)
 {
@@ -104,25 +163,49 @@ static lgao reset(void)
     destroyed = disconnected = fail_create = fail_lookup = fail_connect = fail_open = 0;
     generation = 10; ncommands = bypass_requests = 0; kernel_bypass = 200;
     selected_index = proc_id = ~0u;
+    imc_instance.live = registry_instance.live = connector_instance.live = 0;
+    fail_init = finalized = registry_cleaned = 0;
+    initializing = NULL;
     return (lgao){.fd = -1, .index = 2, .rendererState = LGAO_STATE_STOP};
 }
 static void check_mapping(void)
 {
     for (int mixer = 0; mixer < 2; ++mixer) {
-        lgao ao = reset(); ao.isMixer = mixer;
-        assert(lgao_open_renderer(&ao) == 0 && ao.fd == 7);
-        assert(selected_index == (unsigned)(2 + 4 * mixer));
-        assert(proc_id == 3 && initialized == 1 && ao.rendererState == LGAO_STATE_INIT);
-        assert(ncommands == 2 && commands[0] == AREN_SET_INDEX && commands[1] == AREN_SET_PROC_ID);
+        for (int index = 0; index <= 7; ++index) {
+            lgao ao = reset(); ao.isMixer = mixer; ao.index = index; initializing = &ao;
+            assert(lgao_open_renderer(&ao) == 0 && ao.fd == 7);
+            assert(selected_index == (unsigned)(index + 4 * mixer));
+            assert(proc_id == 3 && initialized == 1 && ao.rendererState == LGAO_STATE_INIT);
+            assert(ao.imc == &imc_instance && ao.reg == &registry_instance);
+            assert(ao.con == &connector_instance);
+            assert(ncommands == 2 && commands[0] == AREN_SET_INDEX && commands[1] == AREN_SET_PROC_ID);
+        }
     }
     lgao ao = reset(); ao.index = -1;
     assert(lgao_open_renderer(&ao) == -1 && !opens);
     ao = reset(); fail_open = 1;
     assert(lgao_open_renderer(&ao) == -1 && !initialized);
 }
+static void check_init_failure(void)
+{
+    for (int point = 1; point <= 3; ++point) {
+        lgao ao = reset(); initializing = &ao; fail_init = point;
+        assert(lgao_open_renderer(&ao) == 0 && ao.fd == 7);
+        assert(ao.rendererState == LGAO_STATE_INIT);
+        assert(!ao.imc && !ao.reg && !ao.con);
+        assert(!imc_instance.live && !registry_instance.live && !connector_instance.live);
+        assert(ncommands == 1 && commands[0] == AREN_SET_INDEX && proc_id == ~0u);
+        assert(!closes && finalized == (point != 1) && registry_cleaned == (point == 3));
+        assert(lgao_close_renderer(&ao) == 0 && ao.fd == -1 && closes == 1);
+        fail_init = 0; ncommands = 0;
+        assert(lgao_open_renderer(&ao) == 0 && initialized == 2 && proc_id == 3);
+        assert(ao.imc == &imc_instance && ao.reg == &registry_instance);
+        assert(ao.con == &connector_instance && ncommands == 2);
+    }
+}
 static void check_reconnect(void)
 {
-    lgao ao = reset();
+    lgao ao = reset(); initializing = &ao;
     assert(lgao_open_renderer(&ao) == 0);
     assert(_lgao_connect_renderer(&ao) == 0);
     assert(creates == 3 && connects == 3 && callbacks == 1 && signaled == 1);
@@ -158,7 +241,7 @@ static void check_failure_cleanup(void)
 }
 int main(void)
 {
-    check_mapping(); check_reconnect(); check_failure_cleanup();
-    puts("lgao connection: index mapping, second connection and failure cleanup passed");
+    check_mapping(); check_init_failure(); check_reconnect(); check_failure_cleanup();
+    puts("lgao connection: slot mapping, AIMC publication/retry, reconnect and failure cleanup passed");
     return 0;
 }

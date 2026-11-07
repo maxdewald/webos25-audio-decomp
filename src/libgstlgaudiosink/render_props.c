@@ -692,7 +692,8 @@ done:
         SINK_GST (glvl, line, obj, fmt, ##__VA_ARGS__); \
     } while (0)
 
-/* @0x10318 gst_lg_audio_render_get_property */
+/* @0x10318: index/mixer publish scalar ao state, never an ao/appsrc handle.
+ * Index is logical (no mixer +4); missing ao returns UINT_MAX/FALSE. */
 void gst_lg_audio_render_get_property (GObject *object, guint prop_id,
                                        GValue *value, GParamSpec *pspec)
 {
@@ -1152,7 +1153,7 @@ app_done:
         }
         PROP_LOG (3, GST_LEVEL_INFO, 0x6db, pAudioRen, "audio-port %d, video-port %d,mixer-port %d",
                   pAudioRen->audio_port, pAudioRen->video_port, pAudioRen->mixer_port);
-        /* audio-port selects /dev/lg/aren<N> (renderer index); see lgao_set_port */
+        /* Ports configure the logical index; aren0 + SET_INDEX selects the slot. */
         SET_OR_DEFER (pAudioRen, lgao_set_port (pAudioRen->ao, pAudioRen->audio_port,
                                                 pAudioRen->mixer_port),
                       PROP_RESOURCE_INFO, 0x6dd);

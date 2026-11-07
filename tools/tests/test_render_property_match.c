@@ -26,6 +26,7 @@ typedef struct { unsigned g_type; int64_t number; const char *string; } GValue;
 #define PROP_LOG(...) ((void)0)
 #define RENDER_LOG(...) ((void)0)
 #define SINK_CHECK(call,line) ((void)(call))
+#define LOGE(...) ((void)0)
 #define g_log(...) (++warnings)
 static int warnings, fail, supplied;
 static unsigned calls;
@@ -59,15 +60,14 @@ static void gst_base_sink_set_ts_offset(GstLgAudioRender *self, int64_t n) {
 #define lgao_get_game_mode(ao,out) read_int("lgao_get_game_mode",out)
 #define lgao_get_lipsync_mode(ao,out) read_int("lgao_get_lipsync_mode",out)
 #define lgao_get_lipsync_offset(ao,out) read_int("lgao_get_lipsync_offset",out)
-#define lgao_get_mode_mixer(ao,out) read_int("lgao_get_mode_mixer",out)
 #define lgao_get_mute(ao,out) read_int("lgao_get_mute",out)
 #define lgao_get_nodelay(ao,out) read_int("lgao_get_nodelay",out)
 #define lgao_get_pcm_bypass(ao,out) read_int("lgao_get_pcm_bypass",out)
 #define lgao_get_pcm_multi_channel(ao,out) read_int("lgao_get_pcm_multi_channel",out)
 #define lgao_get_playrate(ao,out) read_int("lgao_get_playrate",out)
-#define lgao_get_port(ao,out) read_int("lgao_get_port",out)
 #define lgao_get_queue_max_length(ao,out) read_int("lgao_get_queue_max_length",out)
 #define lgao_get_rts(ao,kind,out) read_int("lgao_get_rts",out)
+// @extract src/libgstlgaudiosink/lgao.c lgao_get_mode_mixer lgao_get_port
 // @extract src/libgstlgaudiosink/render_props.c gst_lg_audio_render_get_property
 // @extract src/libgstlgaudiosink/render_element.c gst_lg_audio_render_update_ts_offset
 #define get gst_lg_audio_render_get_property
@@ -79,18 +79,32 @@ int main(void) {
     GValue value={0};
     unsigned ids[]={PROP_PLAY_SPEED,PROP_LIPSYNC_OFFSET,PROP_LIPSYNC,PROP_NODELAY,
         PROP_NODELAY_MODE,PROP_NODELAY_SKIP_UP,PROP_NODELAY_FAST_UP,PROP_NODELAY_RECOVER,
-        PROP_NODELAY_FAST_FREQ,PROP_MIXER,PROP_AUDIO_INDEX,PROP_MUTE,
+        PROP_NODELAY_FAST_FREQ,PROP_MUTE,
         PROP_DIRECTMEDIA_TOTAL_BUF_SIZE,PROP_DIRECTMEDIA_USED_BUF_SIZE,PROP_PCM_BYPASS,
         PROP_PCM_MULTI_CH,PROP_GAME_MODE,PROP_RENDER_BUFFER_THRESHOLD,PROP_QUEUE_MAX_LENGTH};
     for (unsigned i=0;i<sizeof ids/sizeof *ids;++i) {
         unsigned id=ids[i];fail=1;value.number=999;calls=0;
         get(&sink,id,&value,&spec);assert(calls==1);
-        assert(value.number==(id==PROP_AUDIO_INDEX ? UINT32_MAX : id==PROP_LIPSYNC ? 1 : 0));
+        assert(value.number==(id==PROP_LIPSYNC ? 1 : 0));
         fail=0;supplied=2;get(&sink,id,&value,&spec);
         assert(value.number==(id==PROP_LIPSYNC ? 0 : 2));
     }
-    fail=0;supplied=17;get(&sink,PROP_DECODED_SIZE,&value,&spec);
-    assert(value.number==0 && !strcmp(last_getter,"lgao_get_mode_mixer"));
+    value.number=999;get(&sink,PROP_MIXER,&value,&spec);assert(value.number==0);
+    value.number=999;get(&sink,PROP_AUDIO_INDEX,&value,&spec);assert(value.number==UINT32_MAX);
+    int unchanged=123;
+    assert(lgao_get_port(NULL,&unchanged)==-1 && unchanged==123);
+    assert(lgao_get_mode_mixer(NULL,&unchanged)==-1 && unchanged==123);
+    lgao owner={.fd=7,.index=-1};sink.ao=&owner;
+    get(&sink,PROP_AUDIO_INDEX,&value,&spec);assert(value.number==UINT32_MAX);
+    for (int mixer=0;mixer<2;++mixer) {
+        owner.isMixer=mixer;
+        for (int index=0;index<=6;++index) {
+            owner.index=index;
+            get(&sink,PROP_AUDIO_INDEX,&value,&spec);assert(value.number==index);
+            get(&sink,PROP_MIXER,&value,&spec);assert(value.number==mixer);
+        }
+    }
+    fail=0;get(&sink,PROP_DECODED_SIZE,&value,&spec);assert(value.number==0);
     fail=1;get(&sink,PROP_UNDECODED_SIZE,&value,&spec);assert(value.number==0);
     fail=0;get(&sink,PROP_UNDECODED_SIZE,&value,&spec);assert(value.number==123456789);
     fail=1;get(&sink,PROP_FADE_VOLUME,&value,&spec);assert(value.number==100);

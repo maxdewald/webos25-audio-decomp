@@ -288,7 +288,9 @@ static inline void _lgao_set_msgpid_to_signal(lgao *ao)
 
 /* @0x1441c: GET_BYPASS_UID follows SET_PCM_INFO on every rebuilt renderer.
  * The call creates new appsrcs; caps teardown invalidates the old borrowed ones.
- * No es/codec test here: PCM versus ES bypass selection belongs to the kernel. */
+ * No es/codec test here: PCM versus ES bypass selection belongs to the kernel.
+ * Main and bypass have separate UIDs; only the main tail appsink gets cb/priv=ao.
+ * Failure destroys owned modules and clears their borrowed registry pointers. */
 int _lgao_connect_renderer(lgao *ao)
 {
     unsigned int uid_src = 0, uid_gain = 0;
@@ -379,7 +381,8 @@ fail:
     return -1;
 }
 
-/* inlined into _lgao_open_renderer */
+/* Inlined into _lgao_open_renderer: publish imc/reg/con only after all succeed.
+ * Failure releases local allocations without publishing a partial owner. */
 static inline void _lgao_aimc_init(lgao *ao)
 {
     struct aimc *imc;
@@ -411,13 +414,16 @@ static inline void _lgao_aimc_init(lgao *ao)
     ao->con = con;
 }
 
-/* @0x14924: sink index maps to AREN index +4 only in mixer mode.
- * All instances open aren0; SET_INDEX, not the device filename, selects the slot. */
+/* @0x14924: sink index maps to AREN index +4 only in mixer mode, without clamping.
+ * All instances open aren0; SET_INDEX, not the device filename, selects the slot.
+ * SET_PROC_ID registers this owner's AIMC processor, including on reopen. */
 int _lgao_open_renderer(lgao *ao)
 {
-    unsigned int index = ao->index + (ao->isMixer ? 4 : 0);
+    unsigned int index = ao->index;
     unsigned int proc_id;
 
+    if (ao->isMixer)
+        index += 4;
     ao->fd = open("/dev/lg/aren0", O_RDWR | O_CLOEXEC);
     if (ao->fd < 0) {
         LOGE(0x73a, "open renderer error");
@@ -736,7 +742,7 @@ int lgao_set_mode_mixer(void *a, int mode)
     return 0;
 }
 
-/* @0x15580 */
+/* @0x15580: scalar mode only; a missing owner leaves the caller's output alone. */
 int lgao_get_mode_mixer(void *a, int *mode)
 {
     lgao *ao = a;
@@ -921,7 +927,7 @@ int lgao_set_port(void *a, int audioPort, int mixerPort)
     return 0;
 }
 
-/* @0x15d3c */
+/* @0x15d3c: logical ao index, not the mixer-adjusted AREN slot or a module UID. */
 int lgao_get_port(void *a, int *port)
 {
     lgao *ao = a;
@@ -1989,9 +1995,9 @@ int lgao_push_first_event(void *a)
 
     /* raw 0x282d0+: one ldrh tests both adjacent flags; PCM branch is the fallthrough */
     if (ao->pcm_bypass || ao->pcm_multi_ch) {
+        LOGN(0xb26, "pcm_bypass or pcm_multi_ch\n");
         int acmod = info->numberOfChannel < 3 ? 2 : 7;
 
-        LOGN(0xb26, "pcm_bypass or pcm_multi_ch\n");
         event_bypass = aud_event_dup_and_set(event, "acmod", aud_value_int, acmod, NULL);
         if (!event_bypass) {
             LOGE(0xb2d, "first_event is NULL\n");
@@ -2121,7 +2127,7 @@ int lgao_feed(void *a, void *buff, unsigned int buffLength, unsigned long long t
         ao->prevTimestamp[outType] = timestamp;
     }
     LOGD(0xb94, "ts : %llu -> %llu, outType = %d", timestamp,
-         (unsigned long long)buffer->info.timestamp, outType);
+            buffer->info.timestamp64, outType);
     memcpy(buffer->data, buff, buffLength);
 
     if (outType == LGAO_DATA_PCM) {

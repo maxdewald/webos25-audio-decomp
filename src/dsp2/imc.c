@@ -41,6 +41,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
+#include <string.h>
 
 #define ADEC_CMD_SET_PROP      0x10180004u      /* DAT_6005d338 */
 #define CMD_SHBUF_STATUS       0xf101002cu      /* DAT_6005c618 */
@@ -51,9 +52,56 @@
 
 typedef int (*imc_fn)(void *ctx, unsigned cmd, void *a, void *b, int c);
 typedef void (*imc_response_fn)(int result, void *param, unsigned len, void *arg);
+typedef int (*imc_notification_fn)(void *param, unsigned len, void *arg);
+typedef int (*imc_named_fn)(void *arg, void *param, unsigned len);
 
 struct imc_response_link {
     struct imc_response_link *prev, *next;
+};
+
+struct imc_notification {                 /* 0x18 bytes on DSP */
+    struct imc_response_link link;        /* +0x00/+0x04 */
+    int repeat;                          /* +0x08, zero removes before callback */
+    imc_notification_fn fn;               /* +0x0c */
+    void *arg;                           /* +0x10, borrowed */
+    unsigned id;                         /* +0x14 */
+};
+
+struct imc_named_event {                  /* 0x40 bytes on DSP */
+    struct imc_response_link link;        /* +0x00/+0x04 */
+    unsigned id, processor;               /* +0x08/+0x0c; processor 0 = local */
+    int once;                            /* +0x10, nonzero removes AFTER callback */
+    unsigned uid;                        /* +0x14 */
+    char name[32];                       /* +0x18, owned truncated copy */
+    imc_named_fn fn;                      /* +0x38 */
+    void *arg;                           /* +0x3c, borrowed */
+};
+
+struct imc_event_action {                 /* 0x1c-byte registration on DSP */
+    unsigned type;                       /* +0x00, only notification 1 recovered */
+    int repeat;                          /* +0x04, zero = one shot */
+    unsigned target;                     /* +0x08, notification recipient */
+    imc_notification_fn fn;               /* +0x0c, borrowed */
+    void *arg;                           /* +0x10, borrowed */
+    int interval;                        /* +0x14, valid 1..1000, else 1 */
+    unsigned remaining;                  /* +0x18, initialized by insertion */
+};
+
+struct imc_event_entry {                  /* 0x20 bytes on DSP */
+    struct imc_event_action action;
+    unsigned id;                         /* +0x1c */
+};
+
+struct imc_event_table {                  /* 0x64c bytes on DSP */
+    unsigned _0, _4;
+    struct imc_event_entry entries[50];   /* +0x08 */
+    int count;                           /* +0x648 */
+};
+
+struct imc_event_payload {                /* 0x0c bytes on DSP */
+    unsigned _0;                         /* not consumed by notification path */
+    void *param;                         /* +0x04, borrowed for synchronous send */
+    unsigned len;                        /* +0x08 */
 };
 
 struct imc_pending_response {             /* 0x20 bytes on DSP */
@@ -74,14 +122,14 @@ struct imc_handler {                     /* 0x14 bytes */
 };
 
 struct imc {                             /* 0x50 bytes */
-    struct imc *self0, *self1;           /* +0x00 action list head */
+    struct imc_response_link actions;   /* +0x00 notification callbacks */
     struct imc_response_link responses; /* +0x08 pending responses */
     int   lock[7];                       /* +0x10 */
-    void *notif_head, *notif_tail;       /* +0x2c */
-    unsigned _34;
+    struct imc_response_link named;     /* +0x2c named-event registrations */
+    unsigned named_id;                  /* +0x34 */
     void *rbtree;                        /* +0x38 named events */
     unsigned seq;                        /* +0x3c */
-    unsigned _40;
+    unsigned action_id;                 /* +0x40 */
     int   unread;                        /* +0x44 */
     int   platform;                      /* +0x48 */
     void *tracer;                        /* +0x4c */
@@ -147,11 +195,14 @@ extern int   ModuleList_GetPlatform(void);
 extern void  ModuleList_SetPlatform(int);
 extern int   ModuleList_FindModule(unsigned uid);
 extern void *RBTree_CreateTree(void *root, void *cmp);
+extern int RBTree_Search(void *, unsigned, struct imc_event_table **);
+extern int RBTree_CreateNode(void *, unsigned, struct imc_event_table *);
+extern int RBTree_Delete(void *, unsigned);
 extern int   IPC_ReadHeaderAddr(void *h, void *out), IPC_ReadHeaderDone(void *h);
 extern int   IPC_WriteCommand(void *h, void *msg, void *param, int irq);
 extern int   ConnectionMng_ShBufCmd(int id, const int *p);
 extern int   IMC_RaiseEvent(struct imc *, int, int, void *);
-extern int   IMC_RegisterNamedEvent(void *, int, int, int, int, int);
+extern int   IMC_RegisterNamedEvent(void *, const char *, unsigned, int, imc_named_fn, void *);
 extern void  IMC_UnregisterNamedEvent(void *, int), IMC_UnregisterNamedEvent_onUID(void *, int);
 extern int   IMC_RaiseNamedEvent(void *, int, const char *, void *, int);
 extern int   IMC_Response(struct imc *, void *);
@@ -203,9 +254,9 @@ int IMC_Init(struct imc *imc, int platform)
     AuiLogger_Init(imc, 0, sizeof(*imc));
     imc->platform = platform ? platform : ModuleList_GetPlatform();
     r = RBTree_CreateTree(&imc->rbtree, imc_rbtree_cmp);
-    imc->self0 = imc->self1 = imc;
+    imc->actions.prev = imc->actions.next = &imc->actions;
     imc->responses.prev = imc->responses.next = &imc->responses;
-    imc->notif_head = imc->notif_tail = &imc->notif_head;
+    imc->named.prev = imc->named.next = &imc->named;
     imc->unread = 0;
     aud_mutex_init(imc->lock);
     return (int)(intptr_t)r;
@@ -331,12 +382,454 @@ int IMC_Response(struct imc *imc, void *response)
     return 0;
 }
 
+/* @0x6006c9f4 _IMC_FindAndClearNotification: scalar copy/unlink/free in
+ * build/scratch/pr23-next-imc/find-notification.asm. A nonzero repeat keeps
+ * the registration. One-shot storage is freed under IRQ exclusion before
+ * callback delivery; the copied callback/argument are borrowed. */
+static int _IMC_FindAndClearNotification(struct imc *imc, unsigned id,
+                                        struct imc_notification *out)
+{
+    unsigned ps = irq_raise_level();
+    struct imc_response_link *link;
+
+    for (link = imc->actions.next; link != &imc->actions; link = link->next) {
+        struct imc_notification *notification = (struct imc_notification *)link;
+
+        if (notification->id != id)
+            continue;
+        *out = *notification;
+        if (!notification->repeat) {
+            if (link->prev) {
+                link->prev->next = link->next;
+                link->next->prev = link->prev;
+            }
+            aud_free(notification);
+        }
+        irq_restore(ps);
+        return 0;
+    }
+    if (*imc_log_mask & 1)
+        logmm_printl(imc_log_ctx, 0, "_IMC_FindAndClearNotification", 0x291, "not found\n");
+    irq_restore(ps);
+    return 0x13;
+}
+
+/* @0x6006c7a0 _IMC_InsertActionToList: numeric-actions.asm. Selective
+ * notification action (type 1) only; command action (0) remains [GAP].
+ * Clamp interval to 1..1000; initialize countdown to interval. At capacity
+ * the image resets count to zero, overwriting registrations, not failing. */
+static int _IMC_InsertActionToList(struct imc_event_table *table,
+                                   const struct imc_event_action *action, unsigned id)
+{
+    unsigned ps;
+    struct imc_event_entry *entry;
+
+    if (action->type != 1)
+        return 0xf;
+    ps = irq_raise_level();
+    if (table->count > 49)
+        table->count = 0;
+    entry = &table->entries[table->count];
+    entry->action = *action;
+    entry->id = id;
+    if (action->interval < 1 || action->interval > 1000)
+        entry->action.interval = 1;
+    entry->action.remaining = (unsigned)entry->action.interval;
+    ++table->count;
+    irq_restore(ps);
+    return 0;
+}
+
+/* @0x6006c88c _IMC_DeleteActionFromList: numeric-actions.asm, including
+ * scalar loopgtz omitted by Ghidra. Search ALL entries by ID, shift the
+ * tail on deletion. Only notification entries are recovered here. */
+static int _IMC_DeleteActionFromList(struct imc_event_table *table, unsigned id)
+{
+    unsigned ps = irq_raise_level();
+
+    if (table->count > 49) {
+        irq_restore(ps);
+        return 0x1f;
+    }
+    for (int index = 0; index < table->count; ++index) {
+        if (table->entries[index].id != id)
+            continue;
+        if (table->entries[index].action.type != 1) {
+            irq_restore(ps);
+            return 0xf;
+        }
+        --table->count;
+        memmove(table->entries + index, table->entries + index + 1,
+                 (size_t)(table->count - index) * sizeof(*table->entries));
+        irq_restore(ps);
+        return 0;
+    }
+    irq_restore(ps);
+    return 0x13;
+}
+
+/* @0x6006cef4 IMC_RegisterEvent: numeric-register.asm. Notification-only
+ * recovery: ID = (counter & 0xfffff) | ((platform & 15) << 20), skipping
+ * live callback IDs. Callback storage precedes publisher registration and
+ * survives publisher/IPC failure. No rollback, and fn/arg remain borrowed.
+ * [GAP] command-action registration is explicitly rejected with 0xf. */
+int IMC_RegisterEvent(struct imc *imc, unsigned event, unsigned uid, unsigned *id,
+                       const struct imc_event_action *action)
+{
+    struct imc_event_table *table = NULL;
+    struct imc_response_link *link;
+    struct imc_notification *notification;
+    unsigned ps, key = (event << 8) | (uid & 0xff);
+    int platform, result;
+
+    if (!imc)
+        __assert_failed("IMC_RegisterEvent", 0x3b1, "_imc != NULL");
+    if (!action)
+        __assert_failed("IMC_RegisterEvent", 0x3b2, "_imcActionParam != NULL");
+    if (action->type != 1)
+        return 0xf;
+    platform = ModuleList_FindModule(uid);
+    ps = irq_raise_level();
+    do {
+        *id = (imc->action_id++ & 0xfffffu) | (((unsigned)imc->platform & 15u) << 20);
+        for (link = imc->actions.next; link != &imc->actions; link = link->next)
+            if (((struct imc_notification *)link)->id == *id)
+                break;
+    } while (link != &imc->actions);
+    irq_restore(ps);
+    ps = irq_raise_level();
+    notification = aud_malloc(sizeof(*notification));
+    if (!notification) {
+        irq_restore(ps);
+        __assert_failed("IMC_RegisterEvent", 0x3d7, "result == ADEC_ERR_NONE");
+        return 0x10;
+    }
+    AuiLogger_Init(notification, 0, sizeof(*notification));
+    notification->repeat = action->repeat;
+    notification->fn = action->fn;
+    notification->arg = action->arg;
+    notification->id = *id;
+    notification->link.next = imc->actions.next;
+    notification->link.prev = &imc->actions;
+    imc->actions.next->prev = &notification->link;
+    imc->actions.next = &notification->link;
+    irq_restore(ps);
+    if (platform != imc->platform) {
+        unsigned header[8] = {0, *id, action->target, 3,
+            2u | (((unsigned)action->repeat & 1u) << 2), (unsigned)action->interval, key, 0};
+
+        if ((unsigned)action->repeat & ~1u)
+            __assert_failed("_IMC_RegisterRemoteAction", 0x15a,
+                             "(_imcActionParam->repeatType & ~1) == 0");
+        return aimc_ipc_send(imc, platform, header, NULL);
+    }
+    result = RBTree_Search(imc->rbtree, key, &table);
+    if (result == 0x13) {
+        table = aud_malloc(sizeof(*table));
+        if (!table)
+            return 0x10;
+        AuiLogger_Init(table, 0, sizeof(*table));
+        RBTree_CreateNode(imc->rbtree, key, table);
+    }
+    return _IMC_InsertActionToList(table, action, *id);
+}
+
+/* @0x6006d1c0 IMC_CancelEvent: numeric-cancel.asm. Remove/free callback
+ * first under IRQ exclusion even if publisher cancellation later fails.
+ * Missing callback still attempts publisher cancellation. Tree deletion
+ * owns table destruction; no callback argument or payload is freed here. */
+int IMC_CancelEvent(struct imc *imc, unsigned event, unsigned uid, unsigned id)
+{
+    struct imc_event_table *table = NULL;
+    struct imc_response_link *link;
+    unsigned ps, key = (event << 8) | (uid & 0xff);
+    int platform, result;
+
+    if (!imc)
+        __assert_failed("IMC_CancelEvent", 0x3f6, "_imc != NULL");
+    ps = irq_raise_level();
+    for (link = imc->actions.next; link != &imc->actions; link = link->next) {
+        struct imc_notification *notification = (struct imc_notification *)link;
+
+        if (notification->id != id)
+            continue;
+        if (link->prev) {
+            link->prev->next = link->next;
+            link->next->prev = link->prev;
+        }
+        aud_free(notification);
+        break;
+    }
+    irq_restore(ps);
+    platform = ModuleList_FindModule(uid);
+    if (platform != imc->platform) {
+        /* [GAP] unused remote header words are uninitialized in the image. */
+        unsigned header[8] = {4, id, 0, 4, 0, 0, key, 0};
+
+        return aimc_ipc_send(imc, platform, header, NULL);
+    }
+    result = RBTree_Search(imc->rbtree, key, &table);
+    if (result) {
+        if (result != 0x13)
+            __assert_failed("_IMC_CancelLocalAction", 0x17d,
+                             "result == ADEC_ERR_NOT_FOUND");
+        return result;
+    }
+    result = _IMC_DeleteActionFromList(table, id);
+    if (result == 2 || !table->count)
+        result = RBTree_Delete(imc->rbtree, key);
+    return result;
+}
+
+/* @0x6006d318 IMC_RaiseEvent: numeric-raise.asm plus aligned
+ * numeric-remote-notification.asm. Notification type 1 only; [GAP] command
+ * actions return 0xf rather than fake success. Key is event<<8 | uid&255.
+ * Deliver when remaining==interval, then decrement/reset; one-shot actions
+ * are removed after this operation. Payload is a borrowed {unused,ptr,len},
+ * NOT an inline PTS word. Local callbacks execute after IRQ restore; raising
+ * itself holds no mutex/IRQ exclusion. Callback-driven publisher mutation
+ * is not made safe by this reconstruction. Remote send errors are ignored. */
+int IMC_RaiseEvent(struct imc *imc, int event, int uid, void *payload)
+{
+    const struct imc_event_payload *param = payload;
+    struct imc_event_table *table = NULL;
+    unsigned key = ((unsigned)event << 8) | ((unsigned)uid & 0xff);
+    int result;
+
+    if (!imc)
+        __assert_failed("IMC_RaiseEvent", 0x42e, "_imc != NULL");
+    result = RBTree_Search(imc->rbtree, key, &table);
+    if (!table || result)
+        return result;
+    if (table->count > 50) {
+        for (;;) {
+        }
+    }
+    for (int index = 0; index < table->count; ++index) {
+        struct imc_event_entry *entry = table->entries + index;
+        struct imc_event_action *action = &entry->action;
+
+        if (action->type != 1)
+            return 0xf;
+        if (action->remaining == (unsigned)action->interval) {
+            int platform = ModuleList_FindModule(action->target);
+
+            if (platform == imc->platform) {
+                struct imc_notification notification;
+
+                if (!_IMC_FindAndClearNotification(imc, entry->id, &notification) && notification.fn)
+                    notification.fn(param->param, param->len, notification.arg);
+            } else {
+                unsigned header[8] = {5, entry->id, (unsigned)uid, 5, 5,
+                                       action->target, 0, param->len};
+
+                aimc_ipc_send(imc, platform, header, param->param);
+            }
+        }
+        if (!--action->remaining)
+            action->remaining = (unsigned)action->interval;
+        if (!action->repeat) {
+            --table->count;
+            memmove(entry, entry + 1, (size_t)(table->count - index) * sizeof(*entry));
+            --index;
+        }
+    }
+    if (!table->count)
+        return RBTree_Delete(imc->rbtree, key);
+    return result;
+}
+
+/* @0x6006d598 add_named_event: named-registration.asm, scalar stores and
+ * strncpy(32), then name[31]=0. The IMC owns the entry/name, not fn or arg.
+ * Callers hold imc->lock; newest registrations are searched first. */
+static struct imc_named_event *add_named_event(struct imc *imc, unsigned id, int once,
+                                               const char *name, unsigned uid,
+                                               unsigned processor, imc_named_fn fn, void *arg)
+{
+    struct imc_named_event *event = aud_malloc(sizeof(*event));
+
+    if (!event) {
+        if (*imc_log_mask & 1)
+            logmm_printl(imc_log_ctx, 0, "add_named_event", 0x49f, "no mem\n");
+        return NULL;
+    }
+    AuiLogger_Init(event, 0, sizeof(*event));
+    event->id = id;
+    event->processor = processor;
+    event->uid = uid;
+    BufMonitor_AddBufferRef(event->name, name, sizeof(event->name));
+    event->name[31] = 0;
+    event->once = once;
+    event->fn = fn;
+    event->arg = arg;
+    event->link.next = imc->named.next;
+    event->link.prev = &imc->named;
+    imc->named.next->prev = &event->link;
+    imc->named.next = &event->link;
+    return event;
+}
+
+static void remove_named_event(struct imc_named_event *event)
+{
+    if (event->link.prev) {
+        event->link.prev->next = event->link.next;
+        event->link.next->prev = event->link.prev;
+    }
+    aud_free(event);
+}
+
+/* @0x6006d64c IMC_RegisterNamedEvent: named-registration.asm. Increment the
+ * signed 31-bit ID (negative wraps to 1), retain entry even on IPC failure.
+ * Remote type 6: {0,0,platform,6,once!=0,uid,id,32}, owned name as payload. */
+int IMC_RegisterNamedEvent(void *info, const char *name, unsigned uid, int once,
+                            imc_named_fn fn, void *arg)
+{
+    struct imc *imc = info;
+    struct imc_named_event *event;
+    unsigned id;
+
+    aud_mutex_lock(imc->lock);
+    id = imc->named_id + 1;
+    if ((int32_t)id < 0)
+        id = 1;
+    imc->named_id = id;
+    event = add_named_event(imc, id, once, name, uid, 0, fn, arg);
+    if (!event) {
+        aud_mutex_unlock(imc->lock);
+        return -1;
+    }
+    if ((unsigned)imc->platform != uid >> 24) {
+        unsigned header[8] = {0, 0, (unsigned)imc->platform, 6, once != 0, uid, id, 32};
+
+        aimc_ipc_send(imc, uid >> 24, header, event->name);
+    }
+    aud_mutex_unlock(imc->lock);
+    return (int)id;
+}
+
+/* @0x6006d6e4 IMC_UnregisterNamedEvent: named-registration.asm. First ID
+ * match, optional type-7 IPC, then free under the mutex regardless of send
+ * result. A missing ID leaves the list untouched. */
+void IMC_UnregisterNamedEvent(void *info, int id)
+{
+    struct imc *imc = info;
+    struct imc_response_link *link;
+
+    aud_mutex_lock(imc->lock);
+    for (link = imc->named.next; link != &imc->named; link = link->next) {
+        struct imc_named_event *event = (struct imc_named_event *)link;
+
+        if (event->id != (unsigned)id)
+            continue;
+        if ((unsigned)imc->platform != event->uid >> 24) {
+            unsigned header[8] = {0, 0, (unsigned)imc->platform, 7, 0, event->uid,
+                                   (unsigned)id, 0};
+
+            aimc_ipc_send(imc, event->uid >> 24, header, NULL);
+        }
+        remove_named_event(event);
+        aud_mutex_unlock(imc->lock);
+        return;
+    }
+    if (*imc_log_mask & 1)
+        logmm_printl(imc_log_ctx, 0, "IMC_UnregisterNamedEvent", 0x4fc,
+                     "unknown event id. %x\n", id);
+    aud_mutex_unlock(imc->lock);
+}
+
+/* @0x6006d7b4 IMC_UnregisterNamedEvent_no_ipc: named-registration.asm.
+ * Remove only the newest ID match; never notify the remote publisher. */
+void IMC_UnregisterNamedEvent_no_ipc(void *info, int id)
+{
+    struct imc *imc = info;
+    struct imc_response_link *link;
+
+    aud_mutex_lock(imc->lock);
+    for (link = imc->named.next; link != &imc->named; link = link->next) {
+        struct imc_named_event *event = (struct imc_named_event *)link;
+
+        if (event->id == (unsigned)id) {
+            remove_named_event(event);
+            aud_mutex_unlock(imc->lock);
+            return;
+        }
+    }
+    if (*imc_log_mask & 1)
+        logmm_printl(imc_log_ctx, 0, "IMC_UnregisterNamedEvent_no_ipc", 0x529,
+                     "unknown event id. %x\n", id);
+    aud_mutex_unlock(imc->lock);
+}
+
+/* @0x6006d844 IMC_UnregisterNamedEvent_onUID: named-clear-uid.asm.
+ * Remove ALL matching UIDs under the mutex, including remote registrations,
+ * without IPC. This local cleanup is not a remote-unregister acknowledgement. */
+void IMC_UnregisterNamedEvent_onUID(void *info, int uid)
+{
+    struct imc *imc = info;
+    struct imc_response_link *link;
+
+    aud_mutex_lock(imc->lock);
+    link = imc->named.next;
+    while (link != &imc->named) {
+        struct imc_named_event *event = (struct imc_named_event *)link;
+
+        link = link->next;
+        if (event->uid == (unsigned)uid)
+            remove_named_event(event);
+    }
+    aud_mutex_unlock(imc->lock);
+}
+
+/* @0x6006d8d0 IMC_RaiseNamedEvent: named-raise.asm. Exact uid AND name;
+ * newest-first, callbacks and sends under the mutex with borrowed payload.
+ * Local callback(arg,param,len), or type 8 {0,0,uid,8,0,peer<<24,id,len}.
+ * Remove once AFTER delivery, even on transport error; always return 0.
+ * XOS same-thread locks recurse (recursive-mutex.asm), so nested delivery
+ * can see this entry before once removal. Self-unregister frees an entry
+ * this function still uses after callback: not made safe here. This reports
+ * the raise operation, not downstream drain. */
+int IMC_RaiseNamedEvent(void *info, int uid, const char *name, void *param, int len)
+{
+    struct imc *imc = info;
+    struct imc_response_link *link;
+
+    aud_mutex_lock(imc->lock);
+    link = imc->named.next;
+    while (link != &imc->named) {
+        struct imc_named_event *event = (struct imc_named_event *)link;
+
+        link = link->next;
+        if (event->uid != (unsigned)uid || strcmp(event->name, name))
+            continue;
+        if (!event->processor)
+            event->fn(event->arg, param, (unsigned)len);
+        else {
+            unsigned header[8] = {0, 0, (unsigned)uid, 8, 0, event->processor << 24,
+                                   event->id, (unsigned)len};
+
+            aimc_ipc_send(imc, event->processor, header, param);
+        }
+        if (event->once)
+            remove_named_event(event);
+    }
+    aud_mutex_unlock(imc->lock);
+    return 0;
+}
+
 /* @0x6006da08 IMC_ProcessHeader: type 2 @0x6006dae8 consumes hdr[1].
  * Callback(result=hdr[4], borrowed hdr+8, bytes=hdr[7], borrowed argument)
  * runs after entry free and IRQ restore; its return value is ignored. No
  * command/source/target check or payload-length validation occurs here.
  * IPC storage remains owned by the reader until aimc_ipc_header_done. This
- * response alone does not establish asynchronous FIRST/data completion. */
+ * response alone does not establish asynchronous FIRST/data completion.
+ * Type 5 @0x6006db20 selects notification id hdr[1], ignoring other routing
+ * fields, and calls fn(borrowed hdr+8, hdr[7], borrowed arg) outside IRQ
+ * exclusion. Null callbacks succeed; missing ids return 0x13. Evidence:
+ * build/scratch/pr23-next-imc/{header-notification,notification-errors}.asm.
+ * Types 6/7/8: named-{add-header,remove,delivery,delivery-tail}.asm. Add
+ * owns a name copy; remove matches (processor,id), delivery (uid,id).
+ * Named callbacks run with the recursive lock held and remove once AFTER
+ * callback; self-unregister leaves a post-callback dangling entry. */
 int IMC_ProcessHeader(struct imc *imc, const unsigned *hdr)
 {
     if (*imc_log_mask & 0x20)
@@ -361,7 +854,86 @@ int IMC_ProcessHeader(struct imc *imc, const unsigned *hdr)
             pending.fn((int32_t)hdr[4], (void *)(hdr + 8), hdr[7], pending.arg);
         return 0;
     }
-    /* [FLIX] types 3..8 */
+    if (hdr[3] == 5) {
+        struct imc_notification notification;
+        int result = _IMC_FindAndClearNotification(imc, hdr[1], &notification);
+
+        if (result) {
+            if (*imc_log_mask & 1)
+                logmm_printl(imc_log_ctx, 0, "process_notification", 0x621,
+                             "Fail to find notification (%d)\n", result);
+            return result;
+        }
+        if (notification.fn)
+            notification.fn((void *)(hdr + 8), hdr[7], notification.arg);
+        else if (*imc_log_mask & 1)
+            logmm_printl(imc_log_ctx, 0, "process_notification", 0x62a,
+                         "null noti function\n");
+        return 0;
+    }
+    if (hdr[3] == 6) {
+        aud_mutex_lock(imc->lock);
+        add_named_event(imc, hdr[6], hdr[4] & 1, (const char *)(hdr + 8),
+                         hdr[5], hdr[2], NULL, NULL);
+        aud_mutex_unlock(imc->lock);
+        return 0;
+    }
+    if (hdr[3] == 7 || hdr[3] == 8) {
+        struct imc_response_link *link;
+
+        aud_mutex_lock(imc->lock);
+        for (link = imc->named.next; link != &imc->named; link = link->next) {
+            struct imc_named_event *event = (struct imc_named_event *)link;
+
+            if (event->id != hdr[6] ||
+                (hdr[3] == 7 ? event->processor : event->uid) != hdr[2])
+                continue;
+            if (hdr[3] == 8)
+                event->fn(event->arg, (void *)(hdr + 8), hdr[7]);
+            if (hdr[3] == 7 || event->once)
+                remove_named_event(event);
+            aud_mutex_unlock(imc->lock);
+            return 0;
+        }
+        aud_mutex_unlock(imc->lock);
+        return hdr[3] == 7 ? 1 : 0;
+    }
+    if (hdr[3] == 3) {
+        struct imc_event_table *table = NULL;
+        struct imc_event_action action = {.type = (hdr[4] >> 1) & 1,
+            .repeat = (hdr[4] >> 2) & 1, .target = hdr[2], .interval = (int)hdr[5]};
+        int result;
+
+        if (action.type != 1)
+            return 0xf;                /* [GAP] command actions */
+        result = RBTree_Search(imc->rbtree, hdr[6], &table);
+        if (result == 0x13) {
+            table = aud_malloc(sizeof(*table));
+            if (!table)
+                return 0x10;
+            AuiLogger_Init(table, 0, sizeof(*table));
+            result = RBTree_CreateNode(imc->rbtree, hdr[6], table);
+            if (result) {
+                aud_free(table);
+                return result;
+            }
+        }
+        result = _IMC_InsertActionToList(table, &action, hdr[1]);
+        return result == 0xf ? result : 0;
+    }
+    if (hdr[3] == 4) {
+        struct imc_event_table *table = NULL;
+        int result = RBTree_Search(imc->rbtree, hdr[6], &table);
+
+        if (result == 0x13)
+            return result;
+        if (result)
+            __assert_failed("process_cancel", 0x684, "result == ADEC_ERR_NONE");
+        result = _IMC_DeleteActionFromList(table, hdr[1]);
+        if (result == 2 || !table->count)
+            RBTree_Delete(imc->rbtree, hdr[6]);
+        return result == 0xf ? result : 0;
+    }
     return 0xf;
 }
 
@@ -607,7 +1179,8 @@ int aimc_raise_event(void *imc, int a, int b, int c, int d)
 /* @0x6007a248 aimc_register_named_event */
 int aimc_register_named_event(void *imc, int name, int uid, int once, int cb, int arg)
 {
-    int r = IMC_RegisterNamedEvent(imc, name, uid, once == 0, cb, arg);
+    int r = IMC_RegisterNamedEvent(imc, (const char *)(intptr_t)name, uid, once == 0,
+                                   (imc_named_fn)(intptr_t)cb, (void *)(intptr_t)arg);
 
     if (r == 0)
         ALOG(0, "cannot register event. %s\n", (const char *)(intptr_t)name);

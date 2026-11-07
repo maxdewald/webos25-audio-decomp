@@ -433,7 +433,6 @@ static unsigned command_targets;
 static unsigned pending_drains;
 static unsigned dropped_events;
 static unsigned parent_events;
-static unsigned codec_updates;
 static unsigned children_destroyed;
 static void *inputs[256];
 static void *outputs[256];
@@ -450,12 +449,6 @@ static const char *aud_event_value_get_str(decoderbin_event_data *event,
 {
     assert(strcmp(key, "codec-desc") == 0 && fallback == NULL);
     return "test-codec";
-}
-
-static void add_decoder_module(decoderbin *module, const char *codec)
-{
-    assert(strcmp(codec, "test-codec") == 0);
-    ++codec_updates;
 }
 
 static int aud_module_bin_set_input(decoderbin *module, unsigned port,
@@ -486,6 +479,66 @@ static void aud_module_bin_add_cmd_propagate(decoderbin *module, void *child)
 
 static void aud_module_bin_propagate_pending(decoderbin *module);
 
+// @match src/dsp0/decoderbin.c (?s)typedef struct decoderbin_codec \{.*?\n};
+
+static void *owned_children[4];
+static unsigned owned_count;
+static unsigned add_attempts;
+static unsigned fail_add;
+static int fail_name;
+static int reenter_cleanup;
+static int reenter_creation;
+static const char *created_names[4];
+static unsigned lifecycle_cleanups;
+
+// @declare src/dsp0/decoderbin.c decoderbin_event
+
+static void *aud_module_bin_add(decoderbin *module, const char *name)
+{
+    ++add_attempts;
+    if (reenter_creation) {
+        assert(!module->connected);
+        decoderbin_event_data *event = calloc(1, sizeof(*event));
+        assert(event != NULL);
+        event->type = 1;
+        unsigned before = dropped_events;
+        assert(decoderbin_event(module, module, event) == 0);
+        assert(dropped_events == before + 1);
+    }
+    if (add_attempts == fail_add)
+        return NULL;
+    assert(owned_count < 4);
+    uint32_t *child = calloc(2, sizeof(*child));
+    assert(child != NULL);
+    child[1] = 42 + owned_count;
+    created_names[owned_count] = name;
+    owned_children[owned_count++] = child;
+    return child;
+}
+
+static int aud_module_bin_connect(decoderbin *module, void *source, unsigned source_port,
+                                  void *destination, unsigned destination_port)
+{
+    assert(source == owned_children[1] && destination == owned_children[0]);
+    assert(source_port == 0 && destination_port == 0);
+    return -19;
+}
+
+static int aimc_set_property(void *registry, uint32_t uid, const char *format, ...)
+{
+    assert(uid == 42 && strcmp(format, "workerbin-uid=%d") == 0);
+    return -20;
+}
+
+static char *codec_strdup(const char *codec)
+{
+    return fail_name ? NULL : strdup(codec);
+}
+
+#define strdup codec_strdup
+// @extract src/dsp0/decoderbin.c add_decoder_module
+#undef strdup
+
 // @extract src/dsp0/decoderbin.c decoderbin_event decoderbin_constructor decoderbin_destructor decoderbin_connect
 
 static void aud_module_bin_propagate_pending(decoderbin *module)
@@ -505,6 +558,123 @@ static int parent_event(decoderbin *module, void *port, decoderbin_event_data *e
     ++parent_events;
     free(event);
     return -31;
+}
+
+static void lifecycle_cleanup(decoderbin *module)
+{
+    ++lifecycle_cleanups;
+    if (reenter_cleanup) {
+        assert(module->connected);
+        decoderbin_event_data *event = calloc(1, sizeof(*event));
+        assert(event != NULL);
+        event->type = 6;
+        unsigned before = parent_events;
+        assert(decoderbin_event(module, module, event) == -31);
+        assert(parent_events == before + 1);
+    }
+    while (owned_count != 0)
+        free(owned_children[--owned_count]);
+}
+
+static void test_decoder_replacement(void)
+{
+    decoderbin_class klass = { .cleanup = lifecycle_cleanup, .event = parent_event };
+    decoderbin module = { .klass = &klass };
+    add_attempts = fail_add = lifecycle_cleanups = 0;
+    assert(add_decoder_module(&module, "AAC-profile") == 0);
+    assert(owned_count == 2 && !module.connected);
+    assert(module.decoder == owned_children[0] && module.formatter == owned_children[1]);
+    assert(strcmp(created_names[0], "dec_heaac") == 0);
+    assert(strcmp(created_names[1], "reform_ddt") == 0);
+    void *previous_decoder = module.decoder;
+    assert(add_decoder_module(&module, "AAC") == 0);
+    assert(module.decoder == previous_decoder && add_attempts == 2);
+    assert(strcmp(module.codec_name, "AAC") == 0);
+    module.connected = 1;
+    reenter_cleanup = reenter_creation = 1;
+    decoderbin_event_data *event = calloc(1, sizeof(*event));
+    assert(event != NULL);
+    event->type = 1;
+    assert(decoderbin_event(&module, &module, event) == -31);
+    assert(lifecycle_cleanups == 1 && owned_count == 0 && !module.connected);
+    assert(module.decoder == previous_decoder && strcmp(module.codec_name, "AAC") == 0);
+    reenter_cleanup = 0;
+    fail_add = add_attempts + 1;
+    assert(add_decoder_module(&module, "PCM") == -1);
+    assert(module.decoder == previous_decoder && owned_count == 0);
+    fail_add = 0;
+    assert(add_decoder_module(&module, "PCM") == 0);
+    assert(owned_count == 1 && module.formatter == NULL);
+    assert(strcmp(created_names[0], "dec_pcm") == 0 && !module.connected);
+    reenter_creation = 0;
+    routes = command_targets = pending_drains = 0;
+    assert(decoderbin_connect(&module, NULL, 1) == 0);
+    assert(module.connected && inputs[0] == module.decoder && pending_drains == 1);
+    module.dummy_codec = 1;
+    module.workerbin_uid = 99;
+    assert(add_decoder_module(&module, "PCM") == 0);
+    assert(owned_count == 3 && !module.connected && !module.previous_dummy_codec);
+    assert(strcmp(created_names[0], "dummy") == 0);
+    assert(module.output_124 == owned_children[1] && module.output_128 == owned_children[2]);
+    module.previous_dummy_codec = 1;
+    fail_name = 1;
+    assert(add_decoder_module(&module, "PCM") == 0 && module.codec_name == NULL);
+    fail_name = 0;
+    decoderbin_destructor(&module);
+    assert(owned_count == 0 && module.decoder == NULL && module.output_124 == NULL);
+
+    module = (decoderbin){ .klass = &klass };
+    add_attempts = 0;
+    fail_add = 2;
+    assert(add_decoder_module(&module, "AAC") == -1);
+    assert(owned_count == 0 && module.decoder == NULL && module.codec_name == NULL);
+    fail_add = 0;
+    decoderbin_destructor(&module);
+}
+
+static void test_decoder_replacement_failures(void)
+{
+    decoderbin_class klass = { .cleanup = lifecycle_cleanup, .event = parent_event };
+    decoderbin module = { .klass = &klass };
+    add_attempts = lifecycle_cleanups = 0;
+    assert(add_decoder_module(&module, "unsupported") == -1);
+    assert(add_attempts == 0 && owned_count == 0 && module.codec_name == NULL);
+    assert(add_decoder_module(&module, "AAC") == 0);
+    void *old_decoder = module.decoder;
+    void *old_formatter = module.formatter;
+    module.connected = 1;
+    fail_add = add_attempts + 2;
+    assert(add_decoder_module(&module, "AC3") == -1);
+    assert(lifecycle_cleanups == 2 && owned_count == 0 && !module.connected);
+    assert(module.decoder == old_decoder && module.formatter == old_formatter);
+    assert(strcmp(module.codec_name, "AAC") == 0);
+    fail_add = 0;
+    decoderbin_destructor(&module);
+
+    for (unsigned failed_bypass = 2; failed_bypass <= 3; ++failed_bypass) {
+        module = (decoderbin){ .klass = &klass, .dummy_codec = 1 };
+        add_attempts = 0;
+        fail_add = failed_bypass;
+        assert(add_decoder_module(&module, "PCM") == 0);
+        assert(owned_count == 2 && module.decoder != NULL && !module.connected);
+        assert((module.output_124 == NULL) == (failed_bypass == 2));
+        assert((module.output_128 == NULL) == (failed_bypass == 3));
+        assert(strcmp(module.codec_name, "PCM") == 0);
+        decoderbin_destructor(&module);
+        assert(owned_count == 0);
+    }
+    fail_add = 0;
+    module = (decoderbin){ .klass = &klass };
+    fail_name = 1;
+    assert(add_decoder_module(&module, "PCM") == 0);
+    assert(module.decoder != NULL && module.codec_name == NULL);
+    old_decoder = module.decoder;
+    fail_name = 0;
+    unsigned before = add_attempts;
+    assert(add_decoder_module(&module, "AAC") == 0);
+    assert(module.decoder == old_decoder && module.formatter == NULL);
+    assert(add_attempts == before && strcmp(module.codec_name, "AAC") == 0);
+    decoderbin_destructor(&module);
 }
 
 static void parent_cleanup(decoderbin *module)
@@ -565,17 +735,16 @@ static void test_decoderbin(int dummy, int has_formatter)
     assert(decoderbin_connect(&module, NULL, 1) == 0);
     assert(decoderbin_connect(&module, NULL, 0) == 0);
     assert(routes == before && module.connected == 1);
+    module.previous_dummy_codec = module.dummy_codec;
+    module.codec_name = strdup("test-codec");
+    assert(module.codec_name != NULL);
     for (unsigned index = 0; index < 3; ++index) {
         decoderbin_event_data *event = calloc(1, sizeof(*event));
         assert(event != NULL);
         event->type = index == 2 ? 6 : 1;
-        before = codec_updates;
         assert(decoderbin_event(&module, index == 0 ? NULL : &module, event) == -31);
-        assert(codec_updates == before + (index == 1));
         assert(module.connected == 1 && children_destroyed == 0);
     }
-    module.codec_name = strdup("test-codec");
-    assert(module.codec_name != NULL);
     module.previous_dummy_codec = 1;
     module.workerbin_uid = 123;
     decoderbin_destructor(&module);
@@ -599,6 +768,8 @@ int main(void)
     test_decoderbin(0, 0);
     test_decoderbin(0, 1);
     test_decoderbin(1, 1);
-    puts("DSP0 flush, START/failure ownership, processing cleanup, connect/event/teardown ordering");
+    test_decoder_replacement();
+    test_decoder_replacement_failures();
+    puts("DSP0 flush/teardown, replacement/creation failure ownership and reentrant delivery");
     return 0;
 }

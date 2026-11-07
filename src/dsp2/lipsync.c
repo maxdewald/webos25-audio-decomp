@@ -23,7 +23,7 @@
  *    (+0x140 = discard_param after a state/offset change) drops in write_output.
  *  - Every "state="/"offset="/"BaseCT="/"BaseST=" write resets the action to IDLE
  *    and drop_count to discard_param. With LipsyncOnOff == 1, IDLE actions discard
- *    frames; the escape count/gap branches are only partly recovered below. With
+ *    frames; zero/negative-gap escapes are recovered, positive-gap choice is [GAP]. With
  *    sync off, _lipsync_state returns LIPSYNC_OFF (subject to clock/no-delay paths).
  *  - No output port connected -> all input thrown away ("so throw away..").
  *  - FIRST is held back and only forwarded with the first real output buffer;
@@ -100,7 +100,13 @@ struct lipsync {
     int   first_output_sent;     /* +0x198 LIPSYNC_EVT_FIRST_OUTPUT raised */
     int   unknown_19c;
     unsigned debug_count[4];     /* +0x1a0..1ac */
+    uint32_t last_stc, last_pts; /* +0x1b0/+0x1b4 */
+    int   pcr_change_count;      /* +0x1b8 */
+    unsigned unchanged_stc;      /* +0x1bc */
+    int   unknown_1c0;
+    int32_t diff;               /* +0x1c4 signed 90 kHz clock difference */
     int   discontinuity;         /* +0x1c8 */
+    uint32_t repeat_stc;         /* +0x1cc */
     uint32_t out_ts;             /* +0x1d0 */
     int   dataType;              /* +0x1d4 0 pcm, 1 es */
     int   channels, fs, bytePerSample; /* +0x1d8/+0x1dc/+0x1e0 */
@@ -108,11 +114,13 @@ struct lipsync {
     int   LipsyncOnOff;          /* +0x1e8 */
     int   upperbound, lowerbound;/* +0x1ec/+0x1f0 */
     int   offset;                /* +0x1f4 "offset"/"ConstantOffset" */
+    int   unknown_1f8, unknown_1fc;
     int   clockType;             /* +0x200 0x100 pcr, 0x200 audio master */
     int   BaseCT, BaseST;        /* +0x204/+0x208 */
     int   BaseCT_copy, BaseST_copy; /* +0x20c/+0x210 */
     int   NodelayOnOff;          /* +0x214 */
     int   over_protection;       /* +0x218 */
+    int   count_transition;      /* +0x21c */
     int   gap_handling;          /* +0x220 */
     int   start_pts, end_pts;    /* +0x224/+0x228 */
     int   gap_correction;        /* +0x22c */
@@ -149,7 +157,7 @@ extern int  aud_event_value_get_bool(struct aud_event *, const char *, int def);
 extern int  aud_data_adapter_push(void *, struct aud_data *);                 /* @0x6006b72c */
 extern void aud_data_adapter_flush(void *, unsigned);                         /* @0x6006b814 */
 extern struct aud_data *aud_data_adapter_get_data(void *, unsigned);          /* @0x6006bbd0 */
-extern int  aud_data_adapter_peep(void *, uint32_t *ts);                      /* @0x6006bf7c */
+extern struct aud_data *aud_data_adapter_peep(void *);                       /* @0x6006bf7c */
 extern int  msf_process_metadata(void *, void *, unsigned);                   /* @0x6008de48 */
 extern void msf_flush_metadata(void *);                                       /* @0x6008e1dc */
 extern void aud_mutex_lock(void *), aud_mutex_unlock(void *);
@@ -158,11 +166,29 @@ extern void aud_cond_wait_timeout(void *, void *, int ms);
 extern void lipsync_fadein(int ch, void *buf, unsigned size);                 /* @0x600a2138 */
 extern void lipsync_fadeout(int ch, void *buf, unsigned size);                /* @0x600a2218 */
 extern void _lipsync_write_lipsync_state(struct lipsync *, int action);       /* @0x600a22ec */
+extern uint32_t _lipsync_get_stc(int clock_type);
+extern uint32_t _lipsync_get_pts(void *, int clock_type, uint32_t pts);
+extern uint32_t _lipsync_get_maxpts(int clock_type);
+extern uint32_t _lipsync_media_trick_unrecovered(struct lipsync *, uint32_t);
+extern int _lipsync_core_clock_unrecovered(struct lipsync *, uint32_t);
+extern int _lipsync_state_unrecovered(struct lipsync *);
+extern volatile uint32_t *stc_regs;
 
 int _lipsync_state(struct lipsync *ls);
 int _lipsync_core(struct lipsync *ls);
 
 /* ------------------------------------------------------------------------ */
+
+/* @0x600a2078..209c/2100..2105: ordinary-speed media rebasing, modulo 32 bits.
+ * @0x600a209f..20bd/2108..2136 trick-speed normalization remains [GAP]. */
+uint32_t _lipsync_get_pts_for_media(void *module, uint32_t pts)
+{
+    struct lipsync *ls = module;
+    pts &= ls->clockType == 0x11 ? 0x7fffffffu : 0x0fffffffu;
+    if (ls->speed_mode)
+        return _lipsync_media_trick_unrecovered(ls, pts);
+    return (uint32_t)ls->BaseCT + pts - (uint32_t)ls->BaseST;
+}
 
 /* @0x600a10a4: Flush bytes/metadata and rearm FIRST replay. Retains the event,
  * codec-derived dataType/format, action, drop_count and first-output latch. */
@@ -408,20 +434,71 @@ int _lipsync_chain(struct aud_port *port, struct aud_data *d)
  * Validated bge.w18 @0x600a388b/38a7/38b9/38ea/3904 compares signed queued
  * bytes against the internal frame size; short frames return 1 without consume,
  * FIRST, or fades. RUN/REPEAT/out-of-range actions have no such gate.
- * print_cnt (+0x194) counts frames while over_protection == 0. */
+ * print_cnt (+0x194) counts frames while over_protection == 0.
+ * [GAP] @0x600a3558..3768: REPEAT sleep, STC reread/stall count and retry loop;
+ * this host reconstruction returns after one decision without scheduling it. */
 int _lipsync_core(struct lipsync *ls)
 {
     uint32_t pts;
     int prev = ls->action, action;
-    unsigned frame = (unsigned)(ls->nSamplePerFrame * ls->channels * ls->bytePerSample);
+    unsigned frame = (uint32_t)ls->nSamplePerFrame *
+        (uint32_t)ls->channels * (uint32_t)ls->bytePerSample;
     struct aud_data *d;
 
-    if (!aud_data_adapter_peep(ls->adapter, &pts)) {
-        /* no timestamp ("_lipsync_get_timestamp" lvl 3): pts = 0x0fffffff */
-        pts = 0x0fffffff;
+    /* @0x600a308b..30b3: peek borrows the first object, including a consumed
+     * prefix. It neither returns a region nor acquires another reference. */
+    d = aud_data_adapter_peep(ls->adapter);
+    pts = d ? d->timestamp : 0x0fffffffu;
+    /* @0x600a30bd..30f4: output keeps the raw timestamp; only the clock input
+     * advances by consumed bytes. Products are low-word, quotient is signed. */
+    ls->out_ts = pts;
+    if (ls->adapter_out) {
+        int32_t bytes_per_ms = (int32_t)((uint32_t)ls->fs *
+            (uint32_t)ls->channels * (uint32_t)ls->bytePerSample);
+        if (bytes_per_ms)
+            pts += (uint32_t)((int64_t)(int32_t)(ls->adapter_out * 90u) / bytes_per_ms);
     }
-    /* stc read from 0xc1000684, diff = pts - stc - offset, discontinuity and
-     * PCR-change handling, "STC not changed" after 10 equal reads [FLIX] */
+    /* @0x600a312b..315e/33d3..3502: non-seamless clock path. The negative
+     * correction compares against -mask, NOT -(mask/2), and adds mask, not
+     * mask+1. Baseline initialization and seamless delay remain [GAP]. */
+    if (ls->LipsyncOnOff == 1 && ls->BaseST == -1 && ls->clockType != 0x200 &&
+        !(ls->clockType == 0x11 && ls->unknown_190 == 1))
+        return 12;                                   /* @0x600a3248 ->3cfd */
+    if (ls->seamless || ls->clockType == 0x200 ||
+        (ls->clockType == 0x11 && ls->unknown_190 == 1)) {
+        return _lipsync_core_clock_unrecovered(ls, pts);
+    } else {
+        uint32_t clock_pts = _lipsync_get_pts(ls, ls->clockType, pts);
+        uint32_t stc = _lipsync_get_stc(ls->clockType);
+        uint32_t mask = _lipsync_get_maxpts(ls->clockType);
+        int32_t upper = (int32_t)((uint32_t)ls->upperbound * 90u);
+        int32_t lower = (int32_t)((uint32_t)ls->lowerbound * 90u);
+        ls->diff = (int32_t)((uint32_t)ls->offset * 90u + clock_pts - stc - 0x1734u);
+        if (ls->diff > (int32_t)(mask >> 1))
+            ls->diff = (int32_t)((uint32_t)ls->diff - mask);
+        else if (ls->diff < -(int32_t)mask)
+            ls->diff = (int32_t)((uint32_t)ls->diff + mask);
+        /* +0x1c8 also receives bit 3 of the local timestamp record at +70.
+         * That record is zero-initialized @0x600a3076..3086 on this path. */
+        ls->discontinuity = 0;
+        if ((int32_t)(stc - ls->last_stc) > 0xafc8 &&
+            (ls->diff < lower || ls->diff > upper))
+            ls->discontinuity = 1;
+        if ((int32_t)(ls->last_stc - stc) > upper && (int32_t)stc > 0x2000)
+            ls->pcr_change_count = 100;
+        ls->last_stc = stc;
+        if (ls->pcr_change_count && clock_pts < ls->last_pts) {
+            ls->discontinuity = 1;
+            ls->pcr_change_count = 0;
+        }
+        ls->last_pts = clock_pts;
+        if (ls->pcr_change_count)
+            ls->pcr_change_count = (int32_t)((uint32_t)ls->pcr_change_count - 1u);
+    }
+    /* @0x600a3505..3538 overrides state with REPEAT for an expired gap event;
+     * its sleep/reset path @0x600a3560..3687 is not reconstructed here. */
+    if (ls->gap_handling && (uint32_t)ls->end_pts < ls->out_ts + (uint32_t)ls->gap_correction)
+        return _lipsync_core_clock_unrecovered(ls, pts);
     action = _lipsync_state(ls);
     /* "[%s] p:[%10u][%10u] s:[%10u][%10u] d:%4d(ms) action:%s[%d]->%s[%d] r:%d(ms)"
      * (lvl 2) when print-interval elapsed or action changed */
@@ -500,26 +577,16 @@ int _lipsync_core(struct lipsync *ls)
     return 0;
 }
 
-/* @0x600a2644 _lipsync_state: next action. ~57 FLIX bundles hide most comparisons;
- * the control skeleton below is observed, comparisons marked [FLIX?] are inferred.
- *  - LipsyncOnOff != 1 or NodelayOnOff != 0: never reaches the action table;
- *    returns LIPSYNC_OFF(0) (NODLAY/SKIP when NodelayOnOff == 1). LIPSYNC_OFF is
- *    an output action in _lipsync_core, so with sync off data flows immediately
- *    and a "state=1" only re-arms drop_count = discard_param (0 by default).
- *  - LipsyncOnOff == 1: jump table @0x60007380 on the previous action. IDLE(6)
- *    @0x600a2b57 counts idle_cnt up to idle_time ("Set default escape num" when 0,
- *    lvl 2), then escapes ("[%s] first gap : %d(ms) idle->%d", lvl 4) to REPEAT(4)
- *    or FR-RUN(5); NORMAL/ESNORM(2/8) @0x600a2af1, SKIP(3) @0x600a2a48 -> IDLE when
- *    discontinuity, etc.
- *    Validated @0x600a2b64: a nonzero idle_cnt escapes when its increment is >=
- *    idle_time, not >. While holding IDLE, discontinuity==1 resets idle_cnt to
- *    zero (@0x600a2b6f ->2a59). Default 11 requires idle_cnt/idle_time both zero,
- *    clockType==0x100 and all low 28 out_ts bits set (@0x600a2ccf..2cf1).
- *    Gap-dependent escape arithmetic remains [GAP].
- *  - clockType 0x200 (audio master): "base line Noti(audio master mode)" raises
- *    "adec_master_info" and returns FREERUN_WITHNOTI(12); no-PCR baseline raises
- *    LIPSYNC_EVT_NOPCR_BASELINE.
- *  - Returned values seen: 0,2,3,4,5,6,7,9,10,11,12,13 (never ESNORM 8). */
+/* @0x600a2644: partial state recovery. Scalar arithmetic and validated branch
+ * slots cover NORMAL/ESNORM, SKIP, FREE_RUN, TONORM and the nonpositive IDLE
+ * escape, plus bounded REPEAT/EXCEPT/E-NORM paths. All additions/products and
+ * counters wrap at 32 bits before signed comparison. Thresholds are ticks.
+ * @0x600a26cf/26d1 uses (lowerbound + unknown_234)*90 for NORMAL recovery;
+ * @0x600a26c1/26c9 uses unknown_1f8*90 for the REPEAT bound;
+ * @0x600a26bb/26cc uses unknown_1fc*90 for the separate negative-gap test.
+ * Unknown hooks: positive IDLE @2c3e, REPEAT stalled-clock @2c8d, E-NORM
+ * @2a9f, EXCEPT @2b4e, no-delay queue and audio-master baseline decisions.
+ * No guessed action substitutes for those opaque non-branch FLIX operations. */
 int _lipsync_state(struct lipsync *ls)
 {
     /* 0x600a265b: same "%s is changed" reset as in _lipsync_chain */
@@ -532,31 +599,163 @@ int _lipsync_state(struct lipsync *ls)
         else
             ls->action = LS_IDLE;
     }
-    /* count_transition (+0x21c) != 0 takes a separate gradual path @0x600a2705 [GAP].
-     * 0x600a26ff/0x600a28f4: the action table is only used when LipsyncOnOff == 1,
-     * NodelayOnOff == 0 and clockType != 0x200. Otherwise (0x600a2723): */
+    if (ls->idle_total < 100)
+        ls->idle_total = (int32_t)((uint32_t)ls->idle_total + 1u);
+    if (ls->clockType == 0x200)
+        return _lipsync_state_unrecovered(ls);
     if (ls->LipsyncOnOff != 1 || ls->NodelayOnOff) {
-        if (ls->clockType == 0x200)
-            return LS_FREERUN_WITHNOTI;               /* [FLIX?] 0x600a285c */
-        if (ls->NodelayOnOff != 1)
-            return LS_OFF;                            /* 0x600a277a */
-        return LS_NODELAY;                            /* or SKIP by queue level [FLIX?] */
+        if (ls->NodelayOnOff == 1)
+            return _lipsync_state_unrecovered(ls);
+        return LS_OFF;
     }
-    switch (ls->action) {                             /* table @0x60007380 */
-    case LS_IDLE:                                     /* 0x600a2b57 */
+    int skip_limit = ls->idle_total < 0 ? 10 :
+        (ls->clockType == 0x100 || ls->clockType == 0x101 ? 5 : 200);
+    int repeat_limit = ls->idle_total < 0 ? 10 : 200;
+    if (ls->count_transition)
+        skip_limit = repeat_limit = ls->count_transition;
+    int32_t upper = (int32_t)((uint32_t)ls->upperbound * 90u);
+    int32_t repeat_bound = (int32_t)((uint32_t)ls->unknown_1f8 * 90u);
+    int32_t recovery = (int32_t)(((uint32_t)ls->lowerbound +
+                                  (uint32_t)ls->unknown_234) * 90u);
+    int32_t negative = (int32_t)((uint32_t)ls->unknown_1fc * 90u);
+    int32_t recovered_gap = (int32_t)((uint32_t)ls->diff + (uint32_t)recovery);
+    int32_t negative_gap = (int32_t)((uint32_t)ls->diff + (uint32_t)negative);
+    int action;
+    switch (ls->action) {
+    case LS_IDLE:                                     /* @0x600a2b57/2c33/2e1e */
         if (ls->idle_cnt == 0 && ls->idle_time == 0 && ls->clockType == 0x100 &&
             (ls->out_ts & 0x0fffffffu) == 0x0fffffffu)
-            ls->idle_time = 0xb;                      /* "Set default escape num" */
+            ls->idle_time = 0xb;
         ls->idle_cnt = (int32_t)((uint32_t)ls->idle_cnt + 1u);
-        if (ls->idle_cnt < ls->idle_time) {           /* bge.w18 @0x600a2b64 escapes */
-            if (ls->discontinuity == 1)
-                ls->idle_cnt = 0;
-            return LS_IDLE;
+        if (ls->idle_cnt < ls->idle_time)
+            action = LS_IDLE;
+        else if (ls->diff > 0)
+            action = ls->discontinuity == 1 ? LS_IDLE : _lipsync_state_unrecovered(ls);
+        else if (ls->diff == 0)
+            action = LS_TONORM;
+        else
+            action = negative_gap < 0 ? LS_FREE_RUN : LS_SKIP;
+        break;
+    case LS_NORMAL:
+    case LS_ESNORM:                                   /* @0x600a2af1 */
+        if (ls->diff > upper) {
+            ls->skip_cnt = (int32_t)((uint32_t)ls->skip_cnt + 1u);
+            if (ls->skip_cnt <= skip_limit) {
+                ls->repeat_cnt = 0;
+                action = LS_NORMAL;
+            } else {
+                ls->skip_cnt = 0;
+                action = ls->diff <= repeat_bound ? LS_REPEAT : LS_FREE_RUN;
+            }
+        } else if (recovered_gap >= 0) {
+            ls->skip_cnt = ls->repeat_cnt = 0;
+            action = LS_NORMAL;
+        } else {
+            ls->repeat_cnt = (int32_t)((uint32_t)ls->repeat_cnt + 1u);
+            if (ls->repeat_cnt <= repeat_limit) {
+                ls->skip_cnt = 0;
+                action = LS_NORMAL;
+            } else {                                 /* @0x600a2da8..2e59 */
+                uint32_t bytes_per_ms = (uint32_t)ls->fs *
+                    (uint32_t)ls->channels * (uint32_t)ls->bytePerSample;
+                if (!bytes_per_ms)
+                    bytes_per_ms = 0x180;
+                int32_t queued = (int32_t)(ls->adapter_in - ls->adapter_out);
+                int32_t queued_ticks = (int32_t)((uint32_t)queued * 90u);
+                int32_t needed = (int32_t)(0u - (uint32_t)ls->diff * bytes_per_ms);
+                ls->repeat_cnt = 0;
+                action = queued_ticks < needed && queued < ls->frame_bytes ?
+                    LS_EXCEPT : LS_SKIP;
+            }
         }
-        return LS_REPEAT;                             /* or FR-RUN by gap sign [FLIX?] */
+        break;
+    case LS_SKIP:                                     /* @0x600a2a48/2d2f */
+        if (ls->diff > 0)
+            action = LS_TONORM;
+        else if (negative_gap < 0)
+            action = LS_FREE_RUN;
+        else {
+            ls->repeat_cnt = (int32_t)((uint32_t)ls->repeat_cnt + 1u);
+            if (ls->repeat_cnt <= repeat_limit)
+                action = LS_SKIP;
+            else {
+                ls->cnt150 = 0;
+                action = LS_EXCEPT;
+            }
+        }
+        break;
+    case LS_REPEAT:                                   /* @0x600a2b9a/2c7b */
+        if (ls->diff <= 0)
+            action = LS_NORMAL;
+        else if (ls->diff > repeat_bound)
+            action = LS_FREE_RUN;
+        else
+            action = ls->discontinuity == 1 ? LS_IDLE : _lipsync_state_unrecovered(ls);
+        break;
+    case LS_FREE_RUN:                                 /* @0x600a2b7b/2c96 */
+        if (recovered_gap > 0 && ls->diff < upper) {
+            ls->repeat_cnt = ls->skip_cnt = 0;
+            action = LS_NORMAL;
+        } else if (ls->diff > 0 && ls->diff < repeat_bound)
+            action = LS_REPEAT;
+        else if (negative_gap > 0 && ls->diff < 0) {
+            ls->repeat_cnt = 0;
+            action = LS_SKIP;
+        } else
+            action = LS_FREE_RUN;
+        break;
+    case LS_TONORM:                                   /* @0x600a2ad7/2c17 */
+        if (ls->diff > upper || recovered_gap < 0)
+            action = LS_E_NORM;
+        else {
+            ls->skip_cnt = ls->repeat_cnt = 0;
+            action = LS_NORMAL;
+        }
+        break;
+    case LS_E_NORM:                                   /* @0x600a2a94/2ab6/2d7e */
+        if (ls->diff > upper)
+            action = ls->discontinuity == 1 ? LS_IDLE : _lipsync_state_unrecovered(ls);
+        else if (recovered_gap >= 0) {
+            ls->skip_cnt = ls->repeat_cnt = 0;
+            action = LS_TONORM;
+        } else
+            action = negative_gap < 0 ? LS_FREE_RUN : LS_SKIP;
+        break;
+    case LS_EXCEPT:                                   /* @0x600a2b29/2deb */
+        if (ls->diff > upper) {
+            ls->skip_cnt = (int32_t)((uint32_t)ls->skip_cnt + 1u);
+            if (ls->skip_cnt > skip_limit) {
+                ls->skip_cnt = 0;
+                action = ls->discontinuity == 1 ? LS_IDLE : _lipsync_state_unrecovered(ls);
+            } else {
+                ls->repeat_cnt = 0;
+                action = LS_EXCEPT;
+            }
+        } else if (recovered_gap >= 0) {
+            ls->skip_cnt = ls->repeat_cnt = 0;
+            action = LS_NORMAL;
+        } else {
+            ls->skip_cnt = 0;
+            ls->cnt150 = (int32_t)((uint32_t)ls->cnt150 + 1u);
+            action = ls->cnt150 <= repeat_limit ? LS_EXCEPT : LS_SKIP;
+            if (action == LS_SKIP)
+                ls->repeat_cnt = 0;
+        }
+        break;
+    case LS_WRONG:                                    /* @0x600a2acb */
+        action = LS_WRONG;
+        break;
     default:
-        return LS_NORMAL;                             /* bounds vs diff [GAP] */
+        action = LS_NORMAL;                           /* @0x600a2966 */
+        break;
     }
+    if (ls->discontinuity == 1) {                      /* @0x600a2a59 */
+        ls->idle_cnt = 0;
+        return LS_IDLE;
+    }
+    if (action == LS_REPEAT && ls->action != LS_REPEAT)
+        ls->repeat_stc = stc_regs[0x84 / 4];           /* @0x600a2762..2775 */
+    return action;
 }
 
 /* @0x600a1100: Scalar reset dispatch validated with xtobjdump. START

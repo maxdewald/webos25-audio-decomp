@@ -22,7 +22,7 @@
 </style>
 <rect class="card" x="0.5" y="0.5" width="819" height="1109" rx="10"/>
 <text class="title" x="24" y="38">Decompilation progress</text>
-<text class="sub" x="24" y="60">21 original files · 671 of 7,704 KiB of their code reconstructed (8.7%)</text>
+<text class="sub" x="24" y="60">21 original files · 680 of 7,705 KiB of their code reconstructed (8.8%)</text>
 <text class="name" x="24" y="108">libgstdecproxy</text>
 <text class="path" x="24" y="125">/usr/lib/gstreamer-1.0/libgstdecproxy.so</text>
 <rect class="track" x="330" y="102" width="340" height="14" rx="7"/>
@@ -83,7 +83,7 @@
 <text class="path" x="24" y="493">/usr/lib/gstreamer-1.0/libgstlgaudiosink.so</text>
 <rect class="track" x="330" y="470" width="340" height="14" rx="7"/>
 <rect class="cov" x="330" y="470" width="340.0" height="14" rx="7"/>
-<rect class="match" x="330" y="470" width="114.1" height="14" rx="7"/>
+<rect class="match" x="330" y="470" width="114.4" height="14" rx="7"/>
 <text class="pct" x="686" y="482">100.0%</text>
 <text class="path" x="686" y="498">33.6% match</text>
 <text class="name" x="24" y="522">kernel</text>
@@ -129,16 +129,16 @@
 <text class="name" x="24" y="798">dsp2</text>
 <text class="path" x="24" y="815">/lib/firmware/audio_a0_dsp2.bin</text>
 <rect class="track" x="330" y="792" width="340" height="14" rx="7"/>
-<rect class="dsp" x="330" y="792" width="37.8" height="14" rx="7"/>
-<text class="pct" x="686" y="804">11.1%</text>
+<rect class="dsp" x="330" y="792" width="38.8" height="14" rx="7"/>
+<text class="pct" x="686" y="804">11.4%</text>
 <text class="path" x="686" y="820">xtensa</text>
 <text class="name" x="24" y="844">libumi</text>
 <text class="path" x="24" y="861">/usr/lib/libumi.so.1.0.0</text>
 <rect class="track" x="330" y="838" width="340" height="14" rx="7"/>
-<rect class="cov" x="330" y="838" width="24.4" height="14" rx="7"/>
-<rect class="match" x="330" y="838" width="3.0" height="14" rx="7"/>
-<text class="pct" x="686" y="850">7.2%</text>
-<text class="path" x="686" y="866">0.9% match</text>
+<rect class="cov" x="330" y="838" width="29.7" height="14" rx="7"/>
+<rect class="match" x="330" y="838" width="9.2" height="14" rx="7"/>
+<text class="pct" x="686" y="850">8.7%</text>
+<text class="path" x="686" y="866">2.7% match</text>
 <text class="name" x="24" y="890">starfish-media-pipeline</text>
 <text class="path" x="24" y="907">/usr/sbin/starfish-media-pipeline</text>
 <rect class="track" x="330" y="884" width="340" height="14" rx="7"/>
@@ -150,14 +150,14 @@
 <text class="path" x="24" y="953">/usr/lib/libpf-1.0.so.1.0.0</text>
 <rect class="track" x="330" y="930" width="340" height="14" rx="7"/>
 <rect class="cov" x="330" y="930" width="10.8" height="14" rx="7"/>
-<rect class="match" x="330" y="930" width="4.7" height="14" rx="7"/>
+<rect class="match" x="330" y="930" width="4.8" height="14" rx="7"/>
 <text class="pct" x="686" y="942">3.2%</text>
 <text class="path" x="686" y="958">1.4% match</text>
 <text class="name" x="24" y="982">dsp1</text>
 <text class="path" x="24" y="999">/lib/firmware/audio_a0_dsp1.bin</text>
 <rect class="track" x="330" y="976" width="340" height="14" rx="7"/>
-<rect class="dsp" x="330" y="976" width="4.0" height="14" rx="7"/>
-<text class="pct" x="686" y="988">1.2%</text>
+<rect class="dsp" x="330" y="976" width="4.8" height="14" rx="7"/>
+<text class="pct" x="686" y="988">1.4%</text>
 <text class="path" x="686" y="1004">xtensa</text>
 <text class="name" x="24" y="1028">audiod</text>
 <text class="path" x="24" y="1045">/usr/sbin/audiod</text>

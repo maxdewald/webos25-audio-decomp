@@ -1339,7 +1339,9 @@ int aren_get_uid (int index, unsigned int *uid, bool is_bypass)
     return 0;
 }
 
-/* @0xffffffc010cbdda0 */
+/* @0xffffffc010cbdda0: passive endpoint lookup, but the zero-only check
+ * accepts an uncreated bypass's signed -1 as UINT_MAX and reports success.
+ * No ownership reference is acquired, and no processor association is returned. */
 int aren_get_tail_uid (int index, unsigned int *uid, bool is_bypass)
 {
     ARENDERER_INFO_T *ren = NULL;
@@ -1537,7 +1539,8 @@ int aren_set_gap_info (int index, aren_gap_info_t gap_info)
     return 0;
 }
 
-/* @0xffffffc010cbef30 */
+/* @0xffffffc010cbef30: valid indices return success without filling status,
+ * even for unopened slots. This is not a renderer/processor publication. */
 int aren_get_rendered_status (int index, aren_rendered_status_t * status)
 {
     ARENDERER_INFO_T *ren = NULL;
@@ -1816,7 +1819,10 @@ int aren_set_queue_max_length (int index, unsigned int queue_max_length)
     return 0;
 }
 
-/* @0xffffffc010cc04c0 */
+/* @0xffffffc010cc04c0: replaceable caller-supplied IMC processor metadata at
+ * slot+0x54, not a Linux PID or an ownership check. Open resets it to -1;
+ * close leaves it stale. Neither a renderer ioctl nor amedia proc/debug
+ * handler publishes the slot-to-processor association in this implementation. */
 int aren_set_proc_id (int index, unsigned int proc_id)
 {
     ARENDERER_INFO_T *ren = NULL;

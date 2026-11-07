@@ -402,6 +402,9 @@ static int _bm_add_port_connection (struct bm_list_block_port *block_port,
     return 0;
 }
 
+/* Inlined in _bm_connect_block_locked @0xffffffc010c9f544: record both peer
+ * directions. Allocation errors are ignored, so a successful pipeline connect
+ * need not have a complete (or symmetric) block graph record. */
 static int _bm_connect_port (struct bm_list_block *block_out, int port_out,
     struct bm_list_block *block_in, int port_in)
 {
@@ -534,7 +537,8 @@ static int _bm_add_port (struct bm_list_block *block, int port, bool in)
     return 0;
 }
 
-/* @0xffffffc010ca0584 */
+/* @0xffffffc010ca0584: In-kernel block->pipeline->head UID bridge. Neither
+ * this UID nor per-port forwarding is included in bm_dot's published graph. */
 unsigned int bm_get_block_head (struct aud_block_info *block_info)
 {
     struct apipeline *pipe;
@@ -549,7 +553,8 @@ unsigned int bm_get_block_head (struct aud_block_info *block_info)
     return apipeline_head (pipe);
 }
 
-/* @0xffffffc010c9e1f0 */
+/* @0xffffffc010c9e1f0: Default-pipeline tail UID, not the block index or a
+ * forwarded port's endpoint; this is not exported by the DOT proc entry. */
 unsigned int bm_get_block_tail (struct aud_block_info *block_info)
 {
     struct apipeline *pipe;
@@ -1229,8 +1234,12 @@ bool bm_is_main_audio (struct aud_block_info * block_info)
 /*
 block 의 input/output ( bool in ) port int port_block 에 연결이 오면 struct apipeline *pipeline 의 port int port_pipeline 연결하도록 한다.
 만일 이게 없으면 그냥 1 : 1 매핑 ( 기본 pipeline 의 0번 포트로 연결 )
+*/
 
-/* @0xffffffc010ca1510 */
+/* @0xffffffc010ca1510: Key is (direction, block port, pipeline port). An exact
+ * duplicate fails; a different pipeline replaces only the pointer. Lookup
+ * keys only direction/block port, so a new pipeline port shadows older entries.
+ * The forwarding table is not emitted by bm_dot. */
 int bm_register_port_forward (struct aud_block_info *block_info, bool in,
     int port_block, struct apipeline *pipeline, int port_pipeline)
 {
@@ -1934,7 +1943,12 @@ void bm_block_registry (struct audio_block_impl *block_impl)
     list_add (&block_impl->list, &bm_info->list_block_impl);
 }
 
-/* @0xffffffc010c9d590 */
+/* @0xffffffc010c9d590: Passive projection under bm_lock: block type/index,
+ * logical ports and recorded peers only. proc_0 is a literal empty cluster,
+ * not block->processor. No module UID, pipeline forwarding, owner or task ID
+ * is emitted, so these block indices cannot join the module DOT graph alone.
+ * bm_init registers this show callback as dot_block_connection, mode 0640;
+ * shipped fops @0xffffffc0122cb3b0 has only open/read/llseek/release, no write. */
 static int bm_dot (struct seq_file *m, void *data)
 {
     struct aud_bm_info *bm_info = &_bm_info;

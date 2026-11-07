@@ -750,7 +750,11 @@ static ALSA_SNDOUT_OUTPUT_TYPE_T common_output_convert_sndout_output (common_out
     return ret;
 }
 
-/* @0xffffffc010cd1a80 */
+/* @0xffffffc010cd1a80: ADEC ports 0..3 -> renderer slots/mixer inputs 0..3;
+ * AMIXER ports 0..7 -> slots/inputs 4..11. Reject negative/out-of-range ports.
+ * sndout_connect uses this slot unchanged for renderer main port 0 -> mixer
+ * input slot; BYPASS_PORT (0x100) is a separate, shared main-audio route.
+ * These are sndout limits: the shipped aren API separately accepts only 0..9. */
 static int common_input_convert_index (common_input_ext_type_t input, int port)
 {
     int master_index = -1;
@@ -2955,7 +2959,9 @@ static void _set_input_gain (int index, int gain)
  * On first logical optic/ARC connection _connect_output_all runs BEFORE
  * _add_connection, so its bypass reservation may wait for a later connect/
  * re-evaluation. This function notifies after locked exits, including some
- * failures, but that notifier is not a reconnect in the shipped Image. */
+ * failures, but that notifier is not a reconnect in the shipped Image.
+ * Reservation/connect return values are ignored before _add_connection:
+ * logical membership can be published even when its graph edge is absent. */
 /* @0xffffffc010cd6530 */
 static int sndout_connect (struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)
 {
@@ -6630,7 +6636,8 @@ void sndout_speaker_onoff (bool on)
     SNDOUT_UNLOCK ();
 }
 
-/* @0xffffffc010cd0410 */
+/* @0xffffffc010cd0410: passive slot-existence report (AMIXER 0..7 -> renderer
+ * 4..11), not pipeline membership or a UID getter; does not create blocks. */
 static int _proc_amixer_status_show (struct seq_file *m, void *data)
 {
     char renOpened[64];
@@ -6692,7 +6699,10 @@ static const char *_get_copy_protection_string (int copy_protection)
     }
 }
 
-/* @0xffffffc010cd70e0 */
+/* @0xffffffc010cd70e0: ConnectedAdec/ConnectedAmixer enumerate the logical
+ * sndout connection list, not live module links. ConnectedMixerPort is an
+ * OUTPUT-use bitmask, not the renderer-slot/mixer-input mask. This reader also
+ * queries output underflow counters; use host graph/status nodes for passive UIDs. */
 static int _proc_sndout_status_show (struct seq_file *m, void *data)
 {
     ALSA_SNDOUT_INFO_T *sndout_info = &alsa_sndout_info[0];

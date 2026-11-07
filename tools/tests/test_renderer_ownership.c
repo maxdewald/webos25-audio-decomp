@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <stdbool.h>
 #include <errno.h>
+#include <limits.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -68,6 +69,7 @@ static int apipeline_appendf(struct apipeline *p, const char *name, ...)
 { assert(append_count < 8); strcpy(appended[append_count++], name); p->tail = ++next_uid;
   if (!p->count++) p->head = p->tail; return p->tail; }
 static int apipeline_head(struct apipeline *p) { return p->head; }
+static int apipeline_tail(struct apipeline *p) { return p->tail; }
 static void apipeline_del(struct apipeline *p) { pipeline_deletes++; free(p); }
 static int renderer_registry_bypass(struct aud_renderer_info *r, char *name, int uid)
 { assert(registry_count < 8); registry_name[registry_count++] = name; return 0; }
@@ -91,11 +93,12 @@ static void bm_destroy_block(struct aud_block_info *b)
 { struct aud_renderer_info *r = (void *)b; assert(!driver_lock.held); destroys++;
   if (r) { if (r->pipeline_bypass) apipeline_del(r->pipeline_bypass); blocks--; free(r); } }
 static int bm_get_block_head(struct aud_block_info *b) { return b ? 777 : 0; }
+static int bm_get_block_tail(struct aud_block_info *b) { return b ? 778 : 0; }
 // @match src/kernel/aud/aapi_media.c (?m)^#define AREN_MAX \d+
 // @match src/kernel/aud/aapi_media.c (?s)#define ARENDERER_CHECK_INDEX_AND_OPENED_AND_LOCK.*?(?=struct str_table)
 // @match src/kernel/aud/renderer.c (?ms)struct renderer_param param_(?:src|gain)\[\] = \{.*?^};
-// @extract src/kernel/aud/renderer.c renderer_run_param renderer_set_default renderer_create_bypass_pipeline renderer_get_uid_pcm_bypass_head renderer_get_uid_es_bypass_head renderer_set_pcm_bypass_rts_out_channels
-// @extract src/kernel/aud/aapi_media.c aren_open aren_close aren_get_uid
+// @extract src/kernel/aud/renderer.c renderer_run_param renderer_set_default renderer_create_bypass_pipeline renderer_get_uid_pcm_bypass_head renderer_get_uid_es_bypass_head renderer_get_uid_bypass_tail renderer_set_pcm_bypass_rts_out_channels
+// @extract src/kernel/aud/aapi_media.c aren_open aren_close aren_get_uid aren_get_tail_uid aren_set_proc_id
 // @extract src/kernel/aud/driver.c driver_aren_open driver_aren_close
 /* The driver ioctl case for SET_INDEX, run on its own. */
 #define AREN_IOW_SET_INDEX 1
@@ -127,16 +130,31 @@ int main(void)
     struct file owner = {0}, observer = {0}; unsigned uid;
     fail_alloc = 1; assert(driver_aren_open(NULL, &owner) == -ENOMEM); fail_alloc = 0;
     assert(aren_open(-1) == -1 && aren_open(10) == -1 && aren_close(-1) == -1);
+    assert(aren_set_proc_id(-1, 81) == -1 && aren_set_proc_id(AREN_MAX, 81) == -1);
+    assert(aren_set_proc_id(9, 81) == -1); unlocked();
     assert(aren_get_uid(10, &uid, true) == -1); unlocked();
     fd_open(&owner); assert(select_index(&owner, 9) == 0);
+    assert(arenderer_info[9].proc_id == -1);
+    assert(aren_set_proc_id(9, 81) == 0 && arenderer_info[9].proc_id == 81);
     fd_open(&observer); assert(select_index(&observer, 9) == -1);
     assert(((struct audio_renderer_info *)observer.private_data)->index == 9);
+    assert(arenderer_info[9].proc_id == 81);
+    assert(aren_set_proc_id(9, 82) == 0 && arenderer_info[9].proc_id == 82); unlocked();
+    assert(aren_get_tail_uid(9, &uid, true) == 0 && uid == UINT_MAX);
+    assert(!((struct aud_renderer_info *)arenderer_info[9].ren_info)->pipeline_bypass);
     reset_trace(); assert(aren_get_uid(9, &uid, true) == 0);
     assert(append_count == 2 && !strcmp(appended[0], "queue") && !strcmp(appended[1], "lipsync"));
     unsigned old = uid; assert(aren_get_uid(9, &uid, true) == 0 && uid == old && append_count == 2);
+    assert(aren_get_tail_uid(9, &uid, true) == 0 && uid == old + 1);
+    assert(aren_get_tail_uid(9, &uid, false) == 0 && uid == 778); unlocked();
     fd_close(&observer); assert(!arenderer_info[9].is_open && blocks == 0);
+    assert(arenderer_info[9].proc_id == 82);
+    assert(aren_set_proc_id(9, 83) == -1 && arenderer_info[9].proc_id == 82); unlocked();
+    uid = 123; assert(aren_get_tail_uid(9, &uid, true) == -1 && uid == 123); unlocked();
     assert(aren_get_uid(9, &uid, false) == -1); int deleted = destroys;
     fd_close(&owner); assert(destroys == deleted);
+    assert(aren_open(9) == 0 && arenderer_info[9].proc_id == -1);
+    assert(aren_close(9) == 0); unlocked();
     fd_open(&owner); assert(select_index(&owner, 0) == 0);
     fd_open(&observer); fd_close(&observer); assert(!arenderer_info[0].is_open); fd_close(&owner);
     fd_open(&owner); assert(select_index(&owner, -100) == 0);

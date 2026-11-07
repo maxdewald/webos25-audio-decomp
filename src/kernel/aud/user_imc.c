@@ -650,6 +650,12 @@ static long ioctl (struct file *filp, unsigned int cmd, unsigned long arg)
             ret = add_implement_port_buf_def (uimc, &a.implement_port_buf_def);
             break;
 
+        /* Shipped call @0xffffffc010c9a7bc uses this fd's processor, not its
+         * mod_owner or task_id. This is an explicit label assignment, not an
+         * automatic renderer-to-process attribution at open/create time.
+         * libaa aimc_role_set @0x1e4f8 exposes this ioctl; no assigning client
+         * was found in recovered src/ or shipped top-level dynamic imports.
+         * Plugins, static copies and indirect lookups remain unexcluded. */
         case AUIMC_IO_SET_ROLE:
             ret = aud_inst_role_set (uimc->processor, a.role.uid, a.role.name);
             break;

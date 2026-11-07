@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <limits.h>
 
 typedef uint64_t phys_addr_t;
 struct list_head { struct list_head *next, *prev; };
@@ -41,6 +42,7 @@ static void wake_up_all(wait_queue_head_t *w) { ++w->wakes; }
 #define info(...) ((void)0)
 #define error(...) ((void)0)
 #define noti(...) ((void)0)
+#define pnoti(...) ((void)0)
 #define GFP_KERNEL 0
 #define AUD_MODID_PROC(uid) (((uid) >> 24) & 0xff)
 #define AUD_MODLIST_PROC(uid) AUD_MODID_PROC(uid)
@@ -56,8 +58,10 @@ typedef struct { unsigned int output_module_id, output_module_port, input_module
 typedef ConnectorCmdConnect ConnectorCmdDisconnect;
 typedef struct { unsigned int uid; } RegistryCmdDestroyModule;
 typedef struct { unsigned int shared_buf_offset, shared_buf_size, cowork_module_uid, max_access_size, aui_count; } GlueCmdSetSharedBuffer;
+#define ADEC_CMD_SET_PROP 0x10180004u
+typedef struct { int len; char str[]; } ImcCmdSetProp;
 
-struct sent { unsigned int cmd, target, size; bool sync; unsigned char payload[32]; };
+struct sent { unsigned int cmd, target, size, flags; bool sync; unsigned char payload[128]; };
 static struct sent sent[128];
 static int sends, allocations, fail_allocation, frees, glue_destroyed, shared_frees, roles_cleared;
 static int helper_pre, helper_post, processor_removals;
@@ -70,6 +74,18 @@ static void *kzalloc(size_t size, int flags)
     void *p = calloc(1, size);
     assert(p); ++allocation_balance; return p;
 }
+static void *kmalloc(size_t size, int flags) { return kzalloc(size ? size : 1, flags); }
+static int kstrtouint(const char *text, unsigned int base, unsigned int *value)
+{
+    if (!*text || *text == '-' || *text == ' ' || *text == '\t') return -EINVAL;
+    char *end;
+    errno = 0;
+    unsigned long long parsed = strtoull(text, &end, base);
+    if (errno == ERANGE || parsed > UINT_MAX) return -ERANGE;
+    if (end == text || (*end && strcmp(end, "\n"))) return -EINVAL;
+    *value = (unsigned int)parsed;
+    return 0;
+}
 static void kfree(void *p) { if (p) { ++frees; --allocation_balance; free(p); } }
 static void vfree(void *p) { ++shared_frees; kfree(p); }
 static void hma_free(const char *name, phys_addr_t p) { (void)name; (void)p; ++shared_frees; }
@@ -79,10 +95,11 @@ static void remove_proc_entry(const char *name, struct proc_dir_entry *p) { (voi
 static int send(bool sync, void *imc, unsigned int cmd, unsigned int flags,
                 unsigned int target, const void *payload, unsigned int size)
 {
-    (void)imc; (void)flags;
+    assert(imc == NULL);
     assert(sends < 128 && size <= sizeof(sent[0].payload));
-    sent[sends] = (struct sent){ .cmd=cmd, .target=target, .size=size, .sync=sync };
-    memcpy(sent[sends++].payload, payload, size);
+    sent[sends] = (struct sent){ .cmd=cmd, .target=target, .size=size, .flags=flags, .sync=sync };
+    if (size) memcpy(sent[sends].payload, payload, size);
+    ++sends;
     return -EIO; /* The shipped module-list layer deliberately ignores this. */
 }
 #define aimc_send_command(i,c,f,t,p,s) send(false,i,c,f,t,p,s)
@@ -96,6 +113,7 @@ static bool allow_nonsecure_connect = true;
 // @declare src/kernel/aud/module_list.c unregister_impl unregister_processor aud_modlist_unregister_processor put_instance aud_modlist_del_owner get_input_port get_output_port disconnect_in_processor connect_in_processor jumper_inter_output_glue jumper_inter_input_glue connect_between_processor destroy_jumper inst_by_uid owner_inst_by_uid aud_modlist_disconnect_inst_output aud_modlist_disconnect_inst_input aud_inst_connect aud_inst_disconnect_output aud_inst_disconnect_input aud_modlist_connect_inst
 #include "test_module_list_mocks.inc"
 // @extract src/kernel/aud/module_list.c unregister_impl unregister_processor aud_modlist_unregister_processor put_instance aud_modlist_del_owner get_input_port get_output_port disconnect_in_processor connect_in_processor jumper_inter_output_glue jumper_inter_input_glue connect_between_processor destroy_jumper inst_by_uid owner_inst_by_uid aud_modlist_disconnect_inst_output aud_modlist_disconnect_inst_input aud_inst_connect aud_inst_disconnect_output aud_inst_disconnect_input aud_modlist_connect_inst
+// @extract src/kernel/aud/module_list.c send_cmd proc_inst_cmd proc_inst_prop
 
 static struct aud_mod_owner *owner(void)
 {
@@ -130,6 +148,74 @@ static int pre_destroy(void *priv, const char *name, uint32_t uid)
 { (void)priv; (void)name; (void)uid; ++helper_pre; return 0; }
 static int post_destroy(void *priv, const char *name, uint32_t uid)
 { (void)priv; (void)name; (void)uid; ++helper_post; return 0; }
+
+static void test_proc_serialization(void)
+{
+    struct aud_mod_inst *inst = instance(NULL, NULL, 0x03020001);
+    int balance = allocation_balance;
+    char *property[] = {"out-bit-per-sample", "24", "ignored", NULL};
+    reset_calls();
+    assert(proc_inst_prop(inst, 3, property) == 0);
+    const unsigned char expected[] = {
+        21, 0, 0, 0, 'o', 'u', 't', '-', 'b', 'i', 't', '-', 'p', 'e', 'r', '-',
+        's', 'a', 'm', 'p', 'l', 'e', '=', '2', '4', 0
+    };
+    assert(sends == 1 && !sent[0].sync && sent[0].flags == 0);
+    assert(sent[0].cmd == ADEC_CMD_SET_PROP && sent[0].target == inst->uid);
+    assert(sent[0].size == sizeof(expected));
+    assert(!memcmp(sent[0].payload, expected, sizeof(expected)));
+    assert(allocation_balance == balance);
+    char *empty[] = {"", "", NULL};
+    assert(proc_inst_prop(inst, 2, empty) == 0);
+    assert(sent[1].size == 6 && sent[1].payload[0] == 1);
+    assert(!memcmp(sent[1].payload + 4, "=", 2));
+    char *missing[] = {"gain", NULL};
+    assert(proc_inst_prop(inst, 1, missing) == -EINVAL && sends == 2);
+    reset_calls(); fail_allocation = 1;
+    assert(proc_inst_prop(inst, 2, property) == -ENOMEM && sends == 0);
+    assert(allocation_balance == balance);
+
+    char *command[] = {"0x50040008", "0x800000", "1", NULL};
+    reset_calls();
+    assert(proc_inst_cmd(inst, 3, command) == 0);
+    const unsigned char gain[] = {0, 0, 0x80, 0, 1, 0, 0, 0};
+    assert(sends == 1 && sent[0].cmd == 0x50040008 && sent[0].size == sizeof(gain));
+    assert(sent[0].target == inst->uid && !sent[0].sync && sent[0].flags == 0);
+    assert(!memcmp(sent[0].payload, gain, sizeof(gain)));
+    char *words[] = {"0x50020020", "48000", "2", "32", "0", "0", "48000", "2", "24", NULL};
+    assert(proc_inst_cmd(inst, 9, words) == 0 && sent[1].size == 32);
+    assert(sent[1].cmd == 0x50020020);
+    unsigned int formats[] = {48000, 2, 32, 0, 0, 48000, 2, 24};
+    assert(!memcmp(sent[1].payload, formats, sizeof(formats)));
+    char *no_payload[] = {"0x10010000", NULL};
+    assert(proc_inst_cmd(inst, 1, no_payload) == 0 && sent[2].size == 0);
+    char *mismatch[] = {"0x50020020", "7", NULL};
+    assert(proc_inst_cmd(inst, 2, mismatch) == 0 && sent[3].size == 4);
+    char *numeric[] = {"0x50050004", "+010", "4294967295", NULL};
+    assert(proc_inst_cmd(inst, 3, numeric) == 0 && sent[4].size == 8);
+    unsigned int values[] = {8, UINT_MAX};
+    assert(!memcmp(sent[4].payload, values, sizeof(values)));
+    assert(allocation_balance == balance);
+
+    char *bad_command[] = {"oops", NULL};
+    char *negative[] = {"0x50040008", "1", "-1", NULL};
+    char *string[] = {"0x50040008", "pcm", NULL};
+    char *buffer[] = {"0x50040008", "00:01:02:03", NULL};
+    char *overflow[] = {"0x50040008", "4294967296", NULL};
+    reset_calls();
+    assert(proc_inst_cmd(inst, 0, NULL) == -EINVAL);
+    assert(proc_inst_cmd(inst, 1, bad_command) == -EINVAL);
+    assert(proc_inst_cmd(inst, 3, negative) == -EINVAL);
+    assert(proc_inst_cmd(inst, 2, string) == -EINVAL);
+    assert(proc_inst_cmd(inst, 2, buffer) == -EINVAL);
+    assert(proc_inst_cmd(inst, 2, overflow) == -ERANGE);
+    assert(sends == 0 && allocation_balance == balance);
+    reset_calls(); fail_allocation = 1;
+    assert(proc_inst_cmd(inst, 3, command) == -ENOMEM && sends == 0);
+    assert(allocation_balance == balance);
+    reset_calls();
+    kfree(inst);
+}
 
 static void test_lookup_and_wrappers(void)
 {
@@ -241,10 +327,11 @@ static void test_owner_and_processor_teardown(void)
 }
 int main(void)
 {
+    test_proc_serialization();
     test_lookup_and_wrappers(); test_local_fanout_and_failures();
     test_cross_processor(); test_owner_and_processor_teardown();
     assert(list_empty(&processors) && !allocation_balance);
     assert(!processors_lock.held && !connection_lock.held);
-    puts("PASS module_list: owner/global lookup, UID wrappers, local fan-out, allocation failures, stale implementations, sync dispatch, cross-processor jumper setup/teardown/failures, processor death, reference-counted owner cleanup (ASan/UBSan)");
+    puts("PASS module_list: proc property/command bytes, lengths, parse/allocation/send errors; owner/global lookup, UID wrappers, fan-out, jumper failures, processor death, reference-counted cleanup (ASan/UBSan)");
     return 0;
 }

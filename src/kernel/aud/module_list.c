@@ -423,6 +423,8 @@ struct aud_mod_impl *aud_modlist_register_impl (struct aud_proc_info *p, const c
     return impl;
 }
 
+/* @0xffffffc010c90a04: Publish a named processor directory; pid is an opaque
+ * caller cookie (user_imc passes itself), not Linux task identity. */
 static struct aud_proc_info *__printf (3, 4) register_processor (int proc_id, void *pid,
     const char *name, ...)
 {
@@ -456,6 +458,8 @@ static struct aud_proc_info *__printf (3, 4) register_processor (int proc_id, vo
     return p;
 }
 
+/* @0xffffffc010c92c20: Allocate a free processor ID under processors_lock;
+ * processor_%d identifies this registration, not an opener PID or renderer. */
 struct aud_proc_info *aud_modlist_register_processor (void *pid, int *index)
 {
     struct aud_proc_info *p;
@@ -805,6 +809,8 @@ int aud_modlist_register_impl_port_buf_def (struct aud_proc_info *p,
     return 0;
 }
 
+/* @0xffffffc010c8f934: Passive status contains only name and UID, not owner,
+ * role, opener identity or DSP state. Unlike lstatus/prop, it sends no IMC. */
 static int status_show (struct seq_file *m, void *data)
 {
     struct aud_mod_inst *inst = m->private;
@@ -816,6 +822,9 @@ static int status_show (struct seq_file *m, void *data)
     return 0;
 }
 
+/* Inlined in proc_inst_cmd @0xffffffc010c92630: command then u32 base-0 words,
+ * not strings/buffer syntax. Storage is 16 bytes/word; wire length is 4/word.
+ * The command's low-16 size bits are not checked against that wire length. */
 static int send_cmd (const char *name, unsigned int uid, int argc, char **argv)
 {
     unsigned int cmd;
@@ -863,7 +872,9 @@ static int send_cmd (const char *name, unsigned int uid, int argc, char **argv)
     return 0;
 }
 
-/* Shipped @0xffffffc010c92630: "cmd arg..." as kstrtouint base 0, async, unchecked. */
+/* Shipped @0xffffffc010c92630: source=0, async send, then free; ignores send result.
+ * IPC copies before return and successful sends are FIFO on this DSP route.
+ * Parse/allocation failures return before sending; no FIRST/data completion barrier. */
 static int proc_inst_cmd (void *arg, int argc, char **argv)
 {
     struct aud_mod_inst *inst = arg;
@@ -871,7 +882,13 @@ static int proc_inst_cmd (void *arg, int argc, char **argv)
     return send_cmd (inst->name, inst->uid, argc, argv);
 }
 
-/* Shipped @0xffffffc010c91dc0: "name value" -> ADEC_CMD_SET_PROP "name=value"; no result. */
+/* Shipped @0xffffffc010c91dc0: 0x10180004, source=0, instance UID. Payload is
+ * LE32 strlen("name=value"), then those bytes plus NUL: total len+5.
+ * Only argv[0..1] are used verbatim; missing/nomem fail before the async send.
+ * Transport errors are ignored, so success does not establish DSP application.
+ * IPC_WriteCommand @ffffffc010d0c9f0 copies under its ring lock before return;
+ * DSP IRQ @60079c2c / consumer @60079974 preserve successfully queued order.
+ * Neither callback locks the instance or waits for FIRST/data processing. */
 static int proc_inst_prop (void *arg, int argc, char **argv)
 {
     struct aud_mod_inst *inst = arg;
@@ -1261,6 +1278,9 @@ void aud_modlist_destroy_inst (struct aud_mod_inst *inst)
     put_instance (inst);
 }
 
+/* @0xffffffc010c933a0: Publish roles/<label> -> processors/<proc>/<impl>/<uid>.
+ * This caller-supplied alias is not ownership; allocation/symlink failure is
+ * not propagated. Clearing frees the old role but does not clear its pointer. */
 int aud_modlist_role_set (struct aud_mod_inst *inst, const char *role)
 {
     info ("set role \"%s\" to instance \"%s\"\n", role, inst->name);
@@ -2246,6 +2266,11 @@ int aud_inst_disconnect_input (struct aud_mod_owner *o, unsigned int uid_in, int
     return aud_modlist_disconnect_inst_input (o, inst, port_in_index);
 }
 
+/* @0xffffffc010c947b0: Select p, or UID[31:24] only when p is NULL; no owner
+ * lookup. Missing instances use create_inst_on_sync(impl, NULL, false), hence
+ * a newly allocated UID, not necessarily uid. Only implementation zero may be
+ * auto-registered. The shipped direct caller is user_imc ioctl SET_ROLE;
+ * this API's presence does not establish a renderer assigning role labels. */
 int aud_inst_role_set (struct aud_proc_info *p, unsigned int uid, const char *role)
 {
     struct aud_mod_impl *_impl, *impl;
@@ -2537,6 +2562,12 @@ void aud_cleanup_ext_buf (struct aud_mod_owner *o, unsigned int uid, unsigned in
     destroy_glue (glue);
 }
 
+/* @0xffffffc010c8f980: Passive DOT projection of processors, named instances
+ * (names contain UIDs), ports and local peers, not owners/roles/task identity.
+ * Shared jumpers add phys/virt buffer, size, offset and dotted glue edges;
+ * their synthetic <glue>_out/in IDs are distinct from ordinary port node IDs.
+ * Bufferless jumpers add no bridge. Locks nest processors/mods/impl/instance,
+ * but connection_lock is NOT held, so this is not an atomic topology snapshot. */
 static int ml_show (struct seq_file *m, void *data)
 {
     struct aud_proc_info *p;
@@ -2666,6 +2697,9 @@ static int ml_show (struct seq_file *m, void *data)
     return 0;
 }
 
+/* @0xffffffc011a7a700: dot_module_connection is 0440. Enumerating directories
+ * and reading instance status (name, uid) are passive; cmd/prop/lstatus/dump
+ * siblings are not interchangeable with this read-only metadata surface. */
 int __init aud_modlist_init (void)
 {
     proc_processors = proc_mkdir ("processors", aproc_root);

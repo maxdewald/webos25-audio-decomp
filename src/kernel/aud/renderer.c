@@ -1614,7 +1614,10 @@ static void renderer_create_bypass_pipeline (struct aud_block_info *block, bool 
     renderer->is_bypass_rts_PCM = rtsPCM;
 }
 
-/* @0xffffffc010cacab0 */
+/* @0xffffffc010cacab0: main chain is srcbin -> sola -> lipsync -> gain;
+ * restored queue/RTS are prepended (RTS first when both flags are set).
+ * Slot 12 (DAFC) has only srcbin, though sndout's shipped AMIXER range ends
+ * at slot 11. Existing bypass mode is reconstructed, not passively queried. */
 static void renderer_create_pipeline (struct aud_block_info *block)
 {
     struct aud_renderer_info *renderer = (struct aud_renderer_info *) block;
@@ -1680,7 +1683,8 @@ int renderer_get_uid_pcm_bypass_head (struct aud_block_info *block)
     return renderer->uid_rts_bypass;
 }
 
-/* @0xffffffc010cad2c0 */
+/* @0xffffffc010cad2c0: passive bypass-tail lookup; returns -1 before creation,
+ * unlike either head getter. No lock/reference is acquired for the returned UID. */
 int renderer_get_uid_bypass_tail (struct aud_block_info *block)
 {
     struct aud_renderer_info *renderer = (struct aud_renderer_info *) block;

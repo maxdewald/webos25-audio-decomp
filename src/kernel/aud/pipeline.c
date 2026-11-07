@@ -22,6 +22,7 @@
  */
 #include <linux/kernel.h>
 #include <linux/list.h>
+#include <linux/slab.h>
 
 #include "kaimc.h"
 #include "module_list.h"
@@ -54,7 +55,51 @@ struct apipeline
         action;\
     }\
 
-/* Inlined head/tail lookups in the shipped apipeline_connect. */
+/* @0xffffffc010c96280: allocates only the host container; does not publish it.
+ * A failed name allocation is retained as NULL, as in the shipped code. */
+struct apipeline *apipeline_new2 (int preferred_proc, char *name, ...)
+{
+    struct apipeline *pipe;
+    va_list ap;
+
+    pipe = kzalloc (sizeof (*pipe), GFP_KERNEL);
+    if (!pipe)
+    {
+        error ("no mem\n");
+        return NULL;
+    }
+
+    va_start (ap, name);
+    pipe->name = kvasprintf (GFP_KERNEL, name, ap);
+    pipe->preferred_proc = preferred_proc;
+    va_end (ap);
+
+    INIT_LIST_HEAD (&pipe->element_list);
+
+    return pipe;
+}
+
+/* @0xffffffc010c96490: destroys every member UID before freeing the container;
+ * an endpoint UID is borrowed, not an independent lifetime reference. */
+void apipeline_del (struct apipeline *pipe)
+{
+    struct element *element, *next;
+
+    PIPE_NULL_CHECK (pipe, return);
+
+    list_for_each_entry_safe (element, next, &pipe->element_list, list)
+    {
+        aimc_module_destroy (element->uid);
+        list_del (&element->list);
+        kfree (element);
+    }
+
+    kfree (pipe->name);
+    kfree (pipe);
+}
+
+/* @0xffffffc010c96640: passive first-member lookup, 0 for NULL/empty.
+ * No construction, reference acquisition or locking; caller owns lifetime. */
 unsigned int apipeline_head (struct apipeline *pipe)
 {
     struct element *e;
@@ -68,6 +113,7 @@ unsigned int apipeline_head (struct apipeline *pipe)
     return e->uid;
 }
 
+/* @0xffffffc010c966d4: passive last-member lookup, with the same lifetime rules. */
 unsigned int apipeline_tail (struct apipeline *pipe)
 {
     struct element *e;
@@ -101,4 +147,13 @@ unsigned int apipeline_connect (struct apipeline *pipe_out, int port_out, struct
     }
 
     return aimc_module_connect (uid_out, port_out, uid_in, port_in);
+}
+
+/* @0xffffffc010c97190: borrowed name only, not a publication/membership API. */
+const char *apipeline_get_name (struct apipeline *pipe)
+{
+    if (pipe)
+        return (const char *) pipe->name;
+
+    return NULL;
 }

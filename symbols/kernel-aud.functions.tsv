@@ -23,7 +23,12 @@ ffffffc010c946b0	128	aud_inst_disconnect_output
 ffffffc010c94730	128	aud_inst_disconnect_input
 ffffffc010c94d10	2096	aud_modlist_connect_inst
 ffffffc010c95540	336	aud_inst_connect
+ffffffc010c96280	260	apipeline_new2
+ffffffc010c96490	240	apipeline_del
+ffffffc010c96640	148	apipeline_head
+ffffffc010c966d4	156	apipeline_tail
 ffffffc010c96770	480	apipeline_connect
+ffffffc010c97190	20	apipeline_get_name
 ffffffc010c97680	256	aproc_lc_release
 ffffffc010c97f10	964	aproc_lc_read
 ffffffc010c985d0	880	log_capture_log

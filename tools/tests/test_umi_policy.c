@@ -178,6 +178,56 @@ static void expect(const char *name, int ct, int cn, int mo)
 }
 static void earc_expect(int ct,int cn,int mo) { expect("Sndout EARC Outputtype",ct,cn,mo); }
 
+static void test_capability_lookup(void)
+{
+    static const struct umi_value fields[] = {STR("audioCodingType","PCM")};
+    static const struct umi_value objects[] = {OBJ(NULL,fields)};
+    static const struct umi_value object_caps = LIST(NULL,objects);
+    static const struct umi_value mixed[] = {
+        OBJ(NULL,fields), NUM(NULL,1), BIT(NULL,true), {.kind=NIL},
+        STR(NULL,"pcm"), STR(NULL," PCM"), STR(NULL,"PCM "),
+        STR(NULL,"TrueHD"), STR(NULL,"MAT2PCM"), STR(NULL,"")
+    };
+    static const struct umi_value mixed_caps = LIST(NULL,mixed);
+    static const struct umi_value empty_caps = {.kind=ARRAY};
+    static const struct umi_value text_caps = STR(NULL,"PCM");
+    static const struct umi_value *const invalid[] = {&nil,&empty,&text_caps,&empty_caps};
+    reset();
+    assert(isEarcCapabilityAvailable(object,"PCM"));
+    assert(!isEarcCapabilityAvailable(object,"pcm"));
+    earc=&object_caps;
+    assert(!isEarcCapabilityAvailable(object,"PCM"));
+    earc=wow=&mixed_caps;
+    assert(!isEarcCapabilityAvailable(object,"PCM"));
+    assert(isEarcCapabilityAvailable(object,"pcm"));
+    assert(isEarcCapabilityAvailable(object,"TrueHD"));
+    assert(!isEarcCapabilityAvailable(object,"TRUEHD"));
+    assert(!isEarcCapabilityAvailable(object,"truehd"));
+    assert(!isEarcCapabilityAvailable(object,"1"));
+    assert(!isEarcCapabilityAvailable(object,"true"));
+    assert(isEarcCapabilityAvailable(object,""));
+    strings[UMI_MAT_PROFILE]="matprofile1";
+    assert(!isEarcCapabilityAvailable(object,"MAT2PCM"));
+    assert(isWowCastCapabilityAvailable(object,"MAT2PCM"));
+    assert(isEarcCapabilityAvailable(object,"TrueHD"));
+    strings[UMI_MAT_PROFILE]="MatProfile1";
+    assert(isEarcCapabilityAvailable(object,"MAT2PCM"));
+    for (size_t index=0; index<sizeof(invalid)/sizeof(invalid[0]); ++index) {
+        earc=wow=invalid[index];
+        assert(!isEarcCapabilityAvailable(object,"PCM"));
+        assert(!isWowCastCapabilityAvailable(object,"PCM"));
+    }
+    reset(); codec="ac3"; alsa_ok=false;
+    assert(updateEarcCapability(object,&all_caps));
+    assert(isEarcCapabilityAvailable(object,"DD"));
+    earc_expect(CT_DD,0,MO_NONE);
+    assert(!stores && !parser_stores && !delay_updates);
+    assert(updateEarcCapability(object,&object_caps));
+    assert(!isEarcCapabilityAvailable(object,"DD"));
+    assert(!isEarcCapabilityAvailable(object,"PCM"));
+    earc_expect(CT_PCM,0,MO_ALL);
+}
+
 static void test_pcm_mix_channels(void)
 {
     reset();
@@ -337,6 +387,7 @@ static void test_aac_and_writer_failure(void)
 
 int main(void)
 {
+    test_capability_lookup();
     test_pcm_mix_channels();
     test_dts_and_unknown();
     test_independent_capability_fallback();
@@ -344,6 +395,6 @@ int main(void)
     test_profile_update_order();
     test_output_change_and_ott();
     test_aac_and_writer_failure();
-    puts("UMI policy: 7 scenario groups passed");
+    puts("UMI policy: 8 scenario groups passed");
     return 0;
 }

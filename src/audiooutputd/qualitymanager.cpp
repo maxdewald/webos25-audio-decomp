@@ -8,7 +8,7 @@ static bool infoEnabled()
 
 /* @0x1a67c = _ZN14QualityManagerC1ERN2LS6HandleEP9umiClient */
 /* raw a67c..a74e registers exactly three /quality methods, flags=0.
- * No getCapability, setMixer, external_arc or eARC-specific service method exists.
+ * This table has no getCapability, setMixer, external_arc or eARC-specific method.
  * LS2 permissions are external policy: registration alone does not authorize callers.
  * [GAP] TV role/permission files were not supplied; OSE's policy is not TV evidence. */
 QualityManager::QualityManager(LS::Handle& h, umiClient* c):handle(&h),client(c)
@@ -57,7 +57,14 @@ int QualityManager::setSettings(const std::string& category, JValue value)
  * forwarding, not proof of a capability selector or a hardware capability query.
  * UMI getSettings @0x45bfc/getSettingsObject @0x45728 (separate worker) returns
  * an ARRAY of whole cached {category,value} entries for a generic category,
- * ignoring settings; miss is JSON null, empty category returns all entries.
+ * ignoring settings; miss/empty cache returns boolean true (raw 35a08/36676),
+ * mapped below to settings STRING "null"; empty category returns all entries
+ * when the cache is nonempty, not a live-state snapshot.
+ * umiClient raw 1adf2 also returns true when its audio object is missing;
+ * settings STRING "null" alone therefore does not establish a cache miss.
+ * external_arc/setMixer/inputInfo take this generic cache path (raw 364cc).
+ * It does not read the current input map (+0x214 -> +0x18) used by internal
+ * codec/channel getters @0x4910c/0x49f24, or the mixer byte +0x7c.
  * Thus external_arc reads the last successful event, NOT a live capability
  * getter. Partial updates can replace cache value while internal capability
  * state persists. No earcCapability-specific getter is registered here.

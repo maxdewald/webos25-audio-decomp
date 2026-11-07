@@ -215,16 +215,24 @@ bool handleAudioInfoEvent(AudioReportingContext &, AudioTrack *, int, const Ptre
 /* Partial model of 0x595bc, deliberately excluded from reconstruction coverage:
  * only immersive/codec-name/out-channels changes cause decode resubmission.
  * dualMono updates the selected public track but does not request a report.
- * [GAP] callback/logging, private raw-event cache and mirroring immersive into
- * internal source metadata are external to this bounded projection. */
+ * Cache +0x420 is refreshed even for inactive sources or rejected tracks.
+ * Changed immersive also updates internal source +0x74.
+ * [GAP] callback/logging and object ownership are external to this projection. */
 bool handleAudioInfoEvent(AudioReportingContext &context, AudioTrack *tracks, int count, const Ptree &event)
 {
+    context.audioInfoEvent = event;
     int index = event.get<int>("track");
-    if (index < 0 || index >= count) return false;
+    /* Host safety: original 0x5965e checks only count > index (signed). */
+    if (context.sourceType == -1 || index < 0 || index >= count) return false;
     if (auto value = event.get_optional<bool>("dualMono")) tracks[index].dualMono = *value;
     bool changed = false;
     if (auto value = event.get_optional<std::string>("immersive")) {
-        if (context.immersive != *value) { context.immersive = *value; changed = true; }
+        if (context.immersive != *value) {
+            context.immersive = *value;
+            context.internalSourceImmersive = *value;
+            changed = true;
+        }
+        if (context.audioInfoDescription != "Dolby Atmos") context.audioInfoEvent.put("immersive", "none");
     }
     if (auto value = event.get_optional<std::string>("codec-name")) {
         if (context.codecName != *value) { context.codecName = *value; changed = true; }
@@ -233,6 +241,24 @@ bool handleAudioInfoEvent(AudioReportingContext &context, AudioTrack *tracks, in
         if (context.outChannels != *value) { context.outChannels = *value; changed = true; }
     }
     return changed;
+}
+/* Partial recovery of 0x5b984, deliberately excluded from reconstruction coverage:
+ * case 7 accepts nonempty JSON, not a GstMessage; numeric payload is forwarded.
+ * Handler tail 0x59a06 submits audio decode info before the cached event callback.
+ * +0x408 == "Dolby Atmos" preserves cached immersive; report uses source +0x38.
+ * [GAP] Only audio-info dispatch is recovered; function objects project AVProxy
+ * and sendCallbackEvent boundaries, not the shipped callback ABI or logging. */
+void callbackFunctionHook(AudioReportingContext &context, AudioTrack *tracks, int count,
+    int eventType, std::int64_t number, const char *text, const AudioInfoEventCallbacks &callbacks)
+{
+    if (eventType != 7 || !text || !*text) return;
+    Ptree event;
+    std::istringstream input(text);
+    boost::property_tree::read_json(input, event);
+    if (handleAudioInfoEvent(context, tracks, count, event)) {
+        callbacks.setDecodeInfo("audio", util::generateJsonString(generateAudioDecodeInfo(context)));
+    }
+    callbacks.sendCallbackEvent(eventType, number, util::generateJsonString(context.audioInfoEvent));
 }
 /* @0x6b4e0: HFR requires >60 fps AND more than 1920*1088 pixels. */
 bool VideoTrack::isHFR() const

@@ -98,9 +98,11 @@ int main(){
         r=call("/quality","getSettings",R"({"category":"external_arc","subscribe":false})");
         assert(!truth(r["returnValue"])&&calls==before&&subscriptions==0);
         r=call("/quality","getSettings",R"({"settings":[]})");assert(!truth(r["returnValue"]));
-        getter=JValue(true);r=call("/quality","getSettings","{}");assert(str(r["settings"])=="null"&&category.empty());
+        getter=JValue(true);r=call("/quality","getSettings",R"({"category":"external_arc","settings":{}})");
+        assert(truth(r["returnValue"])&&r["settings"].stringify()==R"("null")"&&category=="external_arc");
+        r=call("/quality","getSettings","{}");assert(truth(r["returnValue"])&&r["settings"].stringify()==R"("null")"&&category.empty());
         getter=JValue(false);r=call("/quality","getSettings","{}");assert(r["settings"]==false&&truth(r["returnValue"]));
-        getter=JValue();r=call("/quality","getSettings","{}");assert(r["settings"].stringify()=="null");
+        getter=JValue();r=call("/quality","getSettings","{}");assert(truth(r["returnValue"])&&r["settings"].stringify()=="null");
         driverStatus=7;r=call("/quality","setSettings",R"({"category":"anything","value":{}})");assert(r["errorCode"].asNumber<int>()==20);
         driverStatus=0;r=call("/quality","setQualityAttribute",R"({"categoryType":"x","requestType":"y","isGameMode":true})");assert(truth(r["returnValue"])&&truth(forwarded["isGameMode"]));
         r=call("/quality","setQualityAttribute",R"({"categoryType":"x","requestType":"y","activeState":0})");assert(!truth(r["returnValue"]));
@@ -120,6 +122,8 @@ int main(){
         r=call("/audio/volume","set",R"({"soundOutput":"external_arc","volume":356})");assert(truth(r["returnValue"])&&volume.getSoundOutputVolume("external_arc")==100);
         r=call("/audio/volume","up",R"({"soundOutput":"external_arc"})");assert(r["errorCode"].asNumber<int>()==202);
         r=call("/audio/volume","down",R"({"soundOutput":"untracked"})");assert(truth(r["returnValue"])&&forwarded.asNumber<int>()==99&&volume.getSoundOutputVolume("untracked")==100);
+        before=calls;r=call("/audio/volume","getStatus","{}");
+        assert(truth(r["returnValue"])&&calls==before&&r["volumeStatus"].stringify()==R"([{"soundOutput":"external_arc","volume":100,"muted":false}])");
         r=call("/audio/volume","set",R"({"soundOutput":"external_arc","volume":-1})");assert(!truth(r["returnValue"]));
         r=call("/audio","setInputVolume",R"({"source":"not-connected","sink":"main","volume":256})");assert(truth(r["returnValue"])&&forwarded.asNumber<int>()==0);
         r=call("/audio","getStatus",R"({"subscribe":true})");assert(!truth(r["returnValue"]));
@@ -139,13 +143,13 @@ int main(){
             auto* remaining=connection.findAudioConnection(sources[index],"main");
             assert(remaining&&remaining->source==sources[index]&&remaining->sink=="main");
         }
-        r=call("/audio","getStatus","{}");
+        before=calls;r=call("/audio","getStatus","{}");
         auto expected=pbnjson::JArray();
         for(int index=0;index<20;++index){
             if(index==0||index==10||index==19)continue;
             expected.append(connection.buildAudioStatus(*connection.findAudioConnection(sources[index],"main")));
         }
-        assert(r["audio"].stringify()==expected.stringify());
+        assert(truth(r["returnValue"])&&calls==before&&r["audio"].stringify()==expected.stringify());
         r=call("/audio","getHeadphoneStatus",R"({"subscribe":true})");assert(subscriptions==1&&timerCalls==1&&interval==500&&str(r["headPhoneStatus"]).empty());
         assert(category=="headphoneDetectionMute"&&truth(forwarded["mute"]));
         before=calls;ConnectionManager::_headphoneStatusUpdateCallBack(&connection);assert(posts==0&&calls==before);

@@ -76,9 +76,9 @@
 <text class="path" x="24" y="447">/usr/lib/gstreamer-1.0/libgstlgaudiodec.so</text>
 <rect class="track" x="330" y="424" width="340" height="14" rx="7"/>
 <rect class="cov" x="330" y="424" width="340.0" height="14" rx="7"/>
-<rect class="match" x="330" y="424" width="200.3" height="14" rx="7"/>
+<rect class="match" x="330" y="424" width="212.5" height="14" rx="7"/>
 <text class="pct" x="686" y="436">100.0%</text>
-<text class="path" x="686" y="452">58.9% match</text>
+<text class="path" x="686" y="452">62.5% match</text>
 <text class="name" x="24" y="476">libgstlgaudiosink</text>
 <text class="path" x="24" y="493">/usr/lib/gstreamer-1.0/libgstlgaudiosink.so</text>
 <rect class="track" x="330" y="470" width="340" height="14" rx="7"/>
@@ -136,9 +136,8 @@
 <text class="path" x="24" y="861">/usr/lib/libumi.so.1.0.0</text>
 <rect class="track" x="330" y="838" width="340" height="14" rx="7"/>
 <rect class="cov" x="330" y="838" width="29.7" height="14" rx="7"/>
-<rect class="match" x="330" y="838" width="9.2" height="14" rx="7"/>
 <text class="pct" x="686" y="850">8.7%</text>
-<text class="path" x="686" y="866">2.7% match</text>
+<text class="path" x="686" y="866">build failed</text>
 <text class="name" x="24" y="890">starfish-media-pipeline</text>
 <text class="path" x="24" y="907">/usr/sbin/starfish-media-pipeline</text>
 <rect class="track" x="330" y="884" width="340" height="14" rx="7"/>

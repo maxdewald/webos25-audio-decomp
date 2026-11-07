@@ -3,6 +3,7 @@
 #pragma once
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <string>
 #include <boost/property_tree/ptree.hpp>
 
@@ -55,11 +56,18 @@ std::string generateJsonString(const Ptree &);
 struct AudioReportingContext {
     std::string pipelineId, streamType, contentType, sourceAttribute;
     Ptree pipelinePurpose;
+    Ptree audioInfoEvent;
+    std::string audioInfoDescription;
+    int sourceType = 0;
     int adecPort = -1, mixerPort = -1, audioTrackCount = 0, videoTrackCount = 0;
     int videoSinkType = 0, outChannels = 0;
     const AudioTrack *selectedTrack = nullptr;
-    std::string codecName, immersive, params;
+    std::string codecName, immersive, internalSourceImmersive, params;
     bool reset = false, isGameMode = false, hasAudioDropControl = false, disableAudioDrop = false;
+};
+struct AudioInfoEventCallbacks {
+    std::function<void(const std::string &, const std::string &)> setDecodeInfo;
+    std::function<void(int, std::int64_t, const std::string &)> sendCallbackEvent;
 };
 struct VideoReportingContext {
     std::string pipelineId, contentType, hdrType, appStatus, aviContentType;
@@ -79,6 +87,8 @@ Ptree generateVideoDecodeInfo(const VideoReportingContext &) __asm__("generateVi
 /* Event projection: the caller's AVProxy submission and logging are external.
  * Returns whether the recovered change test requests a fresh audio report. */
 bool handleAudioInfoEvent(AudioReportingContext &, AudioTrack *, int, const Ptree &) __asm__("handleAudioInfoEvent");
+void callbackFunctionHook(AudioReportingContext &, AudioTrack *, int, int, std::int64_t,
+    const char *, const AudioInfoEventCallbacks &);
 }
 namespace smp_internal {
 using smp::Ptree;

@@ -2,6 +2,9 @@
 #define LIBPF_AUDIO_METADATA_H
 #include <rapidjson/document.h>
 #include <cstdint>
+#include <glib-object.h>
+#include <string>
+#include <vector>
 
 /* Recovered prefixes; sampleRate is the LG enum, not a rate in hertz. */
 enum MEDIA_AUDIO_SAMPLERATE : int {
@@ -24,5 +27,17 @@ void setOPUSinfo(MEDIA_AUDIO_OPUS_INFO_T &, const rapidjson::Value &);
 void setIAMFinfo(MEDIA_AUDIO_IAMF_INFO_T &, const rapidjson::Value &);
 void setVORBISinfo(MEDIA_AUDIO_VORBIS_INFO_T &, const rapidjson::Value &);
 unsigned transSampleRate(MEDIA_AUDIO_SAMPLERATE);
+bool dropGenericMediaInfo(const char *structureName, const char *sourceName);
+struct AudioInfoMessage {
+    unsigned messageType = 0x4000;
+    bool hasPlayerHandle = true;
+    const char *structureName = nullptr, *sourceName = nullptr;
+    const GValue *streamId = nullptr, *dualMono = nullptr, *immersive = nullptr;
+    const GValue *codecName = nullptr, *outChannels = nullptr;
+};
+bool readAudioInfoEvent(const AudioInfoMessage &, bool genericPipeline, int trackIndex,
+    bool platformSupportDolbyAtmos, rapidjson::Document &event);
+bool readCustomAudioInfoEvent(const AudioInfoMessage &, std::vector<std::string> &streamIds,
+    bool platformSupportDolbyAtmos, rapidjson::Document &event);
 }
 #endif

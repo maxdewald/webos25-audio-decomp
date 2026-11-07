@@ -7,6 +7,7 @@
 #include "audio_metadata.h"
 #include <glib.h>
 #include <cmath>
+#include <cstring>
 #include <limits>
 
 #if UINTPTR_MAX == UINT32_MAX
@@ -82,5 +83,74 @@ unsigned transSampleRate(MEDIA_AUDIO_SAMPLERATE rate)
     static const unsigned hz[] = {48000, 44100, 32000, 24000, 16000, 12000, 8000, 22050};
     unsigned index = unsigned(rate) - 1;
     return index < 8 ? hz[index] : 0;
+}
+
+/* Extracted predicate from GenericPipeline::handleBusApplication (0xe1f5c),
+ * not a reconstruction of the full handler. decproxy may occur anywhere. */
+bool dropGenericMediaInfo(const char *structureName, const char *sourceName)
+{
+    return structureName && std::strcmp(structureName, "media-info") == 0 &&
+        sourceName && std::strstr(sourceName, "decproxy");
+}
+
+/* Partial projection of gstBusCallbackHandle 0x80694, handleBusApplication
+ * 0x8f6e4/0xe1f5c and handleAudioInfo 0x8e410; excluded from coverage.
+ * Caller supplies TrackInfo::getAudioTrackIndexByStreamId (0x986f4)'s result.
+ * [GAP] Gst object ownership, locking, JSON
+ * serialization and callbacks at +0x14/+0x53c are outside this projection.
+ * Valid string GValues are required; original malformed string inputs may fail.
+ * Field presence, not a media-info type field or source factory, selects audio. */
+bool readAudioInfoEvent(const AudioInfoMessage &message, bool genericPipeline, int trackIndex,
+    bool platformSupportDolbyAtmos, rapidjson::Document &event)
+{
+    if (!message.hasPlayerHandle || message.messageType != 0x4000 || !message.structureName ||
+        std::strcmp(message.structureName, "media-info") != 0 ||
+        (genericPipeline && dropGenericMediaInfo(message.structureName, message.sourceName)))
+        return false;
+    if (!message.streamId || !g_value_get_string(message.streamId) ||
+        !(message.dualMono || message.immersive || message.codecName || message.outChannels))
+        return false;
+    event.SetObject();
+    auto &allocator = event.GetAllocator();
+    event.AddMember("track", trackIndex, allocator);
+    if (message.dualMono)
+        event.AddMember("dualMono", g_value_get_boolean(message.dualMono) != FALSE, allocator);
+    if (message.immersive) {
+        const char *immersive = g_value_get_string(message.immersive);
+        if (!*immersive || !platformSupportDolbyAtmos) immersive = "none";
+        event.AddMember("immersive", rapidjson::Value(immersive, allocator), allocator);
+    }
+    if (message.codecName) {
+        const char *codec = g_value_get_string(message.codecName);
+        if (std::strstr(codec, "dts"))
+            event.AddMember("codec-name", rapidjson::Value(codec, allocator), allocator);
+    }
+    if (message.outChannels) {
+        int channels = G_VALUE_HOLDS_INT(message.outChannels) ? g_value_get_int(message.outChannels) : -1;
+        event.AddMember("out-channels", channels, allocator);
+    }
+    return true;
+}
+
+/* Partial projection of CustomPipeline::handleBusApplication 0xceae4 and
+ * TrackInfo::getAudioTrackIndexByStreamId 0x986f4; excluded from coverage.
+ * Only a single placeholder "0" is repaired, and out-channels cannot trigger it.
+ * [GAP] Malformed string inputs and Gst ownership/locking are not reproduced. */
+bool readCustomAudioInfoEvent(const AudioInfoMessage &message, std::vector<std::string> &streamIds,
+    bool platformSupportDolbyAtmos, rapidjson::Document &event)
+{
+    if (!message.hasPlayerHandle || message.messageType != 0x4000 || !message.structureName ||
+        std::strcmp(message.structureName, "media-info") != 0 || !message.streamId)
+        return false;
+    const char *streamId = g_value_get_string(message.streamId);
+    if (!streamId) return false;
+    if (streamIds.size() == 1 && streamIds[0] == "0" &&
+        (message.dualMono || message.immersive || message.codecName))
+        streamIds[0] = streamId;
+    int trackIndex = -1;
+    for (std::size_t index = 0; index < streamIds.size(); ++index) {
+        if (streamIds[index] == streamId) { trackIndex = static_cast<int>(index); break; }
+    }
+    return readAudioInfoEvent(message, false, trackIndex, platformSupportDolbyAtmos, event);
 }
 }

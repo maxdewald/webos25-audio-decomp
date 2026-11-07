@@ -1,6 +1,7 @@
 // @sources src/starfish-media-pipeline/metadata.cpp src/starfish-media-pipeline/track_metadata.cpp
 // @cflags -std=c++14 -isystem lg-opensource/public/boost
 #include "../../src/starfish-media-pipeline/metadata.hpp"
+#include <boost/property_tree/json_parser.hpp>
 #include <cassert>
 #include <iostream>
 #include <limits>
@@ -88,6 +89,101 @@ static void eventUpdates()
     event.put("codec-name", "DTSHD");
     assert(!smp::handleAudioInfoEvent(state, tracks, 1, event));
     assert(state.codecName == "x-raw");
+    assert(state.audioInfoEvent.get<std::string>("codec-name") == "DTSHD");
+    state.sourceType = -1;
+    event.put("track", 0);
+    assert(!smp::handleAudioInfoEvent(state, tracks, 1, event));
+    assert(state.codecName == "x-raw");
+    assert(state.audioInfoEvent.get<int>("track") == 0);
+    state.sourceType = 0;
+    event.put("immersive", "ATMOS");
+    assert(smp::handleAudioInfoEvent(state, tracks, 1, event));
+    assert(state.immersive == "ATMOS" && state.internalSourceImmersive == "ATMOS");
+    assert(state.audioInfoEvent.get<std::string>("immersive") == "none");
+    state.internalSourceImmersive = "unchanged";
+    assert(!smp::handleAudioInfoEvent(state, tracks, 1, event));
+    assert(state.internalSourceImmersive == "unchanged");
+}
+static void audioInfoCaller()
+{
+    smp::AudioTrack tracks[2];
+    tracks[0].codec = "dts";
+    tracks[0].channels = 6;
+    smp::AudioReportingContext state;
+    state.selectedTrack = &tracks[0];
+    state.audioTrackCount = 2;
+    int submissions = 0, notifications = 0;
+    std::string order;
+    smp::Ptree report, forwarded;
+    const std::int64_t number = 0x123456789LL;
+    smp::AudioInfoEventCallbacks callbacks;
+    callbacks.setDecodeInfo = [&](const std::string &kind, const std::string &json) {
+        assert(kind == "audio");
+        assert(smp::util::parseJson(json.c_str(), &report));
+        assert(report.get<std::string>("requestType") == "setAudioInputInfo");
+        ++submissions;
+        order += "d";
+    };
+    callbacks.sendCallbackEvent = [&](int type, std::int64_t payload, const std::string &json) {
+        assert(type == 7 && payload == number);
+        assert(smp::util::parseJson(json.c_str(), &forwarded));
+        ++notifications;
+        order += "c";
+    };
+    const char *update = R"({"track":1,"codec-name":"dts_hd_ma","out-channels":8,"immersive":"ATMOS","extra":"preserved"})";
+    smp::callbackFunctionHook(state, tracks, 2, 8, number, update, callbacks);
+    smp::callbackFunctionHook(state, tracks, 2, 7, number, nullptr, callbacks);
+    smp::callbackFunctionHook(state, tracks, 2, 7, number, "", callbacks);
+    assert(submissions == 0 && notifications == 0 && state.audioInfoEvent.empty());
+    smp::callbackFunctionHook(state, tracks, 2, 7, number, update, callbacks);
+    assert(order == "dc" && submissions == 1 && notifications == 1);
+    assert(report.get<std::string>("categoryInfo.codec") == "dts_hd_ma");
+    assert(report.get<int>("categoryInfo.channel") == 8);
+    assert(report.get<std::string>("categoryInfo.immersive") == "atmos");
+    assert(forwarded.get<int>("track") == 1);
+    assert(forwarded.get<std::string>("immersive") == "none");
+    assert(forwarded.get<std::string>("extra") == "preserved");
+    smp::callbackFunctionHook(state, tracks, 2, 7, number, update, callbacks);
+    assert(order == "dcc" && submissions == 1 && notifications == 2);
+    state.audioInfoDescription = "Dolby Atmos";
+    smp::callbackFunctionHook(state, tracks, 2, 7, number, update, callbacks);
+    assert(submissions == 1 && forwarded.get<std::string>("immersive") == "ATMOS");
+    smp::callbackFunctionHook(state, tracks, 2, 7, number, R"({"track":1,"dualMono":true})", callbacks);
+    assert(tracks[1].dualMono && !tracks[0].dualMono && submissions == 1);
+    assert(!forwarded.get_optional<std::string>("codec-name"));
+    assert(state.codecName == "dts_hd_ma" && state.outChannels == 8);
+    state.sourceType = -1;
+    smp::callbackFunctionHook(state, tracks, 2, 7, number, R"({"track":0,"codec-name":"dts"})", callbacks);
+    assert(submissions == 1 && state.codecName == "dts_hd_ma");
+    assert(forwarded.get<std::string>("codec-name") == "dts");
+    state.sourceType = 0;
+    smp::callbackFunctionHook(state, tracks, 2, 7, number, R"({"track":2,"codec-name":"dts"})", callbacks);
+    assert(submissions == 1 && state.codecName == "dts_hd_ma" && forwarded.get<int>("track") == 2);
+    int previousNotifications = notifications;
+    bool threw = false;
+    try { smp::callbackFunctionHook(state, tracks, 2, 7, number, "{", callbacks); }
+    catch (const boost::property_tree::json_parser_error &) { threw = true; }
+    assert(threw && notifications == previousNotifications && submissions == 1);
+    threw = false;
+    try { smp::callbackFunctionHook(state, tracks, 2, 7, number, R"({"codec-name":"dts"})", callbacks); }
+    catch (const boost::property_tree::ptree_bad_path &) { threw = true; }
+    assert(threw && notifications == previousNotifications && submissions == 1);
+    assert(state.audioInfoEvent.get<std::string>("codec-name") == "dts");
+    assert(!state.audioInfoEvent.get_optional<int>("track"));
+    smp::callbackFunctionHook(state, tracks, 2, 7, number,
+        R"({"track":0,"dualMono":"invalid","out-channels":"invalid"})", callbacks);
+    assert(submissions == 1 && state.outChannels == 8 && !tracks[0].dualMono);
+    smp::callbackFunctionHook(state, tracks, 2, 7, number,
+        R"({"track":0,"out-channels":-1})", callbacks);
+    assert(submissions == 2 && state.outChannels == -1);
+    assert(report.get<int>("categoryInfo.channel") == 6);
+    state.reset = true;
+    smp::callbackFunctionHook(state, tracks, 2, 7, number,
+        R"({"track":0,"immersive":"none"})", callbacks);
+    assert(submissions == 3 && state.internalSourceImmersive == "none");
+    assert(report.get<std::string>("categoryInfo.codec") == "none");
+    assert(report.get<std::string>("categoryInfo.immersive") == "none");
+    assert(order.substr(order.size() - 4) == "dcdc");
 }
 static void trackParsers()
 {
@@ -175,6 +271,6 @@ static void videoReporting()
 }
 int main()
 {
-    audioReporting(); eventUpdates(); trackParsers(); videoReporting();
+    audioReporting(); eventUpdates(); audioInfoCaller(); trackParsers(); videoReporting();
     std::cout << "codec reporting: classification, missing fields, wire formats, events, HDR passed\n";
 }

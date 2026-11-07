@@ -163,9 +163,11 @@ static bool json_has_token(const struct umi_value *value, const char *token)
     return false;
 }
 
-/* @0x48648: stored JValue +4 scanned for exact tokens; MAT2PCM hidden under
- * matprofile1 even when advertised. The capability list is not inferred from
- * arcActivation/device type. Raw 0x38668/0x386b4 compare before token lookup. */
+/* @0x48648: stored JValue +4 is indexed as an array, then each element is
+ * compared directly to std::string (raw 0x38674/0x3867c), not audioCodingType.
+ * json_has_token models that comparison for string entries; no coercion or
+ * case normalization. MAT2PCM is hidden under exact matprofile1 (raw
+ * 0x386a8/0x386b6). Logging inside that loop is omitted here. */
 bool isEarcCapabilityAvailable(umi_tv_audio *a, const char *token)
 {
     if (eq(umi_ops.string_at(a, UMI_MAT_PROFILE), "matprofile1") && eq(token, "MAT2PCM"))

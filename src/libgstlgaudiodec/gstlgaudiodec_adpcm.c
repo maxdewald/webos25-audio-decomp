@@ -72,11 +72,13 @@ static gboolean gst_lg_audiodec_adpcm_src_event(GstPad *pad, GstObject *parent, 
     gboolean ret;
 
     if (!pAudioDec) {
+#line 265 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_adpcm.c"
         GST_ERROR("pAudioDec is NULL");
         return FALSE;
     }
     gst_lg_adec_upstream_event(pAudioDec, event);
     ret = gst_pad_event_default(pad, parent, event);
+#line 273 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_adpcm.c"
     GST_INFO("ret = %s", ret ? "TRUE" : "FALSE");
     return ret;
 }
@@ -90,6 +92,7 @@ static gboolean gst_lg_audiodec_adpcm_sink_event(GstPad *pad, GstObject *parent,
     gboolean ret;
 
     if (!pAudioDec) {
+#line 235 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_adpcm.c"
         GST_ERROR("pAudioDec is NULL");
         return FALSE;
     }
@@ -101,6 +104,7 @@ static gboolean gst_lg_audiodec_adpcm_sink_event(GstPad *pad, GstObject *parent,
         gst_event_unref(event);
     if (type == GST_EVENT_SEGMENT)
         ret = TRUE;
+#line 250 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_adpcm.c"
     GST_INFO("ret = %s", ret ? "TRUE" : "FALSE");
     return ret;
 }
@@ -121,9 +125,11 @@ static GstStateChangeReturn gst_lg_audiodec_adpcm_change_state(GstElement *eleme
     GstStateChangeReturn ret;
 
     if (!pAudioDec) {
+#line 321 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_adpcm.c"
         GST_ERROR("pAudioDec is NULL");
         return GST_STATE_CHANGE_FAILURE;
     }
+#line 325 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_adpcm.c"
     GST_INFO("DEC.%d - change state from %s to %s (pending=%s)", pAudioDec->index,
              gst_element_state_get_name(GST_STATE_TRANSITION_CURRENT(transition)),
              gst_element_state_get_name(GST_STATE_TRANSITION_NEXT(transition)),
@@ -131,6 +137,7 @@ static GstStateChangeReturn gst_lg_audiodec_adpcm_change_state(GstElement *eleme
     gst_lg_adec_change_state_up(pAudioDec, transition);
     ret = GST_ELEMENT_CLASS(parent_class)->change_state(element, transition);
     gst_lg_adec_change_state_down(pAudioDec, transition);
+#line 338 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_adpcm.c"
     GST_INFO("DEC.%d - change state from %s to %s. DONE", pAudioDec->index,
              gst_element_state_get_name(GST_STATE_TRANSITION_CURRENT(transition)),
              gst_element_state_get_name(GST_STATE_TRANSITION_NEXT(transition)));
@@ -145,10 +152,12 @@ static void gst_lg_audiodec_adpcm_get_property(GObject *object, guint prop_id, G
                                     gst_lg_audiodec_adpcm_get_type(), GstLgAudioDecAdpcm);
 
     if (!pAudioDec) {
+#line 304 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_adpcm.c"
         GST_ERROR("pAudioDec is NULL");
         return;
     }
     if (!gst_lg_adec_get_property(pAudioDec, prop_id, value, pspec))
+#line 310 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_adpcm.c"
         G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
 }
 
@@ -160,10 +169,12 @@ static void gst_lg_audiodec_adpcm_set_property(GObject *object, guint prop_id,
                                     gst_lg_audiodec_adpcm_get_type(), GstLgAudioDecAdpcm);
 
     if (!pAudioDec) {
+#line 286 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_adpcm.c"
         GST_ERROR("pAudioDec is NULL");
         return;
     }
     if (!gst_lg_adec_set_property(pAudioDec, prop_id, value, pspec))
+#line 293 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_adpcm.c"
         G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
 }
 
@@ -197,6 +208,7 @@ static void gst_lg_audiodec_adpcm_class_intern_init(gpointer klass)
 static void gst_lg_audiodec_adpcm_init(GstLgAudioDecAdpcm *pAudioDec)
 {
     if (!pAudioDec) {
+#line 191 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_adpcm.c"
         GST_ERROR("pAudioDec is NULL");
         return;
     }
@@ -240,10 +252,12 @@ GstFlowReturn gst_lg_audiodec_adpcm_getinfo(const GstStructure *s, LGADEC_CODEC_
     const gchar *layout;
     int i;
 
+#line 354 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_adpcm.c"
     GST_INFO("Get ADPCM info");
     codec_info->codec_type = LGADEC_CODEC_ADPCM;
     layout = gst_structure_get_string(s, "layout");
     if (layout) {
+#line 360 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_adpcm.c"
         GST_INFO("layout of ADPCM = %s", layout);
         for (i = 0; _gAdpcmLyaoutMap[i].pAdpcmLayout; i++) {
             if (strstr(_gAdpcmLyaoutMap[i].pAdpcmLayout, layout)) {
@@ -252,6 +266,7 @@ GstFlowReturn gst_lg_audiodec_adpcm_getinfo(const GstStructure *s, LGADEC_CODEC_
             }
         }
     }
+#line 370 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_adpcm.c"
     GST_INFO("ADPCM Layout is 0x%X", codec_info->codec_format);
     return GST_FLOW_OK;
 }

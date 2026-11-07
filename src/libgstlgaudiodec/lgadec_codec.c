@@ -98,38 +98,46 @@ static inline int16_t clip_int16(int v)
 /* @0x31020: one IMA ADPCM nibble */
 int16_t _adpcm_decoder(ADPCM_DATA_T *adpcm_data, uint8_t ch, int8_t nibble)
 {
-    int step = _adpcm_step_table[adpcm_data->adpcm_index[ch]];
-    int index = adpcm_data->adpcm_index[ch] + _adpcm_index_table[(uint8_t)nibble];
-    int diff, sample;
+    int index = adpcm_data->adpcm_index[ch];
+    int step = _adpcm_step_table[index];
+    int predictor;
+    int diff;
 
-    if (index > 88)
+    index += _adpcm_index_table[nibble];
+    if (index >= 88)
         index = 88;
     if (index < 0)
         index = 0;
-    diff = ((nibble & 7) * 2 * step + step) >> 3;
+    diff = (((nibble & 7) * 2 + 1) * step) >> 3;
+    predictor = adpcm_data->adpcm_predictor_sample[ch];
     if (nibble & 8)
-        diff = -diff;
-    sample = adpcm_data->adpcm_predictor_sample[ch] + diff;
+        predictor -= diff;
+    else
+        predictor += diff;
+    if ((unsigned int)(predictor + 0x8000) & 0xffff0000u)
+        predictor = (predictor >> 31) ^ 0x7fff;
+    else
+        predictor = (int16_t)predictor;
     adpcm_data->adpcm_index[ch] = index;
-    adpcm_data->adpcm_predictor_sample[ch] = clip_int16(sample);
-    return (int16_t)adpcm_data->adpcm_predictor_sample[ch];
+    adpcm_data->adpcm_predictor_sample[ch] = predictor;
+    return predictor;
 }
 
 /* @0x3108c: one Microsoft ADPCM nibble */
 int16_t _adpcm_ms_expand_nibble(ADPCM_DATA_T *adpcm_data, uint8_t ch, char nibble)
 {
-    int predictor, idelta = adpcm_data->adpcm_idelta[ch];
-    int snibble = (nibble & 8) ? nibble - 16 : nibble;
-    int16_t sample;
+    int predictor;
 
     predictor = (adpcm_data->adpcm_sample_1[ch] * adpcm_data->adpcm_coeff_1[ch] +
                  adpcm_data->adpcm_sample_2[ch] * adpcm_data->adpcm_coeff_2[ch]) / 64;
+    predictor += ((nibble & 8) ? nibble - 16 : nibble) * adpcm_data->adpcm_idelta[ch];
     adpcm_data->adpcm_sample_2[ch] = adpcm_data->adpcm_sample_1[ch];
-    sample = clip_int16(snibble * idelta + predictor);
-    adpcm_data->adpcm_sample_1[ch] = sample;
-    idelta = (_adpcm_adapt_table[(uint8_t)nibble] * idelta) >> 8;
-    adpcm_data->adpcm_idelta[ch] = idelta < 16 ? 16 : idelta;
-    return sample;
+    adpcm_data->adpcm_sample_1[ch] = clip_int16(predictor);
+    adpcm_data->adpcm_idelta[ch] =
+        (_adpcm_adapt_table[(unsigned char)nibble] * adpcm_data->adpcm_idelta[ch]) >> 8;
+    if (adpcm_data->adpcm_idelta[ch] < 16)
+        adpcm_data->adpcm_idelta[ch] = 16;
+    return adpcm_data->adpcm_sample_1[ch];
 }
 
 /* @0x3110c: AAC sampling_frequency_index (0 if not in the table) */
@@ -427,7 +435,7 @@ int _iamf_feed(lgadec *adec, uint8_t *data, uint32_t len, uint64_t timestamp)
 }
 
 /* @0x31c5c */
-void _aac_init(void *h)
+static void _aac_init(void *h)
 {
     AAC_DATA_T *aac = h;
 
@@ -441,7 +449,7 @@ void _aac_init(void *h)
 }
 
 /* @0x31cd8 */
-void _ac4_init(void *h)
+static void _ac4_init(void *h)
 {
     AC4_DATA_T *ac4 = h;
 
@@ -602,34 +610,38 @@ static inline void _aac_set_adts_length(uint8_t *h, unsigned int channels, unsig
 }
 
 /* inlined: sync word check on the first access unit */
-static inline LGADEC_CODEC_FORMAT_T _aac_detect(const uint8_t *data, uint32_t len)
+static int _aac_detect(lgadec *adec, uint8_t *data, uint32_t len)
 {
-    unsigned int sync;
+    AAC_DATA_T *aac = adec->codec_data;
 
     if (len < 7) {
         LOGT(0x107, "buf size is less than %d bytes. This AAC audio chunk is NOT ADTS", 7);
-        return LGADEC_RAW_FORMAT;
+        aac->aac_format = LGADEC_RAW_FORMAT;
+    } else {
+        uint16_t sync;
+
+        memcpy(&sync, data, sizeof(sync));
+        sync = (sync & 0xff) << 8 | sync >> 8;
+        if ((sync & 0xfff0) == 0xfff0) {
+            LOGT(0x112, "This AAC audio chunk is ADTS");
+            aac->aac_format = LGADEC_AAC_ADTS_FORMAT;
+        } else if (sync >> 5 == 0x2b7) {
+            LOGT(0x116, "This AAC audio chunk is LOAS format.");
+            aac->aac_format = LGADEC_AAC_LOAS_FORMAT;
+        } else {
+            LOGT(0x119, "This AAC audio chunk is NOT ADTS/LOAS format.");
+            aac->aac_format = LGADEC_RAW_FORMAT;
+        }
     }
-    sync = data[0] << 8 | data[1];
-    if ((sync & 0xfff0) == 0xfff0) {
-        LOGT(0x112, "This AAC audio chunk is ADTS");
-        return LGADEC_AAC_ADTS_FORMAT;
-    }
-    if (sync >> 5 == 0x2b7) {
-        LOGT(0x116, "This AAC audio chunk is LOAS format.");
-        return LGADEC_AAC_LOAS_FORMAT;
-    }
-    LOGT(0x119, "This AAC audio chunk is NOT ADTS/LOAS format.");
-    return LGADEC_RAW_FORMAT;
+    return 0;
 }
 
 /* inlined: AudioSpecificConfig -> object type / ADTS byte 2 / channel config */
-static inline int _get_aac_info(void *extra_data, uint32_t len, uint8_t *object_type,
-                                uint8_t *adts_byte2, uint8_t *channels)
+static int _get_aac_info(void *extra_data, uint32_t len, uint8_t *object_type,
+                         uint8_t *adts_byte2, uint8_t *channels)
 {
     uint8_t *dsi = extra_data;
-    uint8_t ot, freq_idx, ch;
-    uint8_t b2;
+    uint8_t ot, freq_idx, ch = 0;
 
     if (!dsi || len < 2) {
         LOGE(0xc8, "extra_data is NULL or extra_data_len is less than 2!!!");
@@ -640,122 +652,137 @@ static inline int _get_aac_info(void *extra_data, uint32_t len, uint8_t *object_
         ot = ((dsi[0] & 7) << 3 | dsi[1] >> 5) + 32;
         freq_idx = (dsi[1] & 0x1f) >> 1;
         if (freq_idx == 15) {
-            if (len < 5) {
-                b2 = 15 << 2;
-                ch = 0;
-            } else {
+            if (len >= 5) {
                 freq_idx = _get_freq_idx((dsi[1] & 1) << 23 | dsi[2] << 15 | dsi[3] << 7 | dsi[4] >> 1);
-                b2 = (freq_idx & 0xf) << 2;
-                ch = len == 5 ? 0 : ((dsi[4] & 1) << 3 | dsi[5] >> 5);
+                if (len > 5)
+                    ch = (dsi[4] & 1) << 3 | dsi[5] >> 5;
             }
-        } else {
-            b2 = freq_idx << 2;
-            ch = len == 2 ? 0 : ((dsi[1] & 1) << 3 | dsi[2] >> 5);
+        } else if (len > 2) {
+            ch = (dsi[1] & 1) << 3 | dsi[2] >> 5;
         }
     } else {
         freq_idx = (dsi[0] & 7) << 1 | dsi[1] >> 7;
         if (freq_idx == 15) {
-            if (len < 5) {
-                b2 = 15 << 2;
-                ch = 0;
-            } else {
+            if (len >= 5) {
                 freq_idx = _get_freq_idx((dsi[1] & 0x7f) << 17 | dsi[2] << 9 | dsi[3] << 1 | dsi[4] >> 7);
-                b2 = (freq_idx & 0xf) << 2;
                 ch = (dsi[4] & 0x7f) >> 3;
             }
         } else {
-            b2 = freq_idx << 2;
             ch = (dsi[1] & 0x7f) >> 3;
         }
     }
-    LOGT(0xf5, "objectType = 0x%02X, freqIndex = 0x%02X, ch = 0x%02X", ot, freq_idx, ch);
     *object_type = ot;
-    *adts_byte2 = b2;
+    *adts_byte2 = freq_idx;
     *channels = ch;
+        LOGT(0xf5, "objectType = 0x%02X, freqIndex = 0x%02X, ch = 0x%02X", *object_type,
+            *adts_byte2, *channels);
     return 0;
 }
 
 /* inlined: tells the DSP the AAC config. Layout: ADTS header(7) 0xdeadbeef 0xcafebabe
  * object_type(1) format(1) AudioSpecificConfig(n), timestamp 0. */
-static inline int _aac_first_data(lgadec *adec, uint8_t *data, uint32_t len)
+static int _aac_first_data(lgadec *adec, uint8_t *data, uint32_t len)
 {
-    AAC_DATA_T *aac = adec->codec_data;
-    LGADEC_STREAM_INFO_T *si = &adec->stream_info;
-    uint8_t object_type = si->object_type;
+    LGADEC_STREAM_INFO_T *si;
+    AAC_DATA_T *aac;
+    uint8_t object_type;
     uint8_t byte2, channels;
-    unsigned int adts_len = si->dsi_buffer_length + 17;
+    uint8_t *buf, *ptr;
+    int dsi_len;
+    uint8_t *adts_header;
+    uint32_t adts_len;
+    int ret;
+
+    if (!adec) {
+        LOGE(0x12e, "adec is null");
+        return -1;
+    }
+    aac = adec->codec_data;
+    if (!aac) {
+        LOGE(0x12f, "adec->codec_data is null");
+        return -1;
+    }
+    si = &adec->stream_info;
+    adts_header = aac->aac_adts_header;
+    adts_len = si->dsi_buffer_length + 17;
+    object_type = si->object_type;
 
     if (aac->aac_format == LGADEC_UNKNOWN_FORMAT || adec->app_type != LGADEC_APP_TYPE_APPCAST)
-        aac->aac_format = _aac_detect(data, len);
+        _aac_detect(adec, data, len);
     lgadec_decoder_set_aac_format_type(adec, aac->aac_format);
 
     switch (aac->aac_format) {
     case LGADEC_AAC_ADTS_FORMAT:
-        aac->aac_adts_header[0] = data[0];
-        aac->aac_adts_header[1] = data[1];
-        aac->aac_adts_header[2] = data[2];
-        aac->aac_adts_header[6] = data[6];
-        _aac_set_adts_length(aac->aac_adts_header, si->channels, adts_len);
+        adts_header[0] = data[0];
+        adts_header[1] = data[1];
+        adts_header[2] = data[2];
+        adts_header[6] = data[6];
+        _aac_set_adts_length(adts_header, si->channels, adts_len);
         return 0;
     case LGADEC_AAC_LOAS_FORMAT:
-        aac->aac_adts_header[0] = 0xff;
-        aac->aac_adts_header[1] = 0xf1;
-        aac->aac_adts_header[2] = (object_type - 1) << 6;
-        aac->aac_adts_header[6] = 0;
-        _aac_set_adts_length(aac->aac_adts_header, si->channels, adts_len);
+        adts_header[0] = 0xff;
+        adts_header[1] = 0xf1;
+        adts_header[2] = (object_type - 1) * 64;
+        adts_header[6] = 0;
+        _aac_set_adts_length(adts_header, si->channels, adts_len);
         return 0;
-    case LGADEC_RAW_FORMAT:
-        if (!si->dsi_buffer || _get_aac_info(si->dsi_buffer, si->dsi_buffer_length,
-                                            &object_type, &byte2, &channels) != 0) {
+    case LGADEC_RAW_FORMAT: {
+        if (si->dsi_buffer && _get_aac_info(si->dsi_buffer, si->dsi_buffer_length,
+                                           &object_type, &byte2, &channels) == 0) {
+            uint8_t profile = object_type ? object_type - 1 : 0;
+
+            if ((uint8_t)(channels - 1) > 6)
+                channels = si->channels;
+            si->channels = channels;
+            adts_header[0] = 0xff;
+            adts_header[1] = 0xf1;
+            adts_header[2] = (int8_t)(profile << 6 | (byte2 & 0xf) << 2) | (channels & 7) >> 2;
+            adts_header[6] = 0;
+            _aac_set_adts_length(adts_header, si->channels, adts_len);
+
+            dsi_len = adec->stream_info.dsi_buffer_length;
+            adts_len = dsi_len + 17;
+            buf = malloc(adts_len);
+            uint32_t magic;
+
+            if (!buf) {
+                LOGE(0x178, "malloc Err");
+                return -1;
+            }
+            memcpy(buf, adts_header, 7);
+            ptr = buf + 7;
+            magic = 0xdeadbeef;
+            memcpy(ptr, &magic, sizeof(magic));
+            ptr += sizeof(magic);
+            magic = 0xcafebabe;
+            memcpy(ptr, &magic, sizeof(magic));
+            ptr += sizeof(magic);
+            *ptr++ = object_type;
+            *ptr++ = aac->aac_format;
+            if (adec->stream_info.dsi_buffer)
+                memcpy(ptr, adec->stream_info.dsi_buffer, dsi_len);
+            LOGN(0x18f, "Tell F/W, object type %d, Data Format %d\n", object_type, aac->aac_format);
+            LOGN(0x191, "dsi / total : %d / %d\n", adec->stream_info.dsi_buffer_length, adts_len);
+            ret = lgadec_decoder_feed(adec, buf, adts_len, 0);
+
+            free(buf);
+            if (ret != 0) {
+                LOGE(0x19a, "Feed Err (first data)");
+                return -1;
+            }
+            aac->feed_cnt++;
+            adec->fed_frame_cnt++;
+        } else {
             LOGT(0x1a1, "DSI is NULL(%p) or _get_aac_info() ERR!!! do not create ADTS seq header",
                  si->dsi_buffer);
             aac->aac_format = LGADEC_UNKNOWN_FORMAT;
             return -1;
         }
-        if (object_type != 0) {
-            uint8_t profile = object_type - 1;
-
-            byte2 |= profile << 6;
-        }
-        if ((uint8_t)(channels - 1) > 6)
-            channels = si->channels;
-        si->channels = channels;
-        aac->aac_adts_header[0] = 0xff;
-        aac->aac_adts_header[1] = 0xf1;
-        aac->aac_adts_header[2] = byte2 | (channels & 7) >> 2;
-        aac->aac_adts_header[6] = 0;
-        _aac_set_adts_length(aac->aac_adts_header, si->channels, adts_len);
         break;
+    }
     default:
         return 0;
     }
-
-    unsigned int dsi_len = adec->stream_info.dsi_buffer_length;
-    unsigned int size = dsi_len + 17;
-    uint8_t *buf = malloc(size);
-    static const uint8_t magic[8] = { 0xef, 0xbe, 0xad, 0xde, 0xbe, 0xba, 0xfe, 0xca };
-
-    if (!buf) {
-        LOGE(0x178, "malloc Err");
-        return -1;
-    }
-    memcpy(buf, aac->aac_adts_header, 7);
-    memcpy(buf + 7, magic, 8);
-    buf[15] = object_type;
-    buf[16] = aac->aac_format;
-    if (adec->stream_info.dsi_buffer)
-        memcpy(buf + 17, adec->stream_info.dsi_buffer, dsi_len);
-    LOGN(0x18f, "Tell F/W, object type %d, Data Format %d\n", object_type, aac->aac_format);
-    LOGN(0x191, "dsi / total : %d / %d\n", adec->stream_info.dsi_buffer_length, size);
-    int ret = lgadec_decoder_feed(adec, buf, size, 0);
-
-    free(buf);
-    if (ret != 0) {
-        LOGE(0x19a, "Feed Err (first data)");
-        return -1;
-    }
-    aac->feed_cnt++;
-    adec->fed_frame_cnt++;
     return 0;
 }
 
@@ -766,6 +793,7 @@ int _aac_feed(lgadec *adec, uint8_t *data, uint32_t len, uint64_t timestamp)
 {
     AAC_DATA_T *aac;
     LGADEC_STREAM_INFO_T *si;
+    uint8_t *adts_header;
 
     if (!adec) {
         LOGE(0x1b3, "adec is null");
@@ -777,6 +805,7 @@ int _aac_feed(lgadec *adec, uint8_t *data, uint32_t len, uint64_t timestamp)
         return -1;
     }
     si = &adec->stream_info;
+    adts_header = aac->aac_adts_header;
     if (aac->aac_format == LGADEC_UNKNOWN_FORMAT)
         aac->aac_format = aac->aac_format_from_demux;
 
@@ -808,8 +837,8 @@ int _aac_feed(lgadec *adec, uint8_t *data, uint32_t len, uint64_t timestamp)
             LOGE(0x1df, "malloc Err");
             return -1;
         }
-        _aac_set_adts_length(aac->aac_adts_header, channels, total);
-        memcpy(frame, aac->aac_adts_header, 7);
+        _aac_set_adts_length(adts_header, channels, total);
+        memcpy(frame, adts_header, 7);
         memcpy(frame + 7, data, len);
         ret = lgadec_decoder_feed(adec, frame, total, timestamp);
         free(frame);
@@ -918,7 +947,13 @@ out:
     return 0;
 }
 
-static inline int16_t rd16(const uint8_t *p) { return (int16_t)(p[0] | p[1] << 8); }
+static inline int16_t rd16(const uint8_t *p)
+{
+    int16_t value;
+
+    memcpy(&value, p, sizeof(value));
+    return value;
+}
 
 /* @0x32c40: ADPCM blocks -> interleaved S16; *sample is advanced past the output */
 int lgadec_adpcm_resampling(void *a, unsigned char *data, unsigned int len, short **sample)
@@ -945,12 +980,12 @@ int lgadec_adpcm_resampling(void *a, unsigned char *data, unsigned int len, shor
         for (done = 0; done < len; done += block_align) {
             unsigned int pos = 0;
 
-            for (unsigned int c = 0; c < ch; c++) {
+            for (int c = 0; c < ch; c++) {
                 int16_t pred = rd16(data);
 
                 *out++ = pred;
                 adpcm->adpcm_predictor_sample[c] = pred;
-                adpcm->adpcm_index[c] = data[2] > 88 ? 88 : data[2];
+                adpcm->adpcm_index[c] = data[2] >= 88 ? 88 : data[2];
                 data += 4;
             }
             pos = ch * 4;
@@ -958,7 +993,7 @@ int lgadec_adpcm_resampling(void *a, unsigned char *data, unsigned int len, shor
                 int16_t *low = out;
                 int16_t *high = out + stereo;
 
-                for (unsigned int i = 0; i < 4; i++) {
+                for (int i = 0; i < 4; i++) {
                     low[0] = _adpcm_decoder(adpcm, 0, data[i] & 0xf);
                     if (ch == 2) {
                         low[1] = _adpcm_decoder(adpcm, 1, data[4 + i] & 0xf);
@@ -1034,12 +1069,12 @@ int lgadec_adpcm_resampling(void *a, unsigned char *data, unsigned int len, shor
     case LGADEC_ADPCM_IMA_QT:
         /* per channel 34-byte chunk: 9-bit predictor + 7-bit index, 32 bytes = 64 samples */
         for (done = 0; done < len; done += block_align) {
-            for (unsigned int c = 0; c < ch; c++) {
+            for (int c = 0; c < ch; c++) {
                 unsigned int index = data[1] & 0x7f;
 
                 adpcm->adpcm_predictor_sample[c] = (int16_t)((data[0] << 8 | data[1]) & 0xff80);
                 adpcm->adpcm_index[c] = index > 88 ? 88 : index;
-                for (unsigned int i = 2; i < 34; i++) {
+                for (int i = 2; i < 34; i++) {
                     out[0] = _adpcm_decoder(adpcm, c, data[i] & 0xf);
                     out[ch] = _adpcm_decoder(adpcm, c, data[i] >> 4);
                     out += 2 * ch;
@@ -1299,12 +1334,11 @@ int lgadec_dvdlpcm_resampling(void *a, unsigned char *data, unsigned int data_le
 }
 
 /* inlined: Blu-ray LPCM 4-byte header (payload size, channel assignment, rate, bits) */
-static inline int _bdlpcm_parse_header(lgadec *adec, PCM_DATA_T *pcm, const uint8_t *h,
-                                       uint32_t header)
+static int _bdlpcm_parse_header(PCM_DATA_T *pcm, uint32_t header)
 {
     unsigned int ch, freq, width, out_width;
 
-    switch (h[2] >> 4) {
+    switch ((header >> 12) & 0xf) {
     case 1:  ch = 1; break;
     case 3:  ch = 2; break;
     case 4: case 5: ch = 3; break;
@@ -1316,25 +1350,35 @@ static inline int _bdlpcm_parse_header(lgadec *adec, PCM_DATA_T *pcm, const uint
     default: goto err;
     }
     pcm->channels = ch;
-    switch (h[2] & 0xf) {
-    case 1:  freq = 48000; break;
-    case 4:  freq = 96000; break;
-    case 5:  freq = 192000; break;
-    default: goto err;
-    }
+    freq = (header >> 8) & 0xf;
+    if (freq == 4)
+        freq = 96000;
+    else if (freq == 5)
+        freq = 192000;
+    else if (freq == 1)
+        freq = 48000;
+    else
+        goto err;
     pcm->frequency = freq;
-    switch (h[3] >> 6) {
-    case 1:  width = 16; out_width = 16; break;
-    case 2:  width = 20; out_width = 24; break;
-    case 3:  width = 24; out_width = 24; break;
-    default: goto err;
+    width = (header >> 6) & 3;
+    if (width == 2) {
+        width = 20;
+        out_width = 24;
+    } else if (width == 3) {
+        width = 24;
+        out_width = 24;
+    } else if (width == 1) {
+        width = 16;
+        out_width = 16;
+    } else {
+        goto err;
     }
     pcm->width = width;
     pcm->out_width = out_width;
     pcm->header = header;
     pcm->payload_size = header >> 16;
     LOGT(0x68a, "frequency=%u, channels=%u, width=%u(org=%u), channelPad=%u, startFlag=%u",
-         freq, ch, out_width, width, ch & 1, (h[3] & 0x3f) >> 5);
+            freq, ch, out_width, width, ch & 1, (header >> 5) & 1);
     return 0;
 err:
     LOGE(0x692, "BD LPCM header error");
@@ -1346,7 +1390,6 @@ int lgadec_bdlpcm_header_check(void *a, unsigned char *data, unsigned int rd_off
 {
     lgadec *adec = a;
     PCM_DATA_T *pcm;
-    const uint8_t *h;
     uint32_t header;
 
     if (!adec) {
@@ -1355,8 +1398,8 @@ int lgadec_bdlpcm_header_check(void *a, unsigned char *data, unsigned int rd_off
     }
     pcm = adec->codec_data;
     *header_flag = 0;
-    h = data + rd_offset;
-    header = (uint32_t)h[0] << 24 | h[1] << 16 | h[2] << 8 | h[3];
+    header = (uint32_t)data[rd_offset] << 24 | data[rd_offset + 1] << 16 |
+             data[rd_offset + 3] | data[rd_offset + 2] << 8;
     if (pcm->header) {
         if (((pcm->header ^ header) & 0xffc0) == 0)
             return 0;
@@ -1364,7 +1407,7 @@ int lgadec_bdlpcm_header_check(void *a, unsigned char *data, unsigned int rd_off
         *header_flag = 1;
         return 0;
     }
-    if (_bdlpcm_parse_header(adec, pcm, h, header) != 0) {
+    if (_bdlpcm_parse_header(pcm, header) != 0) {
         LOGE(0x6c0, "_bdlpcm_parse_header() Err");
         return -1;
     }
@@ -1375,13 +1418,51 @@ int lgadec_bdlpcm_header_check(void *a, unsigned char *data, unsigned int rd_off
     return 0;
 }
 
+static int _wifilpcm_parse_header(PCM_DATA_T *pcm, uint32_t header)
+{
+    uint32_t freq, channels, width, frames;
+
+    if (header >> 24 != 0xa0) {
+        LOGE(0x6ee, "sub stream ID is not 0xA0");
+        return -1;
+    }
+    frames = (header >> 16) & 0xff;
+    LOGT(0x6f4, "number of audio frame is %u", frames);
+    width = (header >> 6) & 3;
+    if (width != 0) {
+        LOGE(0x6f9, "width info is error");
+        return -1;
+    }
+    width = 16;
+    switch ((header >> 3) & 7) {
+    case 1:  freq = 44100; break;
+    case 2:  freq = 48000; break;
+    default:
+        LOGE(0x708, "frequency info is error");
+        return -1;
+    }
+    channels = header & 7;
+    if (channels > 1) {
+        LOGE(0x714, "channel info is error");
+        return -1;
+    }
+    channels = 2;
+    pcm->width = width;
+    pcm->out_width = width;
+    pcm->header = header;
+    pcm->frequency = freq;
+    pcm->payload_size = frames * 320;
+    pcm->channels = channels;
+    return 0;
+}
+
 /* @0x33b18: Wi-Fi Display LPCM (sub stream 0xA0): always 2ch/16 bit, 44.1 or 48 kHz */
 int lgadec_wifilpcm_header_check(void *a, unsigned char *data, unsigned int rd_offset, int *header_flag)
 {
     lgadec *adec = a;
     PCM_DATA_T *pcm;
     const uint8_t *h;
-    uint32_t header, freq;
+    uint32_t header;
 
     if (!adec) {
         LOGE(0x72e, "adec is null");
@@ -1390,7 +1471,7 @@ int lgadec_wifilpcm_header_check(void *a, unsigned char *data, unsigned int rd_o
     pcm = adec->codec_data;
     *header_flag = 0;
     h = data + rd_offset;
-    header = (uint32_t)h[0] << 24 | h[1] << 16 | h[2] << 8 | h[3];
+    header = (uint32_t)h[0] << 24 | h[1] << 16 | h[3] | h[2] << 8;
     if (pcm->header) {
         if (((pcm->header ^ header) & 0xffff00ff) == 0)
             return 0;
@@ -1398,41 +1479,15 @@ int lgadec_wifilpcm_header_check(void *a, unsigned char *data, unsigned int rd_o
         *header_flag = 1;
         return 0;
     }
-    /* _wifilpcm_parse_header (inlined) */
-    if (h[0] != 0xa0) {
-        LOGE(0x6ee, "sub stream ID is not 0xA0");
-        goto err;
+    if (_wifilpcm_parse_header(pcm, header) != 0) {
+        LOGE(0x750, "_wifilpcm_parse_header() Err");
+        return -1;
     }
-    LOGT(0x6f4, "number of audio frame is %u", h[1]);
-    if (h[3] >> 6 != 0) {
-        LOGE(0x6f9, "width info is error");
-        goto err;
-    }
-    switch ((h[3] & 0x3f) >> 3) {
-    case 1:  freq = 44100; break;
-    case 2:  freq = 48000; break;
-    default:
-        LOGE(0x708, "frequency info is error");
-        goto err;
-    }
-    if (h[3] & 6) {
-        LOGE(0x714, "channel info is error");
-        goto err;
-    }
-    pcm->width = 16;
-    pcm->out_width = 16;
-    pcm->header = header;
-    pcm->frequency = freq;
-    pcm->payload_size = h[1] * 320;
-    pcm->channels = 2;
-    adec->stream_info.freq = freq;
-    adec->stream_info.channels = 2;
-    adec->stream_info.bits_per_sample = 16;
+    adec->stream_info.freq = pcm->frequency;
+    adec->stream_info.channels = pcm->channels;
+    adec->stream_info.bits_per_sample = pcm->out_width;
     *header_flag = 2;
     return 0;
-err:
-    LOGE(0x750, "_wifilpcm_parse_header() Err");
-    return -1;
 }
 
 /* @0x33d40: BD / Wi-Fi LPCM big endian -> little endian into out_data */
@@ -1491,7 +1546,7 @@ int lgadec_mulaw_resampling(void *a, unsigned char *data, unsigned int data_len,
 /* @0x33f10: G.711 A-law -> S16 (table copied onto the stack in the original) */
 int lgadec_alaw_resampling(void *a, unsigned char *data, unsigned int data_len, short *pcm_data)
 {
-    static const int16_t trans_table_alaw_to_signed_16bits[256] = {
+    const int16_t trans_table_alaw_to_signed_16bits[256] = {
          -5504,  -5248,  -6016,  -5760,  -4480,  -4224,  -4992,  -4736,
          -7552,  -7296,  -8064,  -7808,  -6528,  -6272,  -7040,  -6784,
          -2752,  -2624,  -3008,  -2880,  -2240,  -2112,  -2496,  -2368,

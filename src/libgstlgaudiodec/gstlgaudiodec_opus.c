@@ -73,11 +73,13 @@ static gboolean gst_lg_audiodec_opus_src_event(GstPad *pad, GstObject *parent, G
     gboolean ret;
 
     if (!pAudioDec) {
+#line 229 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_opus.c"
         GST_ERROR("pAudioDec is NULL");
         return FALSE;
     }
     gst_lg_adec_upstream_event(pAudioDec, event);
     ret = gst_pad_event_default(pad, parent, event);
+#line 237 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_opus.c"
     GST_INFO("ret = %s", ret ? "TRUE" : "FALSE");
     return ret;
 }
@@ -91,6 +93,7 @@ static gboolean gst_lg_audiodec_opus_sink_event(GstPad *pad, GstObject *parent, 
     gboolean ret;
 
     if (!pAudioDec) {
+#line 199 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_opus.c"
         GST_ERROR("pAudioDec is NULL");
         return FALSE;
     }
@@ -102,6 +105,7 @@ static gboolean gst_lg_audiodec_opus_sink_event(GstPad *pad, GstObject *parent, 
         gst_event_unref(event);
     if (type == GST_EVENT_SEGMENT)
         ret = TRUE;
+#line 214 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_opus.c"
     GST_INFO("ret = %s", ret ? "TRUE" : "FALSE");
     return ret;
 }
@@ -122,9 +126,11 @@ static GstStateChangeReturn gst_lg_audiodec_opus_change_state(GstElement *elemen
     GstStateChangeReturn ret;
 
     if (!pAudioDec) {
+#line 285 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_opus.c"
         GST_ERROR("pAudioDec is NULL");
         return GST_STATE_CHANGE_FAILURE;
     }
+#line 289 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_opus.c"
     GST_INFO("DEC.%d - change state from %s to %s (pending=%s)", pAudioDec->index,
              gst_element_state_get_name(GST_STATE_TRANSITION_CURRENT(transition)),
              gst_element_state_get_name(GST_STATE_TRANSITION_NEXT(transition)),
@@ -132,6 +138,7 @@ static GstStateChangeReturn gst_lg_audiodec_opus_change_state(GstElement *elemen
     gst_lg_adec_change_state_up(pAudioDec, transition);
     ret = GST_ELEMENT_CLASS(parent_class)->change_state(element, transition);
     gst_lg_adec_change_state_down(pAudioDec, transition);
+#line 302 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_opus.c"
     GST_INFO("DEC.%d - change state from %s to %s. DONE", pAudioDec->index,
              gst_element_state_get_name(GST_STATE_TRANSITION_CURRENT(transition)),
              gst_element_state_get_name(GST_STATE_TRANSITION_NEXT(transition)));
@@ -146,10 +153,12 @@ static void gst_lg_audiodec_opus_get_property(GObject *object, guint prop_id, GV
                                     gst_lg_audiodec_opus_get_type(), GstLgAudioDecOpus);
 
     if (!pAudioDec) {
+#line 268 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_opus.c"
         GST_ERROR("pAudioDec is NULL");
         return;
     }
     if (!gst_lg_adec_get_property(pAudioDec, prop_id, value, pspec))
+#line 274 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_opus.c"
         G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
 }
 
@@ -161,10 +170,12 @@ static void gst_lg_audiodec_opus_set_property(GObject *object, guint prop_id,
                                     gst_lg_audiodec_opus_get_type(), GstLgAudioDecOpus);
 
     if (!pAudioDec) {
+#line 250 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_opus.c"
         GST_ERROR("pAudioDec is NULL");
         return;
     }
     if (!gst_lg_adec_set_property(pAudioDec, prop_id, value, pspec))
+#line 257 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_opus.c"
         G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
 }
 
@@ -198,6 +209,7 @@ static void gst_lg_audiodec_opus_class_intern_init(gpointer klass)
 static void gst_lg_audiodec_opus_init(GstLgAudioDecOpus *pAudioDec)
 {
     if (!pAudioDec) {
+#line 155 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_opus.c"
         GST_ERROR("pAudioDec is NULL");
         return;
     }
@@ -211,11 +223,12 @@ static void gst_lg_audiodec_opus_init(GstLgAudioDecOpus *pAudioDec)
     gst_lg_adec_init(pAudioDec);
 }
 
-/* @0x25f9c: same as vorbis (calloc instead of malloc), plus a hex dump at LOG level */
+/* @0x25f9c: same as vorbis (calloc instead of malloc), plus a hex dump at DEBUG level */
 GstFlowReturn gst_lg_audiodec_opus_getinfo(const GstStructure *s, LGADEC_CODEC_INFO_T *codec_info)
 {
     const GValue *streamheader;
 
+#line 317 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_opus.c"
     GST_INFO("Get OPUS info");
     streamheader = gst_structure_get_value(s, "streamheader");
     if (streamheader && GST_VALUE_HOLDS_ARRAY(streamheader)) {
@@ -225,6 +238,7 @@ GstFlowReturn gst_lg_audiodec_opus_getinfo(const GstStructure *s, LGADEC_CODEC_I
 
         for (i = 0; i < n; i++)
             size += gst_buffer_get_size(gst_value_get_buffer(gst_value_array_get_value(streamheader, i)));
+#line 333 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_opus.c"
         GST_INFO("opus header size = %u", size);
 
         if (codec_info->buffer)
@@ -246,16 +260,20 @@ GstFlowReturn gst_lg_audiodec_opus_getinfo(const GstStructure *s, LGADEC_CODEC_I
                     memcpy(destination, bufMapInfo.data, buffer_size);
                     gst_buffer_unmap(header, &bufMapInfo);
                 } else {
+#line 361 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_opus.c"
                     GST_ERROR("gst_buffer_map() Err");
                 }
             }
             if (codec_info->buffer) {
+#line 367 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_opus.c"
                 GST_DEBUG("opus header =");
                 for (i = 0; i < (guint)codec_info->buf_size; i++)
+#line 369 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_opus.c"
                     GST_DEBUG("%02X ", codec_info->buffer[i]);
             }
         }
     } else {
+#line 373 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_opus.c"
         GST_ERROR("OPUS: streamheader is not exist");
     }
     codec_info->codec_type = LGADEC_CODEC_OPUS;

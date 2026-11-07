@@ -71,11 +71,13 @@ static gboolean gst_lg_audiodec_wma_src_event(GstPad *pad, GstObject *parent, Gs
     gboolean ret;
 
     if (!pAudioDec) {
+#line 223 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_wma.c"
         GST_ERROR("pAudioDec is NULL");
         return FALSE;
     }
     gst_lg_adec_upstream_event(pAudioDec, event);
     ret = gst_pad_event_default(pad, parent, event);
+#line 231 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_wma.c"
     GST_INFO("ret = %s", ret ? "TRUE" : "FALSE");
     return ret;
 }
@@ -89,6 +91,7 @@ static gboolean gst_lg_audiodec_wma_sink_event(GstPad *pad, GstObject *parent, G
     gboolean ret;
 
     if (!pAudioDec) {
+#line 193 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_wma.c"
         GST_ERROR("pAudioDec is NULL");
         return FALSE;
     }
@@ -100,6 +103,7 @@ static gboolean gst_lg_audiodec_wma_sink_event(GstPad *pad, GstObject *parent, G
         gst_event_unref(event);
     if (type == GST_EVENT_SEGMENT)
         ret = TRUE;
+#line 208 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_wma.c"
     GST_INFO("ret = %s", ret ? "TRUE" : "FALSE");
     return ret;
 }
@@ -120,9 +124,11 @@ static GstStateChangeReturn gst_lg_audiodec_wma_change_state(GstElement *element
     GstStateChangeReturn ret;
 
     if (!pAudioDec) {
+#line 279 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_wma.c"
         GST_ERROR("pAudioDec is NULL");
         return GST_STATE_CHANGE_FAILURE;
     }
+#line 283 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_wma.c"
     GST_INFO("DEC.%d - change state from %s to %s (pending=%s)", pAudioDec->index,
              gst_element_state_get_name(GST_STATE_TRANSITION_CURRENT(transition)),
              gst_element_state_get_name(GST_STATE_TRANSITION_NEXT(transition)),
@@ -130,6 +136,7 @@ static GstStateChangeReturn gst_lg_audiodec_wma_change_state(GstElement *element
     gst_lg_adec_change_state_up(pAudioDec, transition);
     ret = GST_ELEMENT_CLASS(parent_class)->change_state(element, transition);
     gst_lg_adec_change_state_down(pAudioDec, transition);
+#line 296 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_wma.c"
     GST_INFO("DEC.%d - change state from %s to %s. DONE", pAudioDec->index,
              gst_element_state_get_name(GST_STATE_TRANSITION_CURRENT(transition)),
              gst_element_state_get_name(GST_STATE_TRANSITION_NEXT(transition)));
@@ -144,10 +151,12 @@ static void gst_lg_audiodec_wma_get_property(GObject *object, guint prop_id, GVa
                                     gst_lg_audiodec_wma_get_type(), GstLgAudioDecWma);
 
     if (!pAudioDec) {
+#line 262 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_wma.c"
         GST_ERROR("pAudioDec is NULL");
         return;
     }
     if (!gst_lg_adec_get_property(pAudioDec, prop_id, value, pspec))
+#line 268 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_wma.c"
         G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
 }
 
@@ -159,10 +168,12 @@ static void gst_lg_audiodec_wma_set_property(GObject *object, guint prop_id,
                                     gst_lg_audiodec_wma_get_type(), GstLgAudioDecWma);
 
     if (!pAudioDec) {
+#line 244 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_wma.c"
         GST_ERROR("pAudioDec is NULL");
         return;
     }
     if (!gst_lg_adec_set_property(pAudioDec, prop_id, value, pspec))
+#line 251 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_wma.c"
         G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
 }
 
@@ -196,6 +207,7 @@ static void gst_lg_audiodec_wma_class_intern_init(gpointer klass)
 static void gst_lg_audiodec_wma_init(GstLgAudioDecWma *pAudioDec)
 {
     if (!pAudioDec) {
+#line 150 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_wma.c"
         GST_ERROR("pAudioDec is NULL");
         return;
     }
@@ -214,9 +226,11 @@ GstFlowReturn gst_lg_audiodec_wma_getinfo(const GstStructure *s, LGADEC_CODEC_IN
 {
     gint wmaversion;
 
+#line 311 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_wma.c"
     GST_INFO("Get WMA info");
     codec_info->codec_type = LGADEC_CODEC_WMA_PRO;
     if (!gst_structure_get_int(s, "wmaversion", &wmaversion)) {
+#line 341 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_wma.c"
         GST_ERROR("Unknown WMA Format (no wmaversion)");
         return GST_FLOW_ERROR;
     }
@@ -231,10 +245,12 @@ GstFlowReturn gst_lg_audiodec_wma_getinfo(const GstStructure *s, LGADEC_CODEC_IN
         codec_info->codec_format = LGADEC_WMA_LOSSLESS_FORMAT;
         break;
     default:
+#line 333 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_wma.c"
         GST_ERROR("Unknown WMA Format");
         codec_info->codec_format = LGADEC_UNKNOWN_FORMAT;
         return GST_FLOW_ERROR;
     }
+#line 339 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_wma.c"
     GST_INFO("WMA format tag = %d", codec_info->codec_format);
     return GST_FLOW_OK;
 }

@@ -73,11 +73,13 @@ static gboolean gst_lg_audiodec_aac_src_event(GstPad *pad, GstObject *parent, Gs
     gboolean ret;
 
     if (!pAudioDec) {
+#line 299 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_aac.c"
         GST_ERROR("pAudioDec is NULL");
         return FALSE;
     }
     gst_lg_adec_upstream_event(pAudioDec, event);
     ret = gst_pad_event_default(pad, parent, event);
+#line 307 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_aac.c"
     GST_INFO("ret = %s", ret ? "TRUE" : "FALSE");
     return ret;
 }
@@ -91,6 +93,7 @@ static gboolean gst_lg_audiodec_aac_sink_event(GstPad *pad, GstObject *parent, G
     gboolean ret;
 
     if (!pAudioDec) {
+#line 269 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_aac.c"
         GST_ERROR("pAudioDec is NULL");
         return FALSE;
     }
@@ -102,6 +105,7 @@ static gboolean gst_lg_audiodec_aac_sink_event(GstPad *pad, GstObject *parent, G
         gst_event_unref(event);
     if (type == GST_EVENT_SEGMENT)
         ret = TRUE;
+#line 284 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_aac.c"
     GST_INFO("ret = %s", ret ? "TRUE" : "FALSE");
     return ret;
 }
@@ -122,9 +126,11 @@ static GstStateChangeReturn gst_lg_audiodec_aac_change_state(GstElement *element
     GstStateChangeReturn ret;
 
     if (!pAudioDec) {
+#line 355 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_aac.c"
         GST_ERROR("pAudioDec is NULL");
         return GST_STATE_CHANGE_FAILURE;
     }
+#line 359 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_aac.c"
     GST_INFO("DEC.%d - change state from %s to %s (pending=%s)", pAudioDec->index,
              gst_element_state_get_name(GST_STATE_TRANSITION_CURRENT(transition)),
              gst_element_state_get_name(GST_STATE_TRANSITION_NEXT(transition)),
@@ -132,6 +138,7 @@ static GstStateChangeReturn gst_lg_audiodec_aac_change_state(GstElement *element
     gst_lg_adec_change_state_up(pAudioDec, transition);
     ret = GST_ELEMENT_CLASS(parent_class)->change_state(element, transition);
     gst_lg_adec_change_state_down(pAudioDec, transition);
+#line 372 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_aac.c"
     GST_INFO("DEC.%d - change state from %s to %s. DONE", pAudioDec->index,
              gst_element_state_get_name(GST_STATE_TRANSITION_CURRENT(transition)),
              gst_element_state_get_name(GST_STATE_TRANSITION_NEXT(transition)));
@@ -146,10 +153,12 @@ static void gst_lg_audiodec_aac_get_property(GObject *object, guint prop_id, GVa
                                     gst_lg_audiodec_aac_get_type(), GstLgAudioDecAac);
 
     if (!pAudioDec) {
+#line 338 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_aac.c"
         GST_ERROR("pAudioDec is NULL");
         return;
     }
     if (!gst_lg_adec_get_property(pAudioDec, prop_id, value, pspec))
+#line 344 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_aac.c"
         G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
 }
 
@@ -161,10 +170,12 @@ static void gst_lg_audiodec_aac_set_property(GObject *object, guint prop_id,
                                     gst_lg_audiodec_aac_get_type(), GstLgAudioDecAac);
 
     if (!pAudioDec) {
+#line 320 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_aac.c"
         GST_ERROR("pAudioDec is NULL");
         return;
     }
     if (!gst_lg_adec_set_property(pAudioDec, prop_id, value, pspec))
+#line 327 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_aac.c"
         G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
 }
 
@@ -198,6 +209,7 @@ static void gst_lg_audiodec_aac_class_intern_init(gpointer klass)
 static void gst_lg_audiodec_aac_init(GstLgAudioDecAac *pAudioDec)
 {
     if (!pAudioDec) {
+#line 206 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_aac.c"
         GST_ERROR("pAudioDec is NULL");
         return;
     }
@@ -211,27 +223,6 @@ static void gst_lg_audiodec_aac_init(GstLgAudioDecAac *pAudioDec)
     gst_lg_adec_init(pAudioDec);
 }
 
-/* frame format from caps "stream-format"; returns FALSE if unknown */
-static inline gboolean aac_stream_format(const gchar *format, LGADEC_CODEC_INFO_T *codec_info,
-                                         gboolean raw_disables_dsp)
-{
-    if (!strcmp(format, "raw")) {
-        codec_info->codec_format = LGADEC_RAW_FORMAT;
-        if (raw_disables_dsp)
-            codec_info->disable_dsp = 1;
-        GST_INFO("AAC frame format(from DEMUX) is RAW");
-    } else if (!strcmp(format, "adts")) {
-        codec_info->codec_format = LGADEC_AAC_ADTS_FORMAT;
-        GST_INFO("AAC frame format(from DEMUX) is ADTS");
-    } else if (!strcmp(format, "loas")) {
-        codec_info->codec_format = LGADEC_AAC_LOAS_FORMAT;
-        GST_INFO("AAC frame format(from DEMUX) is LOAS");
-    } else {
-        return FALSE;
-    }
-    return TRUE;
-}
-
 /* @0x21f98: audio/mpeg. mpegversion 1 -> MP3; 4 -> AAC; 2 -> AAC if stream-format is
  * raw/adts/loas, else MP3. For AAC, the AudioSpecificConfig object type in codec_data
  * (5 bits, 31 = escape + 6 bits) detects AAC-ELD (39) and AAC-LD (23, log only). */
@@ -239,73 +230,113 @@ GstFlowReturn gst_lg_audiodec_aac_getinfo(const GstStructure *s, LGADEC_CODEC_IN
 {
     gint mpegversion;
     const gchar *format;
-    GstBuffer *codec_data;
-    GstMapInfo map;
-    GstBitReader *br;
-    guint32 object_type;
 
+#line 387 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_aac.c"
     GST_INFO("This content is MPEG type");
     codec_info->codec_format = LGADEC_UNKNOWN_FORMAT;
     codec_info->disable_dsp = 0;
     if (!gst_structure_get_int(s, "mpegversion", &mpegversion)) {
+#line 445
         GST_ERROR("Unknown audio codec");
         return GST_FLOW_ERROR;
     }
     if (mpegversion == 1) {
+#line 394
         GST_INFO("This content is MPEG/MP3 audio codec");
         codec_info->codec_type = LGADEC_CODEC_MP3;
-        return GST_FLOW_OK;
     } else if (mpegversion == 4) {
+#line 397
         GST_INFO("This content is AAC audio codec");
         codec_info->codec_type = LGADEC_CODEC_AAC;
         format = gst_structure_get_string(s, "stream-format");
-        if (format)
-            aac_stream_format(format, codec_info, TRUE);
+        if (format) {
+            if (!strcmp(format, "raw")) {
+                codec_info->codec_format = LGADEC_RAW_FORMAT;
+                codec_info->disable_dsp = 1;
+#line 406
+                GST_INFO("AAC frame format(from DEMUX) is RAW");
+            } else if (!strcmp(format, "adts")) {
+                codec_info->codec_format = LGADEC_AAC_ADTS_FORMAT;
+#line 409
+                GST_INFO("AAC frame format(from DEMUX) is ADTS");
+            } else if (!strcmp(format, "loas")) {
+                codec_info->codec_format = LGADEC_AAC_LOAS_FORMAT;
+#line 412
+                GST_INFO("AAC frame format(from DEMUX) is LOAS");
+            }
+        }
     } else if (mpegversion == 2) {
         format = gst_structure_get_string(s, "stream-format");
-        if (!format) {
+        if (format) {
+            codec_info->codec_type = LGADEC_CODEC_AAC;
+            if (!strcmp(format, "raw")) {
+                codec_info->codec_format = LGADEC_RAW_FORMAT;
+#line 425
+                GST_INFO("AAC frame format(from DEMUX) is RAW");
+            } else if (!strcmp(format, "adts")) {
+                codec_info->codec_format = LGADEC_AAC_ADTS_FORMAT;
+#line 428
+                GST_INFO("AAC frame format(from DEMUX) is ADTS");
+            } else if (!strcmp(format, "loas")) {
+                codec_info->codec_format = LGADEC_AAC_LOAS_FORMAT;
+#line 431
+                GST_INFO("AAC frame format(from DEMUX) is LOAS");
+            } else {
+#line 433
+                GST_INFO("This content is MPEG/MP3 audio codec");
+                codec_info->codec_type = LGADEC_CODEC_MP3;
+            }
+        } else {
+#line 437
             GST_INFO("This content is MPEG/MP3 audio codec");
             codec_info->codec_type = LGADEC_CODEC_MP3;
-            return GST_FLOW_OK;
-        }
-        codec_info->codec_type = LGADEC_CODEC_AAC;
-        if (!aac_stream_format(format, codec_info, FALSE)) {
-            GST_INFO("This content is MPEG/MP3 audio codec");
-            codec_info->codec_type = LGADEC_CODEC_MP3;
-            return GST_FLOW_OK;
         }
     } else {
+#line 441
         GST_ERROR("Unknown audio codec");
         return GST_FLOW_ERROR;
     }
 
-    if (codec_info->codec_type != LGADEC_CODEC_AAC)
-        return GST_FLOW_OK;
-    if (!gst_structure_has_field(s, "codec_data")) {
-        GST_INFO("do not have codec_data");
-        return GST_FLOW_OK;
-    }
-    codec_data = gst_value_get_buffer(gst_structure_get_value(s, "codec_data"));
-    if (!gst_buffer_map(codec_data, &map, GST_MAP_READ))
-        return GST_FLOW_OK;
-    GST_INFO("codec data size: %lu", (gulong)map.size);
-    br = gst_bit_reader_new(map.data, map.size);
-    if (gst_bit_reader_get_bits_uint32(br, &object_type, 5)) {
-        if (object_type == 31) {
-            guint32 escaped_type;
-            if (!gst_bit_reader_get_bits_uint32(br, &escaped_type, 6))
-                goto out;
-            object_type = escaped_type + 32;
-        }
-        if (object_type == 39) {
-            GST_INFO("detect AAC-ELD stream");
-            codec_info->codec_type = LGADEC_CODEC_AAC_ELD;
-        } else if (object_type == 23) {
-            GST_INFO("detect AAC_LD stream");
-        }
-    }
+    if (codec_info->codec_type == LGADEC_CODEC_AAC) {
+        if (gst_structure_has_field(s, "codec_data")) {
+            GstMapInfo map;
+            GstBuffer *codec_data = NULL;
+
+            codec_data = gst_value_get_buffer(gst_structure_get_value(s, "codec_data"));
+            if (gst_buffer_map(codec_data, &map, GST_MAP_READ)) {
+#line 460
+                GST_INFO("codec data size: %lu", (gulong)map.size);
+                GstBitReader *br = gst_bit_reader_new(map.data, map.size);
+                guint32 object_type = 0;
+
+                if (gst_bit_reader_get_bits_uint32(br, &object_type, 5)) {
+                    if (object_type == 31) {
+                        guint32 escaped_type = 0;
+
+                        if (!gst_bit_reader_get_bits_uint32(br, &escaped_type, 6))
+                            goto out;
+                        object_type = escaped_type + 32;
+                    }
+                    switch (object_type) {
+                    case 39:
+#line 473
+                        GST_INFO("detect AAC-ELD stream");
+                        codec_info->codec_type = LGADEC_CODEC_AAC_ELD;
+                        break;
+                    case 23:
+#line 476
+                        GST_INFO("detect AAC_LD stream");
+                        break;
+                    }
+                }
 out:
-    gst_bit_reader_free(br);
-    gst_buffer_unmap(codec_data, &map);
+                gst_bit_reader_free(br);
+                gst_buffer_unmap(codec_data, &map);
+            }
+        } else {
+#line 484
+            GST_INFO("do not have codec_data");
+        }
+    }
     return GST_FLOW_OK;
 }

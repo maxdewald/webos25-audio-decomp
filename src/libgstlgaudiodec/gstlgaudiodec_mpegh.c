@@ -71,12 +71,15 @@ static gboolean gst_lg_audiodec_mpegh_src_event(GstPad *pad, GstObject *parent, 
     gboolean ret;
 
     if (!pAudioDec) {
+#line 224 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_mpegh.c"
         GST_ERROR("pAudioDec is NULL");
         return FALSE;
     }
+#line 228
     GST_INFO("event %p", event);   /* mpegh only: the "mpegh-object-ui" upstream event */
     gst_lg_adec_upstream_event(pAudioDec, event);
     ret = gst_pad_event_default(pad, parent, event);
+#line 233 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_mpegh.c"
     GST_INFO("ret = %s", ret ? "TRUE" : "FALSE");
     return ret;
 }
@@ -90,6 +93,7 @@ static gboolean gst_lg_audiodec_mpegh_sink_event(GstPad *pad, GstObject *parent,
     gboolean ret;
 
     if (!pAudioDec) {
+#line 194 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_mpegh.c"
         GST_ERROR("pAudioDec is NULL");
         return FALSE;
     }
@@ -101,6 +105,7 @@ static gboolean gst_lg_audiodec_mpegh_sink_event(GstPad *pad, GstObject *parent,
         gst_event_unref(event);
     if (type == GST_EVENT_SEGMENT)
         ret = TRUE;
+#line 209 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_mpegh.c"
     GST_INFO("ret = %s", ret ? "TRUE" : "FALSE");
     return ret;
 }
@@ -121,9 +126,11 @@ static GstStateChangeReturn gst_lg_audiodec_mpegh_change_state(GstElement *eleme
     GstStateChangeReturn ret;
 
     if (!pAudioDec) {
+#line 281 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_mpegh.c"
         GST_ERROR("pAudioDec is NULL");
         return GST_STATE_CHANGE_FAILURE;
     }
+#line 285 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_mpegh.c"
     GST_INFO("DEC.%d - change state from %s to %s (pending=%s)", pAudioDec->index,
              gst_element_state_get_name(GST_STATE_TRANSITION_CURRENT(transition)),
              gst_element_state_get_name(GST_STATE_TRANSITION_NEXT(transition)),
@@ -131,6 +138,7 @@ static GstStateChangeReturn gst_lg_audiodec_mpegh_change_state(GstElement *eleme
     gst_lg_adec_change_state_up(pAudioDec, transition);
     ret = GST_ELEMENT_CLASS(parent_class)->change_state(element, transition);
     gst_lg_adec_change_state_down(pAudioDec, transition);
+#line 298 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_mpegh.c"
     GST_INFO("DEC.%d - change state from %s to %s. DONE", pAudioDec->index,
              gst_element_state_get_name(GST_STATE_TRANSITION_CURRENT(transition)),
              gst_element_state_get_name(GST_STATE_TRANSITION_NEXT(transition)));
@@ -145,10 +153,12 @@ static void gst_lg_audiodec_mpegh_get_property(GObject *object, guint prop_id, G
                                     gst_lg_audiodec_mpegh_get_type(), GstLgAudioDecMpegh);
 
     if (!pAudioDec) {
+#line 264 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_mpegh.c"
         GST_ERROR("pAudioDec is NULL");
         return;
     }
     if (!gst_lg_adec_get_property(pAudioDec, prop_id, value, pspec))
+#line 270 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_mpegh.c"
         G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
 }
 
@@ -160,10 +170,12 @@ static void gst_lg_audiodec_mpegh_set_property(GObject *object, guint prop_id,
                                     gst_lg_audiodec_mpegh_get_type(), GstLgAudioDecMpegh);
 
     if (!pAudioDec) {
+#line 246 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_mpegh.c"
         GST_ERROR("pAudioDec is NULL");
         return;
     }
     if (!gst_lg_adec_set_property(pAudioDec, prop_id, value, pspec))
+#line 253 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_mpegh.c"
         G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
 }
 
@@ -197,6 +209,7 @@ static void gst_lg_audiodec_mpegh_class_intern_init(gpointer klass)
 static void gst_lg_audiodec_mpegh_init(GstLgAudioDecMpegh *pAudioDec)
 {
     if (!pAudioDec) {
+#line 150 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_mpegh.c"
         GST_ERROR("pAudioDec is NULL");
         return;
     }
@@ -213,6 +226,7 @@ static void gst_lg_audiodec_mpegh_init(GstLgAudioDecMpegh *pAudioDec)
 /* @0x257d8 */
 GstFlowReturn gst_lg_audiodec_mpegh_getinfo(const GstStructure *s, LGADEC_CODEC_INFO_T *codec_info)
 {
+#line 311 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_mpegh.c"
     GST_INFO("Get MPEG-H info");
     codec_info->codec_type = LGADEC_CODEC_MPEG_H;
     return GST_FLOW_OK;

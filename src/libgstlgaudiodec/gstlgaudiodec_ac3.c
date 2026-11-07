@@ -72,11 +72,13 @@ static gboolean gst_lg_audiodec_ac3_src_event(GstPad *pad, GstObject *parent, Gs
     gboolean ret;
 
     if (!pAudioDec) {
+#line 223 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_ac3.c"
         GST_ERROR("pAudioDec is NULL");
         return FALSE;
     }
     gst_lg_adec_upstream_event(pAudioDec, event);
     ret = gst_pad_event_default(pad, parent, event);
+#line 231
     GST_INFO("ret = %s", ret ? "TRUE" : "FALSE");
     return ret;
 }
@@ -90,6 +92,7 @@ static gboolean gst_lg_audiodec_ac3_sink_event(GstPad *pad, GstObject *parent, G
     gboolean ret;
 
     if (!pAudioDec) {
+#line 193
         GST_ERROR("pAudioDec is NULL");
         return FALSE;
     }
@@ -101,6 +104,7 @@ static gboolean gst_lg_audiodec_ac3_sink_event(GstPad *pad, GstObject *parent, G
         gst_event_unref(event);
     if (type == GST_EVENT_SEGMENT)
         ret = TRUE;
+#line 208
     GST_INFO("ret = %s", ret ? "TRUE" : "FALSE");
     return ret;
 }
@@ -121,9 +125,11 @@ static GstStateChangeReturn gst_lg_audiodec_ac3_change_state(GstElement *element
     GstStateChangeReturn ret;
 
     if (!pAudioDec) {
+#line 279
         GST_ERROR("pAudioDec is NULL");
         return GST_STATE_CHANGE_FAILURE;
     }
+#line 283
     GST_INFO("DEC.%d - change state from %s to %s (pending=%s)", pAudioDec->index,
              gst_element_state_get_name(GST_STATE_TRANSITION_CURRENT(transition)),
              gst_element_state_get_name(GST_STATE_TRANSITION_NEXT(transition)),
@@ -131,6 +137,7 @@ static GstStateChangeReturn gst_lg_audiodec_ac3_change_state(GstElement *element
     gst_lg_adec_change_state_up(pAudioDec, transition);
     ret = GST_ELEMENT_CLASS(parent_class)->change_state(element, transition);
     gst_lg_adec_change_state_down(pAudioDec, transition);
+#line 296
     GST_INFO("DEC.%d - change state from %s to %s. DONE", pAudioDec->index,
              gst_element_state_get_name(GST_STATE_TRANSITION_CURRENT(transition)),
              gst_element_state_get_name(GST_STATE_TRANSITION_NEXT(transition)));
@@ -145,10 +152,12 @@ static void gst_lg_audiodec_ac3_get_property(GObject *object, guint prop_id, GVa
                                     gst_lg_audiodec_ac3_get_type(), GstLgAudioDecAc3);
 
     if (!pAudioDec) {
+#line 262
         GST_ERROR("pAudioDec is NULL");
         return;
     }
     if (!gst_lg_adec_get_property(pAudioDec, prop_id, value, pspec))
+#line 268
         G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
 }
 
@@ -160,10 +169,12 @@ static void gst_lg_audiodec_ac3_set_property(GObject *object, guint prop_id,
                                     gst_lg_audiodec_ac3_get_type(), GstLgAudioDecAc3);
 
     if (!pAudioDec) {
+#line 244
         GST_ERROR("pAudioDec is NULL");
         return;
     }
     if (!gst_lg_adec_set_property(pAudioDec, prop_id, value, pspec))
+#line 251
         G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
 }
 
@@ -197,6 +208,7 @@ static void gst_lg_audiodec_ac3_class_intern_init(gpointer klass)
 static void gst_lg_audiodec_ac3_init(GstLgAudioDecAc3 *pAudioDec)
 {
     if (!pAudioDec) {
+#line 150
         GST_ERROR("pAudioDec is NULL");
         return;
     }
@@ -213,6 +225,7 @@ static void gst_lg_audiodec_ac3_init(GstLgAudioDecAc3 *pAudioDec)
 /* @0x22db0 */
 GstFlowReturn gst_lg_audiodec_ac3_getinfo(const GstStructure *s, LGADEC_CODEC_INFO_T *codec_info)
 {
+#line 308
     GST_INFO("Get AC3 info");
     codec_info->codec_type = LGADEC_CODEC_AC3;
     codec_info->codec_format = LGADEC_AC3_FORMAT;
@@ -222,6 +235,7 @@ GstFlowReturn gst_lg_audiodec_ac3_getinfo(const GstStructure *s, LGADEC_CODEC_IN
 /* @0x22e10 */
 GstFlowReturn gst_lg_audiodec_eac3_getinfo(const GstStructure *s, LGADEC_CODEC_INFO_T *codec_info)
 {
+#line 319
     GST_INFO("Get AC3 info");
     codec_info->codec_type = LGADEC_CODEC_EAC3;
     codec_info->codec_format = LGADEC_AC3_FORMAT;
@@ -231,6 +245,7 @@ GstFlowReturn gst_lg_audiodec_eac3_getinfo(const GstStructure *s, LGADEC_CODEC_I
 /* @0x22e70 */
 GstFlowReturn gst_lg_audiodec_private_ac3_getinfo(const GstStructure *s, LGADEC_CODEC_INFO_T *codec_info)
 {
+#line 330
     GST_INFO("Get private AC3 info");
     codec_info->codec_type = LGADEC_CODEC_AC3;
     codec_info->codec_format = LGADEC_AC3_PRIVATE_FORMAT;

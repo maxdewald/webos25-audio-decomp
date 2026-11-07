@@ -3,10 +3,35 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
-#define LOGE(...) ((void)0)
-#define LOGW(...) ((void)0)
-#define LOGI(...) ((void)0)
-#define LOGT(...) ((void)0)
+// @match src/libgstlgaudiodec/lgadec.h struct logmm_module \{[^}]*\};
+// @match src/libgstlgaudiodec/lgadec.h enum log_level \{[^}]*\};
+// @match src/libgstlgaudiodec/lgadec.h #define LOGM\b(?:[^\n]*\\\n)*[^\n]*
+static unsigned int log_mask;
+#define logmm_dummy_mask log_mask
+// @match src/libgstlgaudiodec/lgadec_codec.c (?m)^(?:static )?struct logmm_module logmm_module_lgadec_codec = [^;]*;
+// @match src/libgstlgaudiodec/lgadec_codec.c (?m)^#define LOG[EWIT]\([^\n]*
+static struct {
+    enum log_level level;
+    const char *function;
+    int line;
+    const char *format;
+} logs[4];
+static unsigned int log_count;
+
+static int logmm_printl(struct logmm_module *module, enum log_level level,
+                        const char *function, int line, const char *format, ...)
+{
+    assert(module == &logmm_module_lgadec_codec);
+    assert(strcmp(module->name, "lgadec_codec") == 0);
+    assert(log_count < sizeof(logs) / sizeof(logs[0]));
+    logs[log_count].level = level;
+    logs[log_count].function = function;
+    logs[log_count].line = line;
+    logs[log_count].format = format;
+    log_count++;
+    return 0;
+}
+
 typedef enum {
     LGADEC_ADPCM_IMA_QT = 1, LGADEC_ADPCM_IMA_WAV = 2, LGADEC_ADPCM_MS = 7
 } LGADEC_ADPCM_T;
@@ -19,6 +44,164 @@ typedef struct {
 // @match src/libgstlgaudiodec/lgadec_codec.c static const [^;]*\b_adpcm_(?:index|step|adapt)_table\[[^;]*;
 // @match src/libgstlgaudiodec/lgadec_codec.c static const [^;]*\b_adpcm_adapt_coeff_[12]\[[^;]*;
 // @extract src/libgstlgaudiodec/lgadec_codec.c clip_int16 _adpcm_decoder _adpcm_ms_expand_nibble rd16 lgadec_adpcm_resampling lgadec_dvdlpcm_header_check lgadec_dvdlpcm_resampling
+// @extract src/libgstlgaudiodec/lgadec_codec.c _bdlpcm_parse_header lgadec_bdlpcm_header_check
+// @extract src/libgstlgaudiodec/lgadec_codec.c _wifilpcm_parse_header lgadec_wifilpcm_header_check
+// @extract src/libgstlgaudiodec/lgadec_codec.c lgadec_alaw_resampling
+static void alaw_samples(void)
+{
+    unsigned char input[256];
+    short output[257];
+    int decoder;
+
+    for (unsigned int index = 0; index < 256; index++)
+        input[index] = index;
+    output[256] = 1234;
+    assert(lgadec_alaw_resampling(&decoder, input, sizeof(input), output) == 0);
+    for (unsigned int index = 0; index < 256; index++) {
+        unsigned int value = index ^ 0x55;
+        unsigned int segment = (value >> 4) & 7;
+        int magnitude = ((value & 15) << 4) + (segment ? 264 : 8);
+
+        if (segment > 1)
+            magnitude <<= segment - 1;
+        assert(output[index] == (value & 0x80 ? magnitude : -magnitude));
+    }
+    assert(output[256] == 1234);
+    assert(lgadec_alaw_resampling(&decoder, NULL, 0, NULL) == 0);
+    assert(lgadec_alaw_resampling(NULL, input, sizeof(input), output) == -1);
+}
+
+static void wifi_headers(void)
+{
+    for (unsigned int stream = 0; stream < 2; stream++) {
+        for (unsigned int frames = 0; frames < 256; frames++) {
+            for (unsigned int fields = 0; fields < 256; fields++) {
+                PCM_DATA_T pcm = {0};
+                lgadec adec = {.codec_data = &pcm};
+                uint8_t data[] = {0xee, stream ? 0xa0 : 0xa1, frames, 0x39, fields};
+                unsigned int rate = (fields >> 3) & 7;
+                int valid = stream && (fields >> 6) == 0 &&
+                    (rate == 1 || rate == 2) && (fields & 7) <= 1;
+                int flag = -1;
+
+                assert(lgadec_wifilpcm_header_check(&adec, data, 1, &flag) == (valid ? 0 : -1));
+                if (!valid) {
+                    assert(flag == 0 && pcm.header == 0 && adec.stream_info.freq == 0);
+                    continue;
+                }
+                assert(flag == 2 && pcm.payload_size == frames * 320);
+                assert(pcm.frequency == (rate == 1 ? 44100 : 48000));
+                assert(pcm.width == 16 && pcm.out_width == 16 && pcm.channels == 2);
+                assert(adec.stream_info.freq == pcm.frequency && adec.stream_info.channels == 2);
+                assert(adec.stream_info.bits_per_sample == 16);
+                uint32_t saved_header = pcm.header;
+
+                data[3] ^= 0xff;
+                assert(lgadec_wifilpcm_header_check(&adec, data, 1, &flag) == 0 && flag == 0);
+                data[2] ^= 1;
+                assert(lgadec_wifilpcm_header_check(&adec, data, 1, &flag) == 0 && flag == 1);
+                assert(pcm.header == saved_header && pcm.payload_size == frames * 320);
+            }
+        }
+    }
+    assert(lgadec_wifilpcm_header_check(NULL, NULL, 0, NULL) == -1);
+}
+
+static void wifi_log_metadata(void)
+{
+    const uint8_t headers[][4] = {
+        {0xa1, 1, 0, 0x10}, {0xa0, 1, 0, 0x50},
+        {0xa0, 1, 0, 0}, {0xa0, 1, 0, 0x12}
+    };
+    const int lines[] = {0x6ee, 0x6f9, 0x708, 0x714};
+    const char *messages[] = {
+        "sub stream ID is not 0xA0", "width info is error",
+        "frequency info is error", "channel info is error"
+    };
+
+    log_mask = 1u << log_level_error;
+    for (unsigned int index = 0; index < 4; index++) {
+        PCM_DATA_T pcm = {0};
+        lgadec adec = {.codec_data = &pcm};
+        uint8_t data[4];
+        int flag = -1;
+
+        memcpy(data, headers[index], sizeof(data));
+        log_count = 0;
+        assert(lgadec_wifilpcm_header_check(&adec, data, 0, &flag) == -1);
+        assert(flag == 0 && pcm.header == 0 && log_count == 2);
+        assert(logs[0].level == log_level_error && logs[0].line == lines[index]);
+        assert(strcmp(logs[0].function, "_wifilpcm_parse_header") == 0);
+        assert(strcmp(logs[0].format, messages[index]) == 0);
+        assert(logs[1].level == log_level_error && logs[1].line == 0x750);
+        assert(strcmp(logs[1].function, "lgadec_wifilpcm_header_check") == 0);
+        assert(strcmp(logs[1].format, "_wifilpcm_parse_header() Err") == 0);
+    }
+    PCM_DATA_T pcm = {0};
+    lgadec adec = {.codec_data = &pcm};
+    uint8_t data[] = {0xa0, 3, 0, 0x10};
+    int flag = -1;
+
+    log_count = 0;
+    log_mask = 1u << log_level_trace;
+    assert(lgadec_wifilpcm_header_check(&adec, data, 0, &flag) == 0);
+    assert(flag == 2 && pcm.payload_size == 960 && log_count == 1);
+    assert(logs[0].level == log_level_trace && logs[0].line == 0x6f4);
+    assert(strcmp(logs[0].function, "_wifilpcm_parse_header") == 0);
+    assert(strcmp(logs[0].format, "number of audio frame is %u") == 0);
+    log_count = 0;
+    data[1]++;
+    log_mask = 1u << log_level_warning;
+    assert(lgadec_wifilpcm_header_check(&adec, data, 0, &flag) == 0);
+    assert(flag == 1 && pcm.payload_size == 960 && log_count == 1);
+    assert(logs[0].level == log_level_warning && logs[0].line == 0x75d);
+    assert(strcmp(logs[0].function, "lgadec_wifilpcm_header_check") == 0);
+    assert(strcmp(logs[0].format, "wifi LPCM header is different") == 0);
+    log_mask = 0;
+    log_count = 0;
+}
+
+static void bd_headers(void)
+{
+    const unsigned int channels[] = {0, 1, 0, 2, 3, 3, 4, 4, 5, 6, 7, 8, 0, 0, 0, 0};
+    const unsigned int rates[] = {0, 48000, 0, 0, 96000, 192000, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0};
+
+    for (unsigned int assignment = 0; assignment < 16; assignment++) {
+        for (unsigned int rate = 0; rate < 16; rate++) {
+            for (unsigned int width = 0; width < 4; width++) {
+                PCM_DATA_T pcm = {0};
+                lgadec adec = {.codec_data = &pcm};
+                uint8_t data[] = {0xee, 0x12, 0x34, assignment << 4 | rate, width << 6 | 0x20};
+                int flag = -1;
+                int valid = channels[assignment] && rates[rate] && width;
+
+                assert(lgadec_bdlpcm_header_check(&adec, data, 1, &flag) == (valid ? 0 : -1));
+                if (!valid) {
+                    assert(flag == 0 && pcm.header == 0);
+                    assert(adec.stream_info.freq == 0 && adec.stream_info.channels == 0);
+                    continue;
+                }
+                assert(flag == 2 && pcm.payload_size == 0x1234);
+                assert(pcm.channels == channels[assignment] && pcm.frequency == rates[rate]);
+                assert(pcm.width == 12 + 4 * width && pcm.out_width == (width == 1 ? 16 : 24));
+                assert(adec.stream_info.channels == pcm.channels);
+                assert(adec.stream_info.freq == pcm.frequency);
+                assert(adec.stream_info.bits_per_sample == pcm.out_width);
+                uint32_t saved_header = pcm.header;
+
+                data[1] ^= 0x80;
+                data[4] ^= 0x3f;
+                assert(lgadec_bdlpcm_header_check(&adec, data, 1, &flag) == 0 && flag == 0);
+                assert(pcm.header == saved_header && pcm.payload_size == 0x1234);
+                data[3] ^= 1;
+                assert(lgadec_bdlpcm_header_check(&adec, data, 1, &flag) == 0 && flag == 1);
+                assert(pcm.header == saved_header && pcm.frequency == rates[rate]);
+            }
+        }
+    }
+    assert(lgadec_bdlpcm_header_check(NULL, NULL, 0, NULL) == -1);
+}
+
 static void dvd_headers(void)
 {
     PCM_DATA_T pcm = {0};
@@ -179,8 +362,13 @@ static void adpcm_blocks(void)
 
 int main(void)
 {
+    alaw_samples();
+    wifi_headers();
+    wifi_log_metadata();
+    bd_headers();
     dvd_headers();
     dvd_repacking();
     adpcm_blocks();
-    puts("decoder codec regressions: PASS (128 headers, DVD 16/20/24, WAV/QT/MS ADPCM)");
+        puts("decoder codec regressions: PASS (131072 Wi-Fi / 1024 BD / 128 DVD headers, "
+            "256 A-law samples, DVD 16/20/24, WAV/QT/MS ADPCM, Wi-Fi log metadata)");
 }

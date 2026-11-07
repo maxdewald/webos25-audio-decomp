@@ -216,7 +216,7 @@ _codec_type[] = {
     { AUDIO_DECODER_CODEC_IAMF, LGADEC_CODEC_IAMF },
 };
 
-static const struct { LGADEC_EVENT_MSG_T id; const char *name; } _event_name[] = {
+const struct { LGADEC_EVENT_MSG_T id; const char *name; } _event_name[] = {
     { LGADEC_EVENT_DSP_RESET, "LGADEC_EVENT_DSP_RESET" },
     { LGADEC_EVENT_DEC_DECODED_INFO, "LGADEC_EVENT_DEC_DECODED_INFO" },
     { LGADEC_EVENT_UPDATE_DECODED_INFO, "LGADEC_EVENT_UPDATE_DECODED_INFO" },
@@ -229,8 +229,24 @@ static const struct { LGADEC_EVENT_MSG_T id; const char *name; } _event_name[] =
     { LGADEC_EVENT_DIALOG_ENHANCEMENT_LIMIT_CHANGED, "LGADEC_EVENT_DIALOG_ENHANCEMENT_LIMIT_CHANGED" },
 };
 
-int lgadec_flush_event_sync(void *a);
-int lgadec_flush_event_async(void *a);
+const struct { LGADEC_CODEC_T id; const char *name; } _codec_name[] = {
+    { LGADEC_CODEC_PCM, "PCM" }, { LGADEC_CODEC_AC3, "AC3" },
+    { LGADEC_CODEC_AAC, "AAC" }, { LGADEC_CODEC_AAC_ELD, "AAC_ELD" },
+    { LGADEC_CODEC_DRA, "DRA" }, { LGADEC_CODEC_MP3, "MP3" },
+    { LGADEC_CODEC_MPEG_H, "MPEG_H" }, { LGADEC_CODEC_AC4, "AC4" },
+    { LGADEC_CODEC_WMA_PRO, "WMA_PRO" }, { LGADEC_CODEC_VORBIS, "VORBIS" },
+    { LGADEC_CODEC_AMR_WB, "AMR_WB" }, { LGADEC_CODEC_AMR_NB, "AMR_NB" },
+    { LGADEC_CODEC_ADPCM, "ADPCM" }, { LGADEC_CODEC_RA8, "RA8" },
+    { LGADEC_CODEC_FLAC, "FLAC" }, { LGADEC_CODEC_OPUS, "OPUS" },
+    { LGADEC_CODEC_AAC_ENC, "AAC_ENC" }, { LGADEC_CODEC_AC3_ENC, "AC3_ENC" },
+    { LGADEC_CODEC_MP3_ENC, "MP3_ENC" }, { LGADEC_CODEC_MAT, "MAT" },
+    { LGADEC_CODEC_AAC_BYPASS, "AAC_BYPASS" }, { LGADEC_CODEC_AC3_IEC60958, "AC3_IEC60958" },
+    { LGADEC_CODEC_EAC3_ATMOS, "EAC3_ATMOS" }, { LGADEC_CODEC_AC4_ATMOS, "AC4_ATMOS" },
+    { LGADEC_CODEC_IAMF, "IAMF" }, { LGADEC_CODEC_UNKNOWN, "UNKNOWN" },
+};
+
+static int lgadec_flush_event_sync(void *a);
+static int lgadec_flush_event_async(void *a);
 static int lgadec_appsink_handle_data(void *priv, int input_port_num, struct aud_data *data);
 static enum appsink_event_return lgadec_appsink_handle_event(void *priv, int port_num,
                                                              struct aud_event *event);
@@ -266,7 +282,7 @@ static inline void _lgadec_callback_to_gst(lgadec *adec, LGADEC_EVENT_MSG_T msg,
 }
 
 /* @0x2895c: g_list_foreach() helper, flushes data queued before the first caps */
-void lgadec_push_pending_data(gpointer data, gpointer user_data)
+static void lgadec_push_pending_data(gpointer data, gpointer user_data)
 {
     LGADEC_DATA_T *lgadec_data = data;
     lgadec *adec = user_data;
@@ -338,21 +354,9 @@ static int lgadec_appsink_handle_data(void *priv, int input_port_num, struct aud
 /* @0x28e28 */
 const char *lgadec_get_codec_name(LGADEC_CODEC_T codec)
 {
-    static const char *const names[LGADEC_CODEC_TYPE_MAX] = {
-        [LGADEC_CODEC_PCM] = "PCM", [LGADEC_CODEC_AC3] = "AC3", [LGADEC_CODEC_AAC] = "AAC",
-        [LGADEC_CODEC_AAC_ELD] = "AAC_ELD", [LGADEC_CODEC_DRA] = "DRA", [LGADEC_CODEC_MP3] = "MP3",
-        [LGADEC_CODEC_MPEG_H] = "MPEG_H", [LGADEC_CODEC_AC4] = "AC4", [LGADEC_CODEC_WMA_PRO] = "WMA_PRO",
-        [LGADEC_CODEC_VORBIS] = "VORBIS", [LGADEC_CODEC_AMR_WB] = "AMR_WB",
-        [LGADEC_CODEC_AMR_NB] = "AMR_NB", [LGADEC_CODEC_ADPCM] = "ADPCM", [LGADEC_CODEC_RA8] = "RA8",
-        [LGADEC_CODEC_FLAC] = "FLAC", [LGADEC_CODEC_OPUS] = "OPUS", [LGADEC_CODEC_AAC_ENC] = "AAC_ENC",
-        [LGADEC_CODEC_AC3_ENC] = "AC3_ENC", [LGADEC_CODEC_MP3_ENC] = "MP3_ENC", [LGADEC_CODEC_MAT] = "MAT",
-        [LGADEC_CODEC_AAC_BYPASS] = "AAC_BYPASS", [LGADEC_CODEC_AC3_IEC60958] = "AC3_IEC60958",
-        [LGADEC_CODEC_EAC3_ATMOS] = "EAC3_ATMOS", [LGADEC_CODEC_AC4_ATMOS] = "AC4_ATMOS",
-        [LGADEC_CODEC_IAMF] = "IAMF",
-    };  /* the original table has no EAC3 entry -> "UNKNOWN" */
-
-    if ((unsigned int)codec < LGADEC_CODEC_TYPE_MAX && names[codec])
-        return names[codec];
+    for (unsigned int index = 0; index < G_N_ELEMENTS(_codec_name); index++)
+        if (_codec_name[index].id == codec)
+            return _codec_name[index].name;
     return "UNKNOWN";
 }
 
@@ -611,6 +615,38 @@ int lgadec_start_init(void *a)
     return 0;
 }
 
+static inline void _lgadec_aimc_init(lgadec *adec)
+{
+    struct aimc *imc;
+    struct registry *reg;
+    struct aud_connector *con;
+
+    imc = aimc_create();
+    if (!imc) {
+        LOGE(0xeb, "can't create aimc");
+        return;
+    }
+    aimc_create_handler(imc);
+    reg = ModuleRegistry_Init(imc);
+    if (!reg) {
+        LOGE(0xf2, "no registry");
+        goto fail;
+    }
+    con = Connector_Create(aimc_get_processor_id(imc), imc);
+    if (!con) {
+        LOGE(0xf9, "no connector");
+        ModuleRegistry_Cleanup(reg);
+        goto fail;
+    }
+    adec->con = con;
+    adec->imc = imc;
+    adec->reg = reg;
+    return;
+
+fail:
+    aimc_finalize(imc);
+}
+
 /* @0x298ec: open /dev/lg/adec0, bind it to the ADEC index, create aimc on first use */
 int lgadec_decoder_open(void *a)
 {
@@ -635,36 +671,12 @@ int lgadec_decoder_open(void *a)
     adec->decoder_state = LGADEC_DECODER_STATE_OPEN;
     adec->feeded_size = 0;
 
-    if (!adec->imc) {                                /* _lgadec_aimc_init, inlined */
-        struct aimc *imc = aimc_create();
-        if (!imc) {
-            LOGE(0xeb, "can't create aimc");
-        } else {
-            struct registry *reg;
-            aimc_create_handler(imc);
-            reg = ModuleRegistry_Init(imc);
-            if (!reg) {
-                LOGE(0xf2, "no registry");
-            } else {
-                struct aud_connector *con = Connector_Create(aimc_get_processor_id(imc), imc);
-                if (con) {
-                    adec->con = con;
-                    adec->imc = imc;
-                    adec->reg = reg;
-                    goto have_imc;
-                }
-                LOGE(0xf9, "no connector");
-                ModuleRegistry_Cleanup(reg);
-            }
-            aimc_finalize(imc);
-        }
-        if (!adec->imc)
-            goto done;
+    if (!adec->imc)
+        _lgadec_aimc_init(adec);
+    if (adec->imc) {
+        proc_id = aimc_get_processor_id(adec->imc);
+        ioctl(adec->fd, ADEC_IOW_SET_PROC_ID, &proc_id);
     }
-have_imc:
-    proc_id = aimc_get_processor_id(adec->imc);
-    ioctl(adec->fd, ADEC_IOW_SET_PROC_ID, &proc_id);
-done:
     LOGI(0x463, "Decoder state is LGADEC_DECODER_STATE_OPEN");
     return ret;
 
@@ -728,13 +740,12 @@ int lgadec_decoder_stop(void *a)
         LOGE(0x49e, "adec is null");
         return -1;
     }
-    if (!adec->bypass_decoder) {
-        if (adec->fd < 0) {
-            LOGE(0x49e, "audio device is not opened");
-            return -1;
-        }
-        ioctl(adec->fd, ADEC_IO_STOP, &adec->index);
+    if (!ADEC_USABLE(adec)) {
+        LOGE(0x49e, "audio device is not opened");
+        return -1;
     }
+    if (!adec->bypass_decoder)
+        ioctl(adec->fd, ADEC_IO_STOP, &adec->index);
     adec->decoder_state = LGADEC_DECODER_STATE_STOP;
     LOGI(0x4a6, "Decoder state is LGADEC_DECODER_STATE_STOP");
     return 0;
@@ -1515,6 +1526,95 @@ int lgadec_log_ts(void *a, unsigned long long timestamp, unsigned int len)
     return 0;
 }
 
+static inline int _lgadec_set_audio_mode(lgadec *adec, int channel_mode)
+{
+    int audio_mode = 5;
+    int channel_mode_dolby[8] = { 3, 0, 2, 4, 4, 4, 4, 4 };
+    int channel_mode_mp3[4] = { 2, 1, 3, 0 };
+
+    if (channel_mode >= 0) {
+        if (adec->codec_type == LGADEC_CODEC_MP3)
+            audio_mode = channel_mode_mp3[channel_mode];
+        else if ((adec->codec_type >= LGADEC_CODEC_AC3 && adec->codec_type <= LGADEC_CODEC_AAC) ||
+                 adec->codec_type == LGADEC_CODEC_AC4)
+            audio_mode = channel_mode_dolby[channel_mode];
+    }
+    return audio_mode;
+}
+
+static inline int _lgadec_process_decoded_info(lgadec *adec, LGADEC_AUDIO_CAPS_INFO *caps_info,
+                                              bool es)
+{
+    if (!ADEC_USABLE(adec)) {
+        LOGE(0x934, "audio device is not opened");
+        return -1;
+    }
+    LOGN(0x938, "got info --> fr: %d ch:%d bps:%d acmod:%d atmos:%d channel_mode:%d "
+         "downmix:%d out_ch:%d es:%d codec_str:%s\n", caps_info->freq, caps_info->channels,
+         caps_info->bits_per_sample, caps_info->acmod, caps_info->atmos, caps_info->channel_mode,
+         caps_info->downmix, caps_info->out_channels, caps_info->es, caps_info->codec_str);
+    if (!es) {
+        LGADEC_AUDIO_CAPS_INFO *cur = &adec->audio_caps;
+
+        if (cur->freq == 0 || cur->freq != caps_info->freq || cur->channels != caps_info->channels ||
+            cur->bits_per_sample != caps_info->bits_per_sample || cur->acmod != caps_info->acmod ||
+            cur->dolby != caps_info->dolby || cur->atmos != caps_info->atmos ||
+            cur->channel_mode != caps_info->channel_mode || cur->lfe_enable != caps_info->lfe_enable ||
+            cur->downmix != caps_info->downmix || cur->out_channels != caps_info->out_channels) {
+            LOGN(0x94e, "caps is updated\n");
+            adec->caps_is_updated = true;
+        }
+        cur->freq = caps_info->freq;
+        cur->channels = caps_info->channels;
+        cur->acmod = caps_info->acmod;
+        cur->lfe_enable = caps_info->lfe_enable;
+        if (adec->codec_type == LGADEC_CODEC_PCM) {
+            caps_info->endianness = adec->stream_info.byte_align;
+            caps_info->sign = adec->stream_info.sign;
+        } else {
+            caps_info->sign = 1;
+            caps_info->endianness = 0;
+        }
+        cur->bits_per_sample = caps_info->bits_per_sample;
+        cur->sign = caps_info->sign;
+        cur->out_channels = caps_info->out_channels;
+        cur->check_downmix = caps_info->check_downmix;
+        cur->endianness = caps_info->endianness;
+        cur->dolby = caps_info->dolby;
+        cur->atmos = caps_info->atmos;
+        cur->gap_correction = caps_info->gap_correction;
+        if (adec->audio_mode == 5 || cur->channel_mode != caps_info->channel_mode) {
+            adec->audio_mode = _lgadec_set_audio_mode(adec, caps_info->channel_mode);
+            cur->channel_mode = caps_info->channel_mode;
+            adec->audio_mode_changed = true;
+        }
+        cur->downmix = caps_info->downmix;
+    } else {
+        adec->audio_caps.data_channels = caps_info->data_channels;
+        adec->audio_caps.data_rate = caps_info->data_rate;
+        adec->audio_caps.data_bps = caps_info->data_bps;
+        adec->audio_caps.es = caps_info->es;
+        memcpy(adec->audio_caps.codec_str, caps_info->codec_str, sizeof(caps_info->codec_str));
+    }
+    if (adec->wait_bypass_first_event) {
+        if (!adec->first_event_done[LGADEC_DATA_PCM] || !adec->first_event_done[LGADEC_DATA_ES])
+            return 0;
+    } else if (!adec->first_event_done[LGADEC_DATA_PCM]) {
+        return 0;
+    }
+    if (adec->caps_is_updated) {
+        LOGN(0x982, "update decoded info");
+        _lgadec_callback_to_gst(adec, LGADEC_EVENT_UPDATE_DECODED_INFO, &adec->audio_caps);
+        _lgadec_callback_to_gst(adec, LGADEC_EVENT_SEND_MEDIA_INFO, NULL);
+    } else {
+        LOGN(0x987, "do not update decoded info");
+    }
+    memset(adec->first_event_done, 0, sizeof(adec->first_event_done));
+    adec->caps_is_updated = false;
+    adec->caps_is_sent = true;
+    return 0;
+}
+
 /* @0x2b714: aimc events from both appsinks. FIRST_AU carries the decoded format; on the
  * ES (bypass_appsink) port it has "es"=TRUE and describes the IEC stream (data-*). */
 static enum appsink_event_return lgadec_appsink_handle_event(void *priv, int port_num,
@@ -1571,103 +1671,31 @@ static enum appsink_event_return lgadec_appsink_handle_event(void *priv, int por
         caps_info.channel_mode = channel_mode;
         caps_info.clock_x4 = clock_x4;
         caps_info.out_channels = out_channels;
-        if (!es) {
-            caps_info.freq = rate;
-            caps_info.channels = channels;
-            caps_info.bits_per_sample = bits_per_sample;
-        } else {
+        if (es) {
             caps_info.data_bps = bits_per_sample;
             caps_info.data_channels = channels;
             caps_info.es = true;
+            caps_info.data_rate = data_rate;
+            if (codec_str) {
+                memcpy(caps_info.codec_str, codec_str, sizeof(caps_info.codec_str));
+                LOGN(0x1ae, "caps_info.codec_str = %s\n", caps_info.codec_str);
+            }
+            adec->first_event_done[LGADEC_DATA_ES] = true;
+        } else {
+            caps_info.freq = rate;
+            caps_info.channels = channels;
+            caps_info.bits_per_sample = bits_per_sample;
+            if (codec_str) {
+                memcpy(caps_info.codec_str, codec_str, sizeof(caps_info.codec_str));
+                LOGN(0x1ae, "caps_info.codec_str = %s\n", caps_info.codec_str);
+            }
+            caps_info.data_rate = data_rate;
+            adec->first_event_done[LGADEC_DATA_PCM] = true;
         }
-        if (codec_str) {
-            memcpy(caps_info.codec_str, codec_str, sizeof(caps_info.codec_str));
-            LOGN(0x1ae, "caps_info.codec_str = %s\n", caps_info.codec_str);
-        }
-        adec->first_event_done[es ? LGADEC_DATA_ES : LGADEC_DATA_PCM] = true;
         caps_info.downmix = downmix;
         caps_info.data_rate = data_rate;
 
-        /* _lgadec_process_decoded_info, inlined */
-        if (!ADEC_USABLE(adec)) {
-            LOGE(0x934, "audio device is not opened");
-            break;
-        }
-        LOGN(0x938, "got info --> fr: %d ch:%d bps:%d acmod:%d atmos:%d channel_mode:%d "
-             "downmix:%d out_ch:%d es:%d codec_str:%s\n", caps_info.freq, caps_info.channels,
-             caps_info.bits_per_sample, caps_info.acmod, caps_info.atmos, caps_info.channel_mode,
-             downmix, caps_info.out_channels, caps_info.es, caps_info.codec_str);
-        if (!es) {
-            LGADEC_AUDIO_CAPS_INFO *cur = &adec->audio_caps;
-
-            if (cur->freq == 0 || cur->freq != caps_info.freq || cur->channels != caps_info.channels ||
-                cur->bits_per_sample != caps_info.bits_per_sample || cur->acmod != caps_info.acmod ||
-                cur->dolby != caps_info.dolby || cur->atmos != caps_info.atmos ||
-                cur->channel_mode != caps_info.channel_mode || cur->lfe_enable != caps_info.lfe_enable ||
-                cur->downmix != caps_info.downmix || cur->out_channels != caps_info.out_channels) {
-                LOGN(0x94e, "caps is updated\n");
-                adec->caps_is_updated = true;
-            }
-            cur->freq = caps_info.freq;
-            cur->channels = caps_info.channels;
-            cur->acmod = caps_info.acmod;
-            cur->lfe_enable = caps_info.lfe_enable;
-            if (adec->codec_type == LGADEC_CODEC_PCM) {
-                caps_info.endianness = adec->stream_info.byte_align;
-                caps_info.sign = adec->stream_info.sign;
-            } else {
-                caps_info.sign = 1;
-                caps_info.endianness = 0;
-            }
-            cur->bits_per_sample = caps_info.bits_per_sample;
-            cur->sign = caps_info.sign;
-            cur->out_channels = caps_info.out_channels;
-            cur->check_downmix = caps_info.check_downmix;
-            cur->endianness = caps_info.endianness;
-            cur->dolby = caps_info.dolby;
-            cur->atmos = caps_info.atmos;
-            cur->gap_correction = caps_info.gap_correction;
-            if (adec->audio_mode == 5 || cur->channel_mode != caps_info.channel_mode) {
-                /* _lgadec_set_audio_mode, inlined: AUDIO_DECODER_CH_MODE -> LGADEC_MODE */
-                int channel_mode_dolby[8] = { 3, 0, 2, 4, 4, 4, 4, 4 };
-                int channel_mode_mp3[4] = { 2, 1, 3, 0 };
-                int audio_mode = 5;
-
-                if (caps_info.channel_mode >= 0) {
-                    if (adec->codec_type == LGADEC_CODEC_MP3)
-                        audio_mode = channel_mode_mp3[caps_info.channel_mode];
-                    else if ((adec->codec_type >= LGADEC_CODEC_AC3 && adec->codec_type <= LGADEC_CODEC_AAC) ||
-                             adec->codec_type == LGADEC_CODEC_AC4)
-                        audio_mode = channel_mode_dolby[caps_info.channel_mode];
-                }
-                adec->audio_mode = audio_mode;
-                cur->channel_mode = caps_info.channel_mode;
-                adec->audio_mode_changed = true;
-            }
-            cur->downmix = caps_info.downmix;
-        } else {
-            adec->audio_caps.data_channels = caps_info.data_channels;
-            adec->audio_caps.data_rate = caps_info.data_rate;
-            adec->audio_caps.data_bps = caps_info.data_bps;
-            adec->audio_caps.es = caps_info.es;
-            memcpy(adec->audio_caps.codec_str, caps_info.codec_str, sizeof(caps_info.codec_str));
-        }
-
-        /* For codecs with a DSP pass-through output, wait for both first events. */
-        if (!adec->first_event_done[LGADEC_DATA_PCM])
-            break;
-        if (adec->wait_bypass_first_event && !adec->first_event_done[LGADEC_DATA_ES])
-            break;
-        if (adec->caps_is_updated) {
-            LOGN(0x982, "update decoded info");
-            _lgadec_callback_to_gst(adec, LGADEC_EVENT_UPDATE_DECODED_INFO, &adec->audio_caps);
-            _lgadec_callback_to_gst(adec, LGADEC_EVENT_SEND_MEDIA_INFO, NULL);
-        } else {
-            LOGN(0x987, "do not update decoded info");
-        }
-        memset(adec->first_event_done, 0, sizeof(adec->first_event_done));
-        adec->caps_is_updated = false;
-        adec->caps_is_sent = true;
+        _lgadec_process_decoded_info(adec, &caps_info, es);
         break;
     }
     case AUD_EVENT_TYPE_LAST_AU:
@@ -1726,6 +1754,29 @@ static enum appsink_event_return lgadec_appsink_handle_event(void *priv, int por
     return appsink_event_not_handled;
 }
 
+static inline int lgadec_task_stop(lgadec *adec)
+{
+    int status;
+    int thr_ret;
+
+    if (adec->task_status == LGADEC_TASK_NONE) {
+        LOGE(0x364, "stop task alreay\n");
+        return 0;
+    }
+    pthread_mutex_lock(&adec->pipe_mutex);
+    write(adec->pipe[1], "stop", 4);
+    LOGN(0x36a, "pipe write: stop");
+    pthread_mutex_unlock(&adec->pipe_mutex);
+    thr_ret = pthread_join(adec->task, (void **)&status);
+    if (thr_ret != 0) {
+        LOGE(0x36f, "task join ERR (thr_ret:%d, status:%d)\n", thr_ret, status);
+        return -1;
+    }
+    adec->task_status = LGADEC_TASK_NONE;
+    LOGI(0x375, "task joined %d\n", status);
+    return 0;
+}
+
 /* @0x2cb44 */
 int lgadec_stop(void *a)
 {
@@ -1751,24 +1802,9 @@ int lgadec_stop(void *a)
         return 0;
     }
 
-    if (adec->task_status == LGADEC_TASK_NONE) {     /* lgadec_task_stop, inlined */
-        LOGE(0x364, "stop task alreay\n");
-    } else {
-        int status, thr_ret;
-
-        pthread_mutex_lock(&adec->pipe_mutex);
-        write(adec->pipe[1], "stop", 4);
-        LOGN(0x36a, "pipe write: stop");
-        pthread_mutex_unlock(&adec->pipe_mutex);
-        thr_ret = pthread_join(adec->task, (void **)&status);
-        if (thr_ret == 0) {
-            adec->task_status = LGADEC_TASK_NONE;
-            LOGI(0x375, "task joined %d\n", status);
-        } else {
-            LOGE(0x36f, "task join ERR (thr_ret:%d, status:%d)\n", thr_ret, status);
-            LOGE(0x88e, "task stop Err!!\n");
-            ret = -1;
-        }
+    if (lgadec_task_stop(adec) != 0) {
+        LOGE(0x88e, "task stop Err!!\n");
+        ret = -1;
     }
     close(adec->pipe[0]);
     close(adec->pipe[1]);
@@ -1809,10 +1845,10 @@ int lgadec_register_callback_fn(void *a, LGADEC_CALLBACK_FN callback_fn, void *d
     return 0;
 }
 
-int lgadec_flush_event_async(void *a);
+static int lgadec_flush_event_async(void *a);
 
 /* @0x28764: push a flush through the DSP chain and wait (1 s) for its FLUSH_DONE */
-int lgadec_flush_event_sync(void *a)
+static int lgadec_flush_event_sync(void *a)
 {
     lgadec *adec = a;
     struct timespec ts;
@@ -1841,7 +1877,7 @@ int lgadec_flush_event_sync(void *a)
 }
 
 /* @0x2886c */
-int lgadec_flush_event_async(void *a)
+static int lgadec_flush_event_async(void *a)
 {
     lgadec *adec = a;
 
@@ -1969,7 +2005,6 @@ int lgadec_select_codec(void *a, LGADEC_CODEC_INFO_T *codec_info)
 {
     lgadec *adec = a;
     LGADEC_STREAM_INFO_T *si;
-    LGADEC_CODEC_T codec;
     void *data;
 
     if (!adec) {
@@ -1987,69 +2022,20 @@ int lgadec_select_codec(void *a, LGADEC_CODEC_INFO_T *codec_info)
         adec->selected_codec->cleanup(&adec->codec_data);
         adec->selected_codec = NULL;
     }
-    codec = codec_info->codec_type;
-
-    switch (codec) {
-    case LGADEC_CODEC_PCM: {
-        LGADEC_PCM_T type = codec_info->codec_format;
-
-        if (type == LGADEC_PCM_BASE) {
-            if (si->freq == 0 || si->freq > 384000) {
-                LOGE(0xc25, "freq(%u) is not supported", si->freq);
-                return -1;
-            }
-            if (si->channels < 1 || si->channels > 8) {
-                LOGE(0xc2b, "channels(%u) is not supported", si->channels);
-                return -1;
-            }
-        } else if (type == LGADEC_PCM_MULAW || type == LGADEC_PCM_ALAW) {
-            si->bits_per_sample = 16;
-            LOGD(0xc35, "bits_per_sample = %d", 16);
-            if (!freq_in(si->freq, 8000, 192000)) {
-                LOGE(0xc3a, "freq(%u) is not supported", si->freq);
-                return -1;
-            }
-            if (si->channels > 2) {
-                LOGE(0xc41, "channels(%u) is not supported", si->channels);
-                return -1;
-            }
-        } else if (type < LGADEC_PCM_WIFI || type > LGADEC_PCM_BD) {
-            LOGE(0xc4d, "unknown pcm type:%d", type);
+    switch (codec_info->codec_type) {
+    case LGADEC_CODEC_MP3:
+        if (si->freq != 0 && (si->freq < 8000 || si->freq > 48000)) {
+            LOGE(0xa51, "freq(%u) is not supported", si->freq);
             return -1;
         }
-        data = lgadec_pcm_create();
-        if (!data) {
-            LOGE(0xc53, "adpcm data create fail!!");
+        if (si->channels > 2 && si->channels != 6) {
+            LOGE(0xa59, "channels(%u) is not supported", si->channels);
             return -1;
         }
-        adec->codec_data = data;
-        adec->pcm_type = type;
-        adec->selected_codec = &codec_type_pcm;
-        adec->no_dec = 1;                           /* PCM never goes through the DSP */
-        goto selected;
-    }
-    case LGADEC_CODEC_AC3:
-    case LGADEC_CODEC_EAC3:
-        if (codec_info->codec_format == LGADEC_AC3_FORMAT) {
-            if (si->freq != 0 && si->freq != 32000 && si->freq != 44100 && si->freq != 48000) {
-                LOGE(0xa92, "freq(%u) is not supported", si->freq);
-                return -1;
-            }
-            if (si->channels > 6) {
-                LOGE(0xa97, "channels(%u) is not supported", si->channels);
-                return -1;
-            }
-            adec->selected_codec = &codec_type_none;   /* _raw_feed -> lgadec_decoder_feed */
-        } else if (codec_info->codec_format == LGADEC_AC3_PRIVATE_FORMAT) {
-            adec->selected_codec = &codec_type_private;
-        } else {
-            LOGE(0xaa4, "invalid AC3 format!!");
-            return -1;
-        }
-        goto selected;
+        break;
     case LGADEC_CODEC_AAC:
         adec->is_disable_reform = codec_info->disable_dsp;
-        if (!freq_in(si->freq, 8000, 96000)) {
+        if (si->freq != 0 && (si->freq < 8000 || si->freq > 96000)) {
             LOGE(0xa67, "freq(%u) is not supported", si->freq);
             return -1;
         }
@@ -2071,26 +2057,25 @@ int lgadec_select_codec(void *a, LGADEC_CODEC_INFO_T *codec_info)
             return LGADEC_RET_NOT_SUPPORTED;
         }
         break;
-    case LGADEC_CODEC_MP3:
-        if (!freq_in(si->freq, 8000, 48000)) {
-            LOGE(0xa51, "freq(%u) is not supported", si->freq);
+    case LGADEC_CODEC_AC3:
+    case LGADEC_CODEC_EAC3:
+        if (codec_info->codec_format == LGADEC_AC3_FORMAT) {
+            if (si->freq != 0 && si->freq != 32000 && si->freq != 44100 && si->freq != 48000) {
+                LOGE(0xa92, "freq(%u) is not supported", si->freq);
+                return -1;
+            }
+            if (si->channels > 6) {
+                LOGE(0xa97, "channels(%u) is not supported", si->channels);
+                return -1;
+            }
+            adec->selected_codec = &codec_type_none;
+        } else if (codec_info->codec_format == LGADEC_AC3_PRIVATE_FORMAT) {
+            adec->selected_codec = &codec_type_private;
+        } else {
+            LOGE(0xaa4, "invalid AC3 format!!");
             return -1;
         }
-        if (si->channels > 2 && si->channels != 6) {
-            LOGE(0xa59, "channels(%u) is not supported", si->channels);
-            return -1;
-        }
-        break;
-    case LGADEC_CODEC_MPEG_H:
-        if (!freq_in(si->freq, 8000, 48000)) {
-            LOGE(0xb36, "freq(%u) is not supported", si->freq);
-            return -1;
-        }
-        if (si->channels > 16) {
-            LOGE(0xb3b, "channels(%u) is not supported", si->channels);
-            return -1;
-        }
-        break;
+        goto selected;
     case LGADEC_CODEC_AC4:
         if (si->freq != 0 && si->freq != 44100 && si->freq != 48000) {
             LOGE(0xaaf, "freq(%u) is not supported", si->freq);
@@ -2108,38 +2093,6 @@ int lgadec_select_codec(void *a, LGADEC_CODEC_INFO_T *codec_info)
         adec->codec_data = data;
         adec->selected_codec = &codec_type_ac4;
         goto selected;
-    case LGADEC_CODEC_WMA_PRO: {
-        unsigned int tag;
-
-        if (codec_info->codec_format == LGADEC_WMA_PRO_FORMAT) {
-            if (!freq_in(si->freq, 8000, 96000)) {
-                LOGE(0xbc3, "freq(%u) is not supported", si->freq);
-                return -1;
-            }
-            tag = 0x162;
-        } else if (codec_info->codec_format == LGADEC_WMA_LOSSLESS_FORMAT) {
-            if (!freq_in(si->freq, 44100, 192000)) {
-                LOGE(0xbce, "freq(%u) is not supported", si->freq);
-                return -1;
-            }
-            tag = 0x163;
-        } else if (codec_info->codec_format == LGADEC_WMA2_FORMAT) {
-            if (!freq_in(si->freq, 8000, 96000)) {
-                LOGE(3000, "freq(%u) is not supported", si->freq);
-                return -1;
-            }
-            tag = 0x161;
-        } else {
-            LOGE(0xbd6, "WMA format tag(%d) is not supported", codec_info->codec_format);
-            return -1;
-        }
-        si->wma_format_tag = tag;
-        if (si->channels > 8) {
-            LOGE(0xbde, "channels(%u) is not supported", si->channels);
-            return -1;
-        }
-        break;
-    }
     case LGADEC_CODEC_AMR_WB:
         if (si->freq != 0 && si->freq != 16000) {
             LOGE(0xac9, "freq(%u) is not supported", si->freq);
@@ -2160,30 +2113,34 @@ int lgadec_select_codec(void *a, LGADEC_CODEC_INFO_T *codec_info)
             return -1;
         }
         break;
-    case LGADEC_CODEC_VORBIS:
-        if (!codec_info->buffer) {
-            LOGE(0xb76, "codec_data is NULL");
+    case LGADEC_CODEC_FLAC:
+        LOGI(0xb1a, "flac enter");
+        if (si->freq > 192000) {
+            LOGE(0xb1c, "freq(%u) is not supported", si->freq);
             return -1;
         }
-        free(si->dsi_buffer);
-        si->dsi_buffer = codec_info->buffer;
-        si->dsi_buffer_length = codec_info->buf_size;
-        if (!freq_in(si->freq, 8000, 48000)) {
-            LOGE(0xb86, "freq(%u) is not supported", si->freq);
-            goto free_dsi;
+        if (si->channels > 8) {
+            LOGE(0xb21, "channels(%u) is not supported", si->channels);
+            return -1;
         }
-        if (si->channels > 2) {
-            LOGE(0xb8d, "channels(%u) is not supported", si->channels);
-            goto free_dsi;
-        }
-        data = lgadec_vorbis_create();
+        data = lgadec_flac_create();
         if (!data) {
-            LOGE(0xb93, "flac data create fail!!");    /* sic */
-            goto free_dsi;
+            LOGE(0xb27, "flac data create fail!!");
+            return -1;
         }
         adec->codec_data = data;
-        adec->selected_codec = &codec_type_vorbis;
+        adec->selected_codec = &codec_type_flac;
         goto selected;
+    case LGADEC_CODEC_MPEG_H:
+        if (si->freq != 0 && (si->freq < 8000 || si->freq > 48000)) {
+            LOGE(0xb36, "freq(%u) is not supported", si->freq);
+            return -1;
+        }
+        if (si->channels > 16) {
+            LOGE(0xb3b, "channels(%u) is not supported", si->channels);
+            return -1;
+        }
+        break;
     case LGADEC_CODEC_OPUS:
         free(si->dsi_buffer);
         si->dsi_buffer = codec_info->buffer;
@@ -2201,6 +2158,63 @@ int lgadec_select_codec(void *a, LGADEC_CODEC_INFO_T *codec_info)
         adec->codec_data = data;
         adec->selected_codec = &codec_type_opus;
         goto selected;
+    case LGADEC_CODEC_VORBIS:
+        if (!codec_info->buffer) {
+            LOGE(0xb76, "codec_data is NULL");
+            return -1;
+        }
+        free(si->dsi_buffer);
+        si->dsi_buffer = codec_info->buffer;
+        si->dsi_buffer_length = codec_info->buf_size;
+        if (si->freq != 0 && (si->freq < 8000 || si->freq > 48000)) {
+            LOGE(0xb86, "freq(%u) is not supported", si->freq);
+            goto free_dsi;
+        }
+        if (si->channels > 2) {
+            LOGE(0xb8d, "channels(%u) is not supported", si->channels);
+            goto free_dsi;
+        }
+        data = lgadec_vorbis_create();
+        if (!data) {
+            LOGE(0xb93, "flac data create fail!!");
+            goto free_dsi;
+        }
+        adec->codec_data = data;
+        adec->selected_codec = &codec_type_vorbis;
+        goto selected;
+    case LGADEC_CODEC_WMA_PRO: {
+        switch (codec_info->codec_format) {
+        case LGADEC_WMA2_FORMAT:
+            if (si->freq != 0 && (si->freq < 8000 || si->freq > 96000)) {
+                LOGE(3000, "freq(%u) is not supported", si->freq);
+                return -1;
+            }
+            si->wma_format_tag = 0x161;
+            break;
+        case LGADEC_WMA_PRO_FORMAT:
+            if (si->freq != 0 && (si->freq < 8000 || si->freq > 96000)) {
+                LOGE(0xbc3, "freq(%u) is not supported", si->freq);
+                return -1;
+            }
+            si->wma_format_tag = 0x162;
+            break;
+        case LGADEC_WMA_LOSSLESS_FORMAT:
+            if (si->freq != 0 && (si->freq < 44100 || si->freq > 192000)) {
+                LOGE(0xbce, "freq(%u) is not supported", si->freq);
+                return -1;
+            }
+            si->wma_format_tag = 0x163;
+            break;
+        default:
+            LOGE(0xbd6, "WMA format tag(%d) is not supported", codec_info->codec_format);
+            return -1;
+        }
+        if (si->channels > 8) {
+            LOGE(0xbde, "channels(%u) is not supported", si->channels);
+            return -1;
+        }
+        break;
+    }
     case LGADEC_CODEC_ADPCM: {
         int adpcm_type = codec_info->codec_format;
 
@@ -2233,24 +2247,52 @@ int lgadec_select_codec(void *a, LGADEC_CODEC_INFO_T *codec_info)
         adec->selected_codec = &codec_type_adpcm;
         goto selected;
     }
-    case LGADEC_CODEC_FLAC:
-        LOGI(0xb1a, "flac enter");
-        if (si->freq > 192000) {
-            LOGE(0xb1c, "freq(%u) is not supported", si->freq);
+    case LGADEC_CODEC_PCM: {
+        LGADEC_PCM_T type = codec_info->codec_format;
+
+        switch (type) {
+        case LGADEC_PCM_BASE:
+            if (si->freq == 0 || si->freq > 384000) {
+                LOGE(0xc25, "freq(%u) is not supported", si->freq);
+                return -1;
+            }
+            if (si->channels < 1 || si->channels > 8) {
+                LOGE(0xc2b, "channels(%u) is not supported", si->channels);
+                return -1;
+            }
+            break;
+        case LGADEC_PCM_MULAW:
+        case LGADEC_PCM_ALAW:
+            si->bits_per_sample = 16;
+            LOGD(0xc35, "bits_per_sample = %d", 16);
+            if (si->freq != 0 && (si->freq < 8000 || si->freq > 192000)) {
+                LOGE(0xc3a, "freq(%u) is not supported", si->freq);
+                return -1;
+            }
+            if (si->channels > 2) {
+                LOGE(0xc41, "channels(%u) is not supported", si->channels);
+                return -1;
+            }
+            break;
+        case LGADEC_PCM_WIFI:
+        case LGADEC_PCM_DVD:
+        case LGADEC_PCM_BD:
+            break;
+        default:
+            LOGE(0xc4d, "unknown pcm type:%d", type);
             return -1;
         }
-        if (si->channels > 8) {
-            LOGE(0xb21, "channels(%u) is not supported", si->channels);
-            return -1;
-        }
-        data = lgadec_flac_create();
+        data = lgadec_pcm_create();
         if (!data) {
-            LOGE(0xb27, "flac data create fail!!");
+            LOGE(0xc53, "adpcm data create fail!!");
             return -1;
         }
         adec->codec_data = data;
-        adec->selected_codec = &codec_type_flac;
+        adec->pcm_type = type;
+        adec->selected_codec = &codec_type_pcm;
+        adec->no_dec = 1;
         goto selected;
+    }
     case LGADEC_CODEC_IAMF:
         data = lgadec_iamf_create();
         if (!data) {
@@ -2261,17 +2303,14 @@ int lgadec_select_codec(void *a, LGADEC_CODEC_INFO_T *codec_info)
         adec->selected_codec = &codec_type_iamf;
         goto selected;
     default:
-        LOGE(0xc6f, "not support codec type (%d)", codec);
+        LOGE(0xc6f, "not support codec type (%d)", codec_info->codec_type);
         return -1;
     }
-    adec->codec_type = codec;
     adec->selected_codec = &codec_type_none;
-    goto log;
 
 selected:
     adec->codec_type = codec_info->codec_type;
-log:
-    LOGN(0xc75, "select codec done (codec_type:%s, no_dec:%s)", lgadec_get_codec_name(codec),
+    LOGN(0xc75, "select codec done (codec_type:%s, no_dec:%s)", lgadec_get_codec_name(adec->codec_type),
          adec->no_dec ? "TRUE" : "FALSE");
     adec->wait_bypass_first_event = lgadec_is_available_bypass_output(adec->codec_type);
     return 0;
@@ -2549,56 +2588,61 @@ int lgadec_set_bypass_decoder(void *a, bool on)
 static void *lgadec_task_run(void *data)
 {
     lgadec *adec = data;
-    char buf[8];
+    int ret = 0;
     struct pollfd event_fd[2];
-    ssize_t readed;
 
     for (;;) {
+        int nfds = 2;
+
+        memset(event_fd, 0, sizeof(event_fd));
         event_fd[1].fd = adec->pipe[0];
-        event_fd[1].events = POLLIN;
-        event_fd[1].revents = 0;
         event_fd[0].fd = adec->preroll_pipe[0];
+        event_fd[1].events = POLLIN;
         event_fd[0].events = POLLIN;
-        event_fd[0].revents = 0;
-        if (poll(event_fd, 2, -1) < 0) {
+        ret = poll(event_fd, nfds, -1);
+        if (ret < 0) {
             LOGE(0x30c, "poll Err!! %s\n", strerror(errno));
             return NULL;
         }
         if (event_fd[0].revents & POLLIN) {
-            memset(buf, 0, sizeof(buf));
+            char buf[8] = {0};
+            ssize_t readed;
+
             LOGI(0x314, "callback event from PREROLL_PIPE\n");
             readed = read(adec->preroll_pipe[0], buf, 7);
-            if (readed < 1)
+            if (readed > 0) {
+                if (strncmp(buf, "preroll", 7) == 0)
+                    _lgadec_callback_to_gst(adec, LGADEC_EVENT_PREROLL, NULL);
+                else
+                    LOGE(0x31a, "wrong message!! %s\n", buf);
+            } else {
                 LOGE(0x31d, "read Err %d\n", readed);
-            else if (strncmp(buf, "preroll", 7) == 0)
-                _lgadec_callback_to_gst(adec, LGADEC_EVENT_PREROLL, NULL);
-            else
-                LOGE(0x31a, "wrong message!! %s\n", buf);
+            }
         }
-        if (!(event_fd[1].revents & POLLIN))
-            continue;
+        if (event_fd[1].revents & POLLIN) {
+            char buf[8] = {0};
+            ssize_t readed;
 
-        memset(buf, 0, sizeof(buf));
-        LOGI(0x325, "callback event from PIPE\n");
-        readed = read(adec->pipe[0], buf, 7);
-        if (readed < 1) {
-            LOGE(0x339, "read Err %d\n", readed);
-            continue;
-        }
-        if (strncmp(buf, "stop", 4) == 0)
-            break;
-        if (buf[0] == 'S' && buf[1] == 'U' && buf[2] == 'B') {
-            bool onoff = strncmp(buf, "SUB0", 4) != 0;
+            LOGI(0x325, "callback event from PIPE\n");
+            readed = read(adec->pipe[0], buf, 7);
+            if (readed > 0) {
+                if (strncmp(buf, "stop", 4) == 0) {
+                    adec->task_status = LGADEC_TASK_STOP;
+                    LOGI(0x32a, "set task status: stop\n");
+                    return NULL;
+                } else if (buf[0] == 'S' && buf[1] == 'U' && buf[2] == 'B') {
+                    bool onoff = strncmp(buf, "SUB0", 4) != 0;
 
-            LOGN(0x333, "send to SUB%d\n", onoff);
-            lgadec_set_bypass_decoder(adec, onoff);
-        } else {
-            LOGE(0x336, "wrong message!! %s\n", buf);
+                    LOGN(0x333, "send to SUB%d\n", onoff);
+                    lgadec_set_bypass_decoder(adec, onoff);
+                } else {
+                    LOGE(0x336, "wrong message!! %s\n", buf);
+                }
+            } else {
+                LOGE(0x339, "read Err %d\n", readed);
+            }
         }
     }
-    adec->task_status = LGADEC_TASK_STOP;
-    LOGI(0x32a, "set task status: stop\n");
-    return NULL;
 }
 
 /* @0x307ac */
@@ -2639,6 +2683,24 @@ int lgadec_set_es_bypass(void *a, bool on)
     return 0;
 }
 
+static inline int lgadec_task_start(lgadec *adec)
+{
+    if (adec->task_status == LGADEC_TASK_NONE) {
+        pthread_mutex_lock(&adec->task_mutex);
+        if (pthread_create(&adec->task, NULL, lgadec_task_run, adec) < 0) {
+            LOGE(0x34f, "task create Err\n");
+        } else {
+            adec->task_status = LGADEC_TASK_RUN;
+            LOGI(0x356, "task create success\n");
+        }
+        pthread_mutex_unlock(&adec->task_mutex);
+    } else {
+        LOGE(0x347, "alreay task is running\n");
+        return -1;
+    }
+    return 0;
+}
+
 /* @0x30cb0: bypass_decoder skips configure/connect/start (no DSP), but the control task
  * and pipes are still created so SUB0 can bring the decoder back later. */
 int lgadec_start(void *a)
@@ -2649,13 +2711,13 @@ int lgadec_start(void *a)
         LOGE(0x83c, "adec is null");
         return -1;
     }
+    if (!ADEC_USABLE(adec)) {
+        LOGE(0x83c, "audio device is not opened");
+        return -1;
+    }
+    if (adec->no_dec)
+        goto no_decoder;
     if (!adec->bypass_decoder) {
-        if (adec->fd < 0) {
-            LOGE(0x83c, "audio device is not opened");
-            return -1;
-        }
-        if (adec->no_dec)
-            goto no_decoder;
         /* sic: this message is printed on the NON-bypass path (0x20ce0 -> 0x20df6 -> 0x20ce6) */
         LOGN(0x846, "bypass decoder is on... so not config & connect & start\n");
         if (lgadec_decoder_configure_decoder(adec) == -1) {
@@ -2670,8 +2732,6 @@ int lgadec_start(void *a)
             LOGE(0x84f, "lgadec_decoder_start (adec) Err!");
             goto fail;
         }
-    } else if (adec->no_dec) {
-        goto no_decoder;
     }
 
     if (pipe(adec->pipe) < 0) {
@@ -2691,18 +2751,7 @@ int lgadec_start(void *a)
     if (adec->sound_system != UNSET_PARAM)
         lgadec_set_sound_system(adec, adec->sound_system);
 
-    if (adec->task_status == LGADEC_TASK_NONE) {       /* lgadec_task_start, inlined */
-        pthread_mutex_lock(&adec->task_mutex);
-        if (pthread_create(&adec->task, NULL, lgadec_task_run, adec) < 0) {
-            LOGE(0x34f, "task create Err\n");
-        } else {
-            adec->task_status = LGADEC_TASK_RUN;
-            LOGI(0x356, "task create success\n");
-        }
-        pthread_mutex_unlock(&adec->task_mutex);
-    } else {
-        LOGE(0x347, "alreay task is running\n");
-    }
+    lgadec_task_start(adec);
     LOGI(0x86f, "start");
     return 0;
 

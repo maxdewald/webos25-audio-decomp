@@ -71,11 +71,13 @@ static gboolean gst_lg_audiodec_pcm_src_event(GstPad *pad, GstObject *parent, Gs
     gboolean ret;
 
     if (!pAudioDec) {
+#line 229 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_pcm.c"
         GST_ERROR("pAudioDec is NULL");
         return FALSE;
     }
     gst_lg_adec_upstream_event(pAudioDec, event);
     ret = gst_pad_event_default(pad, parent, event);
+#line 237 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_pcm.c"
     GST_INFO("ret = %s", ret ? "TRUE" : "FALSE");
     return ret;
 }
@@ -89,6 +91,7 @@ static gboolean gst_lg_audiodec_pcm_sink_event(GstPad *pad, GstObject *parent, G
     gboolean ret;
 
     if (!pAudioDec) {
+#line 199 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_pcm.c"
         GST_ERROR("pAudioDec is NULL");
         return FALSE;
     }
@@ -100,6 +103,7 @@ static gboolean gst_lg_audiodec_pcm_sink_event(GstPad *pad, GstObject *parent, G
         gst_event_unref(event);
     if (type == GST_EVENT_SEGMENT)
         ret = TRUE;
+#line 214 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_pcm.c"
     GST_INFO("ret = %s", ret ? "TRUE" : "FALSE");
     return ret;
 }
@@ -120,9 +124,11 @@ static GstStateChangeReturn gst_lg_audiodec_pcm_change_state(GstElement *element
     GstStateChangeReturn ret;
 
     if (!pAudioDec) {
+#line 285 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_pcm.c"
         GST_ERROR("pAudioDec is NULL");
         return GST_STATE_CHANGE_FAILURE;
     }
+#line 289 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_pcm.c"
     GST_INFO("DEC.%d - change state from %s to %s (pending=%s)", pAudioDec->index,
              gst_element_state_get_name(GST_STATE_TRANSITION_CURRENT(transition)),
              gst_element_state_get_name(GST_STATE_TRANSITION_NEXT(transition)),
@@ -130,6 +136,7 @@ static GstStateChangeReturn gst_lg_audiodec_pcm_change_state(GstElement *element
     gst_lg_adec_change_state_up(pAudioDec, transition);
     ret = GST_ELEMENT_CLASS(parent_class)->change_state(element, transition);
     gst_lg_adec_change_state_down(pAudioDec, transition);
+#line 302 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_pcm.c"
     GST_INFO("DEC.%d - change state from %s to %s. DONE", pAudioDec->index,
              gst_element_state_get_name(GST_STATE_TRANSITION_CURRENT(transition)),
              gst_element_state_get_name(GST_STATE_TRANSITION_NEXT(transition)));
@@ -144,10 +151,12 @@ static void gst_lg_audiodec_pcm_get_property(GObject *object, guint prop_id, GVa
                                     gst_lg_audiodec_pcm_get_type(), GstLgAudioDecPcm);
 
     if (!pAudioDec) {
+#line 268 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_pcm.c"
         GST_ERROR("pAudioDec is NULL");
         return;
     }
     if (!gst_lg_adec_get_property(pAudioDec, prop_id, value, pspec))
+#line 274 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_pcm.c"
         G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
 }
 
@@ -159,10 +168,12 @@ static void gst_lg_audiodec_pcm_set_property(GObject *object, guint prop_id,
                                     gst_lg_audiodec_pcm_get_type(), GstLgAudioDecPcm);
 
     if (!pAudioDec) {
+#line 250 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_pcm.c"
         GST_ERROR("pAudioDec is NULL");
         return;
     }
     if (!gst_lg_adec_set_property(pAudioDec, prop_id, value, pspec))
+#line 257 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_pcm.c"
         G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
 }
 
@@ -196,6 +207,7 @@ static void gst_lg_audiodec_pcm_class_intern_init(gpointer klass)
 static void gst_lg_audiodec_pcm_init(GstLgAudioDecPcm *pAudioDec)
 {
     if (!pAudioDec) {
+#line 156 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_pcm.c"
         GST_ERROR("pAudioDec is NULL");
         return;
     }
@@ -212,6 +224,7 @@ static void gst_lg_audiodec_pcm_init(GstLgAudioDecPcm *pAudioDec)
 /* @0x2697c: audio/x-lpcm, audio/x-private-lg-lpcm */
 GstFlowReturn gst_lg_audiodec_pcm_getinfo(const GstStructure *s, LGADEC_CODEC_INFO_T *codec_info)
 {
+#line 314 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_pcm.c"
     GST_INFO("Get PCM info");
     codec_info->codec_type = LGADEC_CODEC_PCM;
     codec_info->codec_format = LGADEC_PCM_BASE;
@@ -221,6 +234,7 @@ GstFlowReturn gst_lg_audiodec_pcm_getinfo(const GstStructure *s, LGADEC_CODEC_IN
 /* @0x269dc: audio/x-lpcm-1, audio/x-private1-lpcm */
 GstFlowReturn gst_lg_audiodec_dvdwifi_getinfo(const GstStructure *s, LGADEC_CODEC_INFO_T *codec_info)
 {
+#line 326 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_pcm.c"
     GST_INFO("Get PCM DVD");
     codec_info->codec_type = LGADEC_CODEC_PCM;
     codec_info->codec_format = LGADEC_PCM_DVD;
@@ -230,6 +244,7 @@ GstFlowReturn gst_lg_audiodec_dvdwifi_getinfo(const GstStructure *s, LGADEC_CODE
 /* @0x26a3c: audio/x-private-ts-lpcm */
 GstFlowReturn gst_lg_audiodec_bdwifi_getinfo(const GstStructure *s, LGADEC_CODEC_INFO_T *codec_info)
 {
+#line 338 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_pcm.c"
     GST_INFO("Get PCM BD");
     codec_info->codec_type = LGADEC_CODEC_PCM;
     codec_info->codec_format = LGADEC_PCM_BD;
@@ -239,6 +254,7 @@ GstFlowReturn gst_lg_audiodec_bdwifi_getinfo(const GstStructure *s, LGADEC_CODEC
 /* @0x26aa0: audio/x-private2-lpcm */
 GstFlowReturn gst_lg_audiodec_wifi_getinfo(const GstStructure *s, LGADEC_CODEC_INFO_T *codec_info)
 {
+#line 350 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_pcm.c"
     GST_INFO("Get PCM Wi-Fi");
     codec_info->codec_type = LGADEC_CODEC_PCM;
     codec_info->codec_format = LGADEC_PCM_WIFI;
@@ -248,6 +264,7 @@ GstFlowReturn gst_lg_audiodec_wifi_getinfo(const GstStructure *s, LGADEC_CODEC_I
 /* @0x26b04 */
 GstFlowReturn gst_lg_audiodec_mulaw_getinfo(const GstStructure *s, LGADEC_CODEC_INFO_T *codec_info)
 {
+#line 362 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_pcm.c"
     GST_INFO("Get MuLaw info");
     codec_info->codec_type = LGADEC_CODEC_PCM;
     codec_info->codec_format = LGADEC_PCM_MULAW;
@@ -257,6 +274,7 @@ GstFlowReturn gst_lg_audiodec_mulaw_getinfo(const GstStructure *s, LGADEC_CODEC_
 /* @0x26b68 */
 GstFlowReturn gst_lg_audiodec_alaw_getinfo(const GstStructure *s, LGADEC_CODEC_INFO_T *codec_info)
 {
+#line 374 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_pcm.c"
     GST_INFO("Get ALaw info");
     codec_info->codec_type = LGADEC_CODEC_PCM;
     codec_info->codec_format = LGADEC_PCM_ALAW;

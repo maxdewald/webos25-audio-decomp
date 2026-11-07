@@ -72,11 +72,13 @@ static gboolean gst_lg_audiodec_ac4_src_event(GstPad *pad, GstObject *parent, Gs
     gboolean ret;
 
     if (!pAudioDec) {
+#line 222 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_ac4.c"
         GST_ERROR("pAudioDec is NULL");
         return FALSE;
     }
     gst_lg_adec_upstream_event(pAudioDec, event);
     ret = gst_pad_event_default(pad, parent, event);
+#line 230 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_ac4.c"
     GST_INFO("ret = %s", ret ? "TRUE" : "FALSE");
     return ret;
 }
@@ -90,6 +92,7 @@ static gboolean gst_lg_audiodec_ac4_sink_event(GstPad *pad, GstObject *parent, G
     gboolean ret;
 
     if (!pAudioDec) {
+#line 192 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_ac4.c"
         GST_ERROR("pAudioDec is NULL");
         return FALSE;
     }
@@ -101,6 +104,7 @@ static gboolean gst_lg_audiodec_ac4_sink_event(GstPad *pad, GstObject *parent, G
         gst_event_unref(event);
     if (type == GST_EVENT_SEGMENT)
         ret = TRUE;
+#line 207 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_ac4.c"
     GST_INFO("ret = %s", ret ? "TRUE" : "FALSE");
     return ret;
 }
@@ -121,9 +125,11 @@ static GstStateChangeReturn gst_lg_audiodec_ac4_change_state(GstElement *element
     GstStateChangeReturn ret;
 
     if (!pAudioDec) {
+#line 278 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_ac4.c"
         GST_ERROR("pAudioDec is NULL");
         return GST_STATE_CHANGE_FAILURE;
     }
+#line 282 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_ac4.c"
     GST_INFO("DEC.%d - change state from %s to %s (pending=%s)", pAudioDec->index,
              gst_element_state_get_name(GST_STATE_TRANSITION_CURRENT(transition)),
              gst_element_state_get_name(GST_STATE_TRANSITION_NEXT(transition)),
@@ -131,6 +137,7 @@ static GstStateChangeReturn gst_lg_audiodec_ac4_change_state(GstElement *element
     gst_lg_adec_change_state_up(pAudioDec, transition);
     ret = GST_ELEMENT_CLASS(parent_class)->change_state(element, transition);
     gst_lg_adec_change_state_down(pAudioDec, transition);
+#line 295 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_ac4.c"
     GST_INFO("DEC.%d - change state from %s to %s. DONE", pAudioDec->index,
              gst_element_state_get_name(GST_STATE_TRANSITION_CURRENT(transition)),
              gst_element_state_get_name(GST_STATE_TRANSITION_NEXT(transition)));
@@ -145,10 +152,12 @@ static void gst_lg_audiodec_ac4_get_property(GObject *object, guint prop_id, GVa
                                     gst_lg_audiodec_ac4_get_type(), GstLgAudioDecAc4);
 
     if (!pAudioDec) {
+#line 261 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_ac4.c"
         GST_ERROR("pAudioDec is NULL");
         return;
     }
     if (!gst_lg_adec_get_property(pAudioDec, prop_id, value, pspec))
+#line 267 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_ac4.c"
         G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
 }
 
@@ -160,10 +169,12 @@ static void gst_lg_audiodec_ac4_set_property(GObject *object, guint prop_id,
                                     gst_lg_audiodec_ac4_get_type(), GstLgAudioDecAc4);
 
     if (!pAudioDec) {
+#line 243 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_ac4.c"
         GST_ERROR("pAudioDec is NULL");
         return;
     }
     if (!gst_lg_adec_set_property(pAudioDec, prop_id, value, pspec))
+#line 250 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_ac4.c"
         G_OBJECT_WARN_INVALID_PROPERTY_ID(object, prop_id, pspec);
 }
 
@@ -197,6 +208,7 @@ static void gst_lg_audiodec_ac4_class_intern_init(gpointer klass)
 static void gst_lg_audiodec_ac4_init(GstLgAudioDecAc4 *pAudioDec)
 {
     if (!pAudioDec) {
+#line 149 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_ac4.c"
         GST_ERROR("pAudioDec is NULL");
         return;
     }
@@ -215,19 +227,24 @@ GstFlowReturn gst_lg_audiodec_ac4_getinfo(const GstStructure *s, LGADEC_CODEC_IN
 {
     const gchar *format;
 
+#line 309 "../../git/gst-plugins-bsp/../gstlgaudio/gstlgaudiodec_ac4.c"
     GST_INFO("Get AC4 info");
     codec_info->codec_type = LGADEC_CODEC_AC4;
     codec_info->codec_format = LGADEC_UNKNOWN_FORMAT;
     format = gst_structure_get_string(s, "frame-format");
     if (!format) {
+#line 328
         GST_ERROR("Unknown AC-4 frame format");
     } else if (!strcmp(format, "RAW")) {
         codec_info->codec_format = LGADEC_RAW_FORMAT;
+#line 320
         GST_INFO("AC4 frame format is RAW");
     } else if (!strcmp(format, "SYNC")) {
         codec_info->codec_format = LGADEC_AC4_SYNC_FRAME_FORMAT;
+#line 323
         GST_INFO("AC4 frame format is SYNC_FRAME");
     } else {
+#line 325
         GST_ERROR("Unknown AC-4 frame format");
     }
     return GST_FLOW_OK;

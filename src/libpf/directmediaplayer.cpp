@@ -36,8 +36,43 @@ public:
 #define DM_DECODER(self)  FIELD(GstElement *, self, 0xa8)
 #define DM_SINK(self)     FIELD(GstElement *, self, 0xb0)
 #define DM_APPID(self)    FIELD(std::string, self, 0xb4)
+#define DM_SOURCE_FILE \
+    "/usr/src/debug/lib32-player-factory-libs/1.0.0-637.ptl4tv.30-r41/git/player-factory/internal/directmedia/directmediaplayer.cpp"
 
 static const int dm_pcm_rates[8] = { 48000, 44100, 32000, 24000, 16000, 12000, 8000, 22050 };
+
+#if defined(__GNUC__) && !defined(__clang__)
+__attribute__((noclone))
+#endif
+__attribute__((noinline)) static std::string dm_element_name(const char *text)
+{
+    return std::string(text);
+}
+
+#define DM_LOG_DEBUG(log, file, func, line, ...)                                     \
+    do {                                                                            \
+        int level_;                                                                 \
+        if (PmLogGetContextLevel((log).ctx, &level_) == 0 && level_ == 7) {             \
+            char cp_[0x200], msg_[0x200];                                            \
+            PF_CODE_POINT(cp_, (log).name, file, func, line);                         \
+            int size_ = snprintf(msg_, 0x200, "{\"%s\":\"%s\"}", "CODE_POINT", cp_);  \
+            msg_[size_] = ' ';                                                       \
+            snprintf(msg_ + size_ + 1, 0x1ff - size_, __VA_ARGS__);                   \
+            if ((log).ctx == NULL || (log).ctx->level > 6)                            \
+                PmLogString_((log).ctx, 7, NULL, NULL, msg_);                          \
+        }                                                                           \
+    } while (0)
+
+#define DM_LOG_ERROR(log, file, func, line, ...)                                     \
+    do {                                                                            \
+        char kv_[0x200];                                                             \
+        union { char cp_[0x100]; char msg_[0x200]; } text_;                           \
+        PF_CODE_POINT(text_.cp_, (log).name, file, func, line);                       \
+        snprintf(kv_, 0x200, "{\"%s\":\"%s\"}", "CODE_POINT", text_.cp_);             \
+        snprintf(text_.msg_, 0x200, __VA_ARGS__);                                    \
+        if ((log).ctx == NULL || (log).ctx->level > 2)                                \
+            PmLogString_((log).ctx, 3, "SFPIPELINE", kv_, text_.msg_);                 \
+    } while (0)
 
 /* @0x14bf68: the only stock producer of lgaudiosink pcm-bypass / pcm-multi-ch for
  * DirectMedia. Both are set BEFORE the pipeline leaves NULL (ao does not exist yet, so
@@ -47,10 +82,10 @@ static const int dm_pcm_rates[8] = { 48000, 44100, 32000, 24000, 16000, 12000, 8
  * pairs either flag with an ES/MAT description. game-mode=TRUE sets the bypass fader. */
 bool DirectMediaPlayer::createAudioPath()
 {
-    PF_LOG_DEBUG(DM_LOG(this), "directmediaplayer.cpp", "createAudioPath", 0x1e6,
+    DM_LOG_DEBUG(DM_LOG(this), DM_SOURCE_FILE, "createAudioPath", 0x1e6,
                  "createAudioPath");
 
-    std::string name("audio-src");
+    std::string name = dm_element_name("audio-src");
     DM_APPSRC(this) = gst_element_factory_make("appsrc", name.c_str());
 
     char *info = DM_INFO(this);
@@ -106,13 +141,13 @@ bool DirectMediaPlayer::createAudioPath()
     }
 
     gchar *str = gst_caps_to_string(srcCaps);
-    PF_LOG_DEBUG(DM_LOG(this), "directmediaplayer.cpp", "createAudioPath", 0x1ec,
+    DM_LOG_DEBUG(DM_LOG(this), DM_SOURCE_FILE, "createAudioPath", 0x1ec,
                  "check src caps: %s", str);
     g_free(str);
 
     GstCaps *sinkCaps = gst_caps_new_empty_simple("audio/x-raw");
     if (FIELD(bool, DM_INFO(this), 0x04)) {
-        PF_LOG_DEBUG(DM_LOG(this), "directmediaplayer.cpp", "createAudioPath", 0x1fa,
+        DM_LOG_DEBUG(DM_LOG(this), DM_SOURCE_FILE, "createAudioPath", 0x1fa,
                      "create and add audio decoder");
         GstElementFactory *factory = findElementFactory(GST_ELEMENT_FACTORY_TYPE_DECODER, srcCaps);
         DM_DECODER(this) = gst_element_factory_create(factory, NULL);
@@ -129,7 +164,7 @@ bool DirectMediaPlayer::createAudioPath()
     }
 
     str = gst_caps_to_string(sinkCaps);
-    PF_LOG_DEBUG(DM_LOG(this), "directmediaplayer.cpp", "createAudioPath", 0x20f,
+    DM_LOG_DEBUG(DM_LOG(this), DM_SOURCE_FILE, "createAudioPath", 0x20f,
                  "audio sink caps: %s", str);
     g_free(str);
 
@@ -139,7 +174,7 @@ bool DirectMediaPlayer::createAudioPath()
     gst_object_unref(factory);
     gst_caps_unref(sinkCaps);
     if (!DM_SINK(this)) {
-        PF_LOG_ERROR(DM_LOG(this), "directmediaplayer.cpp", "createAudioPath", 0x21a,
+        DM_LOG_ERROR(DM_LOG(this), DM_SOURCE_FILE, "createAudioPath", 0x21a,
                      "cannot create audiosink");
         return false;
     }
@@ -150,12 +185,12 @@ bool DirectMediaPlayer::createAudioPath()
     else
         gst_bin_add_many(GST_BIN(DM_PIPELINE(this)), DM_APPSRC(this), DM_DECODER(this),
                          DM_SINK(this), NULL);
-    if (!FIELD(bool, DM_INFO(this), 0x04)) {
-        if (!gst_element_link_many(DM_APPSRC(this), DM_SINK(this), NULL))
-            PF_LOG_ERROR(DM_LOG(this), "directmediaplayer.cpp", "createAudioPath", 0x24c,
+    if (FIELD(bool, DM_INFO(this), 0x04)) {
+        if (!gst_element_link_many(DM_APPSRC(this), DM_DECODER(this), DM_SINK(this), NULL))
+            DM_LOG_ERROR(DM_LOG(this), DM_SOURCE_FILE, "createAudioPath", 0x249,
                          "error in linking audio elements");
-    } else if (!gst_element_link_many(DM_APPSRC(this), DM_DECODER(this), DM_SINK(this), NULL)) {
-        PF_LOG_ERROR(DM_LOG(this), "directmediaplayer.cpp", "createAudioPath", 0x249,
+    } else if (!gst_element_link_many(DM_APPSRC(this), DM_SINK(this), NULL)) {
+        DM_LOG_ERROR(DM_LOG(this), DM_SOURCE_FILE, "createAudioPath", 0x24c,
                      "error in linking audio elements");
     }
 
@@ -168,11 +203,11 @@ bool DirectMediaPlayer::createAudioPath()
 
     if (FIELD(int, DM_INFO(this), 0xb0) > 5) {
         if (DM_APPID(this).compare(0, 17, "com.google.stadia") == 0) {
-            PF_LOG_DEBUG(DM_LOG(this), "directmediaplayer.cpp", "createAudioPath", 0x267,
+            DM_LOG_DEBUG(DM_LOG(this), DM_SOURCE_FILE, "createAudioPath", 0x267,
                          "set pcm-bypass to asink");
             g_object_set(G_OBJECT(DM_SINK(this)), "pcm-bypass", TRUE, NULL);
         } else {
-            PF_LOG_DEBUG(DM_LOG(this), "directmediaplayer.cpp", "createAudioPath", 0x26b,
+            DM_LOG_DEBUG(DM_LOG(this), DM_SOURCE_FILE, "createAudioPath", 0x26b,
                          "set pcm-multi-ch to asink");
             g_object_set(G_OBJECT(DM_SINK(this)), "pcm-multi-ch", TRUE, NULL);
         }

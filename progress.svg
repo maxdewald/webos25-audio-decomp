@@ -22,7 +22,7 @@
 </style>
 <rect class="card" x="0.5" y="0.5" width="819" height="1155" rx="10"/>
 <text class="title" x="24" y="38">Decompilation progress</text>
-<text class="sub" x="24" y="60">22 original files · 687 of 10,981 KiB of their code reconstructed (6.3%)</text>
+<text class="sub" x="24" y="60">22 original files · 688 of 10,981 KiB of their code reconstructed (6.3%)</text>
 <text class="name" x="24" y="108">libgstdecproxy</text>
 <text class="path" x="24" y="125">/usr/lib/gstreamer-1.0/libgstdecproxy.so</text>
 <rect class="track" x="330" y="102" width="340" height="14" rx="7"/>

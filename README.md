@@ -19,9 +19,19 @@ make public-sources # pinned public dependencies and webOS reference implementat
 make opensource     # optional: LG's firmware GPL/LGPL source (~4.4 GB)
 ```
 
-To regenerate `build/decomp/`: Ghidra 12.2 with
-`JAVA_HOME=/opt/homebrew/opt/openjdk@21`, and `tools/ghidra-ext/XtensaHiFi` copied into
-`~/Library/ghidra/ghidra_12.2_PUBLIC/Extensions/`. Then `make decomp-arm decomp-dsp`.
+To regenerate `build/decomp/`: Ghidra 12.2 requires **JDK 25**. The existing
+`decomp-*.sh` wrappers use macOS/Homebrew paths; on Linux invoke
+`support/analyzeHeadless` from your Ghidra installation with `JAVA_HOME` pointing
+to a JDK 25 installation. Install `tools/ghidra-ext/XtensaHiFi` in Ghidra's
+`Ghidra/Processors/` directory. Keep raw exports under `build/decomp/`.
+`tools/xtobjdump.sh` also works directly on Linux without Ghidra; split the
+hash-verified DSP image with `tools/split_fw.py` first.
+
+`src/dsp0/hdmi.c` reconstructs `_hdmi_push_first_event` and `hdmi_prop_updated`
+from the hash-matched C2 DSP0 image. Its comments distinguish FIRST metadata
+from payload processing: codec 4 announces MAT and codec 6 announces DTS-HD MA,
+but neither the property callback nor the FIRST builder proves transparent
+end-to-end relabelling. `make test T=dsp0_hdmi` checks the recovered behavior.
 
 ## Workflow
 

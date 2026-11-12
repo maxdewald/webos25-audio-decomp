@@ -6,7 +6,7 @@ root=${here:h}
 bin=${1:A}
 syms=${2:A}
 name=${bin:t}
-export JAVA_HOME=/opt/homebrew/opt/openjdk@21
+export JAVA_HOME=/opt/homebrew/opt/openjdk@25
 mkdir -p "$root/build/ghidra/$name" "$root/build/decomp" "$root/build/logs"
 /opt/homebrew/opt/ghidra/libexec/support/analyzeHeadless "$root/build/ghidra/$name" "$name" \
   -import "$bin" -overwrite \

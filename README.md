@@ -13,14 +13,14 @@ down to the eARC output on the DSP. Firmware: LG OLED42C27LA (C2), Rockhopper
 ## Setup
 
 ```sh
-make verify        # orig/ holds the expected files (pull them from a rooted TV)
+make verify        # orig/ holds the expected files (tools/pull-orig.sh copies them from a rooted TV)
 make toolchain     # GCC 11.4.0 ARMv7-A Thumb-2 image, the compiler LG used
 make public-sources # pinned public dependencies and webOS reference implementations
 make opensource     # optional: LG's firmware GPL/LGPL source (~4.4 GB)
 ```
 
 To regenerate `build/decomp/`: Ghidra 12.2 with
-`JAVA_HOME=/opt/homebrew/opt/openjdk@21`, and `tools/ghidra-ext/XtensaHiFi` copied into
+`JAVA_HOME=/opt/homebrew/opt/openjdk@25`, and `tools/ghidra-ext/XtensaHiFi` copied into
 `~/Library/ghidra/ghidra_12.2_PUBLIC/Extensions/`. Then `make decomp-arm decomp-dsp`.
 
 ## Workflow

@@ -9,7 +9,7 @@ cd "$root"
 bin=$1; target=$2
 case "$bin:$target" in *[!a-zA-Z0-9_.:+-]*) echo 'invalid binary or target name' >&2; exit 2;; esac
 mkdir -p build/lift build/logs
-if ! JAVA_HOME=${JAVA_HOME:-/opt/homebrew/opt/openjdk@21} \
+if ! JAVA_HOME=${JAVA_HOME:-/opt/homebrew/opt/openjdk@25} \
   "${GHIDRA_HEADLESS:-/opt/homebrew/opt/ghidra/libexec/support/analyzeHeadless}" \
   "build/ghidra/$bin" "$bin" -process "$bin" -noanalysis -readOnly -scriptPath tools \
   -postScript ExportTokens.java build/lift > "build/logs/lift-$bin.log" 2>&1; then

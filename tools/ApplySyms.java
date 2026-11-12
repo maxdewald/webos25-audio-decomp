@@ -14,7 +14,7 @@ public class ApplySyms extends GhidraScript {
         for (String ln : Files.readAllLines(Paths.get(getScriptArgs()[0]))) {
             if (ln.startsWith("#") || ln.isBlank()) continue;
             String[] p = ln.split("\t", 2);
-            Address a = toAddr(Long.parseLong(p[0], 16));
+            Address a = toAddr(Long.parseUnsignedLong(p[0], 16));
             new DisassembleCommand(a, null, true).applyTo(currentProgram, monitor);
             Function f = getFunctionAt(a);
             if (f == null) f = createFunction(a, p[1]);

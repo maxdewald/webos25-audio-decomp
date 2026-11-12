@@ -29,7 +29,8 @@
  * Image SHA256: 0606410b32b19fd10f77bb3bdd9b5c618380c717076638418169b7e7bbff80db.
  * Source-assisted from LG common/imc/adec_imc.c under its GPL-2.0 option.
  * Evidence: build/scratch/seek-chain/{IMC_ProcessHeader,IMC_RegisterNamedEvent,
- * add_named_event}.asm. No standalone process_named_event_handle symbol:
+ * add_named_event}.asm and build/scratch/notification-lifecycle/ for removal.
+ * No standalone process_named_event_handle symbol:
  * it is inlined in IMC_ProcessHeader @0xffffffc010d0b1e0 +0x664 onward.
  * This excerpt does NOT claim reconstruction of other IMC_ProcessHeader arms.
  */
@@ -43,7 +44,7 @@
 logm_define (com_imc, log_level_noti);
 #define info(fmt,args...) logm_info(com_imc,fmt,##args)
 #define error(fmt,args...) logm_error(com_imc,fmt,##args)
-enum { IMC_ACTION_NEVENT_ADD = 6 };
+enum { IMC_ACTION_NEVENT_ADD = 6, IMC_ACTION_NEVENT_DEL = 7 };
 
 struct named_event
 {
@@ -135,11 +136,65 @@ int IMC_RegisterNamedEvent (ImcInfo * imc, const char *name, unsigned int target
     return event_id;
 }
 
+/* @0xffffffc010d09e80: verified Image. +0x24 mutex_lock(imc+0x20);
+ * +0x28..+0x50 first event_id (+0x10) match on event_list (imc+0x40);
+ * +0x94 compares target_on byte +0x1f with imc->core (+0x6c); remote case
+ * +0x134..+0x160 zeroes a 0x20 header (sender +0x8 = core, action +0xc = 7,
+ * target +0x14, ext +0x18) and sends it with no payload, then branches back
+ * to +0xa4 unlink (link_del skips a NULL prev), kfree, unlock. The send
+ * result is ignored: no remote ACK or error check precedes the local free.
+ * Not-found logs and unlocks with the list untouched.
+ * Removes the IMC named_event only. That synchronizes with an in-progress
+ * cb_func_local (IMC_ProcessHeader calls it under imc->lock), but does not
+ * touch kaimc's noti_info or drain its queued noti_handler_work. The kaimc
+ * wrapper separately detaches/drains the noti it finds; a second unregister
+ * is not a join on that already-detached work. */
+void IMC_UnregisterNamedEvent (ImcInfo * imc, int event_id)
+{
+    struct named_event *e, *selected = NULL;
+
+    aud_mutex_lock (&imc->lock);
+    for_each_link_entry (e, &imc->event_list, list)
+    {
+        if (e->event_id == event_id)
+        {
+            selected = e;
+            break;
+        }
+    }
+
+    if (!selected)
+    {
+        error ("unknown event_id. %x\n", event_id);
+        aud_mutex_unlock (&imc->lock);
+        return;
+    }
+
+    info ("unregister event \"%s\" on %x.\n", selected->event_name, selected->target_on);
+    if (AUD_MODID_PROC (selected->target_on) != imc->core)
+    {
+        IpcHeader ipc_header = { };
+
+        ipc_header.senderInfo.sender = imc->core;
+        ipc_header.targetInfo.action = IMC_ACTION_NEVENT_DEL;
+        ipc_header.targetInfo.target = selected->target_on;
+        ipc_header.extField = event_id;
+        aimc_ipc_send (imc, AUD_MODID_PROC (selected->target_on), &ipc_header, NULL);
+    }
+    link_del (&selected->list);
+    ADEC_FREE (NULL, selected);
+    aud_mutex_unlock (&imc->lock);
+}
+
 /* IMC_ACTION_NEVENT_HANDLE (action 8) in IMC_ProcessHeader matches sender
  * and event_id, then invokes selected->callback_func (+0x40) with callback_arg
  * (+0x48), packet+0x20 and packet length (+0x1c). For output_status that
  * function is kaimc.c::cb_func_local, NOT output.c::_cb_output_status.
- * The call is at 0xffffffc010d0b8fc; once=false preserves the registration. */
+ * The call is at 0xffffffc010d0b8fc, inside imc->lock (lock at ...b87c,
+ * unlock at ...b930). The enclosing aimc_process_header holds the WQ lock
+ * from 0xffffffc010c8e0e0 through ...e148 on the local dispatch branch.
+ * Neither lock extends into the queued output callback. once=false preserves
+ * the lower registration; callback return status is ignored. */
 static int process_named_event_handle (ImcInfo * imc, IpcHeader * ipc_header)
 {
     struct named_event *e, *selected;

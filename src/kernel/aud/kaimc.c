@@ -93,8 +93,13 @@ int aimc_module_connect (unsigned int uid1, int port1, unsigned int uid2, int po
 
 /* The actual indirect kernel caller of output.c::_cb_output_status:
  * noti+0x10 = callback, +0x18 = callback argument, +0x20 = work;
- * queued param+0x10 = length, +0x14 = copied bytes. Work drains FIFO order
- * without holding param_lock across the callback. repeat=true keeps it alive. */
+ * queued param+0x10 = length, +0x14 = copied bytes. Work drains FIFO order:
+ * dequeue while locked, unlock at 0xffffffc010c8cce8, load the callback/arg
+ * pair at ...cd34 and call at ...cd40, then free the payload at ...cd48.
+ * The worker acquires neither global IMC lock nor imc_info.lock; param_lock
+ * is not held across the callback and does not protect callback replacement.
+ * repeat=true leaves noti ownership with unregister; repeat=false self-frees
+ * at ...cdb0, having been detached by cb_func_local before queueing. */
 /* @0xffffffc010c8cc50 */
 static void noti_handler_work (struct work_struct *work)
 {
@@ -127,7 +132,12 @@ static void noti_handler_work (struct work_struct *work)
 
 /* IMC callback: copy payload, queue under param_lock, queue_work(system_wq).
  * Never invokes _cb_output_status inline. No deduplication/coalescing of
- * payloads: coalesced work still drains all queued notifications. */
+ * payloads: coalesced work still drains all queued notifications.
+ * param_lock is released at 0xffffffc010c8d11c, before queue_work_on at
+ * ...d180; a one-shot noti is first unlinked at ...d150..d16c. The enclosing
+ * local dispatch holds the WQ lock and imc_info.lock, not the eventual worker.
+ * Allocation failure returns -1 without queueing; the named-event dispatch
+ * ignores that return. The zero-length case still allocates/queues a record. */
 /* @0xffffffc010c8d060 */
 static int cb_func_local (void *cbParam, void *param, unsigned int param_size)
 {
@@ -171,7 +181,8 @@ static int cb_func_local (void *cbParam, void *param, unsigned int param_size)
 
 // <= 0 : error
 //  > 0 : success, event_id
-/* @0xffffffc010c8d240 */
+/* @0xffffffc010c8d240: adds an independent noti/listener and lower named event.
+ * This exported API is not an atomic replacement of an existing callback. */
 int aimc_register_named_event (void *cb_param, int (*cb_func) (void *, int, void *),
     unsigned int target, const char *event_name, bool repeat)
 {
@@ -224,7 +235,20 @@ int aimc_register_named_event (void *cb_param, int (*cb_func) (void *, int, void
 
 EXPORT_SYMBOL (aimc_register_named_event);
 
-/* @0xffffffc010c8c660 */
+/* @0xffffffc010c8c660: verified Image. Locks ctx+0x10 (WQ) then +0x30,
+ * IMC_UnregisterNamedEvent, first noti->event (+0x44) match on noti_list
+ * (gaimc+0x78), list_del with poison, unlock both, then flush_work(+0x20),
+ * drain param_list (+0x70) under param_lock (+0x50), kfree. Not found: only
+ * unlocks. process_dspirq_workfunc/aimc_process_header hold the +0x10 lock
+ * around IMC_ProcessHeader, so no new cb_func_local can queue onto a noti
+ * once both removals are done; the work is drained after the locks drop.
+ *
+ * Locking and teardown: aimc_unregister_named_event unlinks the matching noti
+ * under AUDIO_IMC_WQ_LOCK and AUDIO_IMC_LOCK, drops both locks, then flushes
+ * pending work (+0x20) and drains param_list before freeing the noti struct.
+ * Competing callers cannot find an unlinked noti on noti_list.
+ * Exact boundary: unlink at 0xffffffc010c8c6ec..c70c, global unlocks at
+ * ...c710/...c718, flush at ...c720, final noti free at ...c770. */
 void aimc_unregister_named_event (int event_id)
 {
     struct noti_info *noti = NULL;

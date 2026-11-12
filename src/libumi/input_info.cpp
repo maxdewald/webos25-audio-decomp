@@ -22,6 +22,10 @@ int setMixerSettings(Audio *, pbnjson::JValue)
     __asm__("_ZN10umiTVAudio16setMixerSettingsEN7pbnjson6JValueE");
 /* @0x526f4: only changed value.mix writes +0x7c; reapply the effective mode.
  * Missing mix returns 0; unchanged mix returns hasKey's nonzero result.
+ * Byte assignment precedes reapply and is not rolled back on failure: the next
+ * identical request skips the failed attempt, not just redundant successful
+ * writes. Explicit setSoundOutputDigital and capability updates are separate
+ * reapply edges; no client identity or holder lifecycle is tracked here.
  * [GAP] The original ignores asBool's error and leaves its local uninitialized
  * on conversion failure; only a boolean mix has a recovered defined value. */
 int setMixerSettings(Audio *self, pbnjson::JValue value)

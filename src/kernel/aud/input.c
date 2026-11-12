@@ -67,6 +67,105 @@ struct aud_input_info
     struct list_head list_event;
 };
 
+/* HAL payloads used only by this recovered call site. Unknown tail fields
+ * remain zero. Layouts/size arguments are proven; public typedef names are not. */
+struct recovered_hdmi_mute
+{
+    int port;
+    int mute;
+    int unrecovered_08;
+    int mode;
+};
+struct recovered_hdmi_audio_info
+{
+    int port;
+    int type;
+    int sampling_freq;
+    int channels;
+    unsigned char unrecovered_10[24];
+};
+extern int KDRV_HDMI21_HAL_Rx_Set_AudioMute (int port, void *data, int size);
+extern int KDRV_HDMI21_HAL_Rx_GetAudioInfo (int port, void *data, int size);
+
+/* @0xffffffc010ca48f0: complete property/state effects, log-only code omitted.
+ * Configure the INPUT's HDMI DSP uid, never the decoder uid. HAL type, kernel
+ * audio_decoder_codec, ALSA UserCodec and DSP codec are distinct namespaces.
+ * In particular HDMI DTS=7 / DTS_HD=202 / UNKNOWN_DTS=1004 /
+ * UNKNOWN_DTS_HD=1202 all take mode=1, DSP codec=0, kernel codec=1 (PCM).
+ * There is NO aud_hal_dts_supported() call and NO DTS/HBR setup here.
+ * MAT=16 is mode=4/DSP codec=4/kernel MAT=5, not DTS_HD=202.
+ * Preserves ignored HAL/property errors, untouched non-PCM channel_num,
+ * original-rate bookkeeping, conditional queue writes and forced-PCM oddity:
+ * forced_pcm skips the PCM branch; it does not unconditionally select PCM mode.
+ * Does not write start/drop/data-drop-mode/drop-output-data, or emit FIRST.
+ * Valid block/uid and matching HAL ABI are preconditions; no null validation.
+ */
+int input_set_hdmi (struct aud_block_info *block, bool forced_pcm)
+{
+    struct aud_input_info *input = (struct aud_input_info *) block;
+    struct recovered_hdmi_mute mute = { .port = input->index, .mode = 2 };
+    struct recovered_hdmi_audio_info audio = { .port = input->index };
+    int mode, codec, kernel_codec;
+    bool resize_queues = false;
+
+    KDRV_HDMI21_HAL_Rx_Set_AudioMute (input->index, &mute, 16);
+    KDRV_HDMI21_HAL_Rx_GetAudioInfo (input->index, &audio, 40);
+    input->org_hdmi_freq = audio.sampling_freq;
+    input->org_hdmi_ch = audio.channels;
+    aimc_set_property (input->uid, "hdmi-port=%d", input->index);
+    input->sampling_freq = (unsigned int) audio.sampling_freq - 32000 <= 160000
+        ? audio.sampling_freq : 48000;
+    aimc_set_property (input->uid, "sampling-freq=%d", input->sampling_freq);
+
+    if (!forced_pcm && audio.type == 2)
+    {
+        switch (audio.channels)
+        {
+            case 2: case 4: case 6: case 8:
+                input->channel_num = audio.channels;
+                break;
+            case 3: case 5: case 7:
+                input->channel_num = audio.channels + 1;
+                break;
+            default:
+                input->channel_num = 2;
+                break;
+        }
+        aimc_set_property (input->uid, "channel-num=%d", input->channel_num);
+        mode = codec = 0;
+        kernel_codec = 1;
+        resize_queues = audio.sampling_freq > 48000 || input->channel_num > 2;
+    }
+    else
+    {
+        /* Raw HAL numbers are deliberate: no borrowed DTS-enabled enums. */
+        switch (audio.type)
+        {
+            case 3:    mode = 1; codec = 1; kernel_codec = 2; break;
+            case 5:    mode = 1; codec = 3; kernel_codec = 7; break;
+            case 14:   mode = 1; codec = 2; kernel_codec = 3; resize_queues = true; break;
+            case 16:   mode = 4; codec = 4; kernel_codec = 5; resize_queues = true; break;
+            case 200: case 201:
+                mode = 6; codec = 0; kernel_codec = 1; break;
+            case 1003: mode = 6; codec = 1; kernel_codec = 2; break;
+            case 1005: mode = 6; codec = 3; kernel_codec = 7; break;
+            case 1014: mode = 6; codec = 2; kernel_codec = 3; resize_queues = true; break;
+            case 1016: mode = 7; codec = 4; kernel_codec = 5; resize_queues = true; break;
+            default:   mode = 1; codec = 0; kernel_codec = 1; break;
+        }
+    }
+    aimc_set_property (input->uid, "mode=%d", mode);
+    input->hdmi_codec = kernel_codec;
+    aimc_set_property (input->uid, "codec=%d", codec);
+    if (resize_queues)
+    {
+        aimc_set_property (input->uid_queue, "max-length=%d", 0x20000);
+        aimc_set_property (input->uid_queue_bypass, "max-length=%d", 0x20000);
+    }
+    input->forced_pcm = forced_pcm;
+    return 0;
+}
+
 /* @0xffffffc010ca3be0 */
 enum audio_decoder_codec input_get_hdmi_codec (struct aud_block_info *block)
 {

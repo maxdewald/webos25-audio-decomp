@@ -27,7 +27,9 @@ bool setforceOutputSettings(umi_tv_audio *a, const struct umi_value *value)
  * deinitAudio @0x2fc50 only clears the resource vector end, NOT this cache or
  * mixer. Lifetime is normally the service process, not a request/pipeline.
  * Startup callers may replay settings; persistence across service restart/boot
- * outside this object is NOT established by these functions. */
+ * outside this object is NOT established by these functions. An unchanged
+ * setMixer handler returns success and can refresh this cache WITHOUT any
+ * output reapply; a cached category value is not effective hardware readback. */
 bool setSoundOutputDigitalSettings(umi_tv_audio *a, const char *category, const struct umi_value *value)
 {
     bool result;

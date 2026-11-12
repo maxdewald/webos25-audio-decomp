@@ -25,7 +25,7 @@ const char *const dsp0_decoders[] = {
 /* DTS remnants (dsp0 symbol table): HDMI-receiver bitstream parsing only. */
 extern int HdmiParser_Get_DTS_FrameSize(const void *hdr);    /* @0x6023d210 */
 extern int HdmiParser_Get_DTSXP2_FrameSize(const void *hdr); /* @0x6023d340 */
-extern int HdmiParser_FindDTSCDSync(const void *buf);        /* @0x6023dba8 */
+extern int HdmiParser_FindDTSCDSync(const void *data, int len, int *offset, int *stride); /* @0x6023dba8 */
 extern void HdmiParser_Init_Dtsx_SycnType(void);             /* @0x6023dd4c */
 
 /* Debug enums printed by the HDMI path (strings in dsp0):

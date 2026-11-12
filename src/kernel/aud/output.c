@@ -28,7 +28,9 @@
  * Verification depth: _set_format, _cb_output_status, output_set_type,
  * output_pre/post_connect, output_pre/post_disconnect, output_set_format,
  * output_set_volume, output_set_earc_on, output_set_on were read instruction
- * by instruction; output_set_mute was also verified against the Image.
+ * by instruction; output_set_mute was also verified against the Image. The
+ * notification-lifetime slice also checked destroy/suspend/resume against
+ * complete saved ASM (build/scratch/notification-lifecycle/).
  * Other tagged functions were checked only by symbol + strings.
  *
  * webOS25-shipped differences found:
@@ -711,6 +713,8 @@ static enum output_codec_t _adec_codec_convert_output_codec (FW_AUD_OUTPUT_CODEC
  * (32-bit +0x54, normalized to bool) to _set_format. output_set_format never
  * changes it. Thus bypass=0 here reflects existing/initially zero object state,
  * not a bypass=false value copied out of the new FIRST event.
+ * There is no suspended/isOpened check or AUD_OUTPUT_LOCK here; neither output
+ * suspend nor an unrelated caller holding _output_lock gates this worker.
  * An aligned B/BL scan of the exact Image found only _set_format+0x38 and
  * output_set_earc_on+0x40 directly calling aud_clock_update_output; it found
  * no direct notifier/routing call (indirect callers are not ruled out).
@@ -782,7 +786,12 @@ static int _cb_output_status (void *_param, int _paramLen, void *_cbParam)
  * ARC/SE_ARC/WOWCAST map to the same physical ARC index; output_add refuses
  * another live block at that index rather than mirroring to a second output.
  * Format notification output_status only adjusts clock/HAL/cache; it does
- * not call sndout_connect_output or modify block-manager routing. */
+ * not call sndout_connect_output or modify block-manager routing.
+ * Notification recreation is explicit: after building the new pipeline/UIDs,
+ * OPTIC/ARC unregister a positive old event ID at 0xffffffc010cb3d08, register
+ * output_status with repeat=true at ...3d2c, then cache the new ID at ...3d30.
+ * Registration failure is logged/cached, not propagated; HP/SPEAKER do not
+ * perform that removal. A one-time callback-pointer edit misses recreation. */
 /* @0xffffffc010cb3b90 */
 int output_set_type (struct aud_block_info *block, enum output_type_t output_type)
 {
@@ -881,7 +890,14 @@ int output_get_underflow (struct aud_block_info *block, unsigned int *underflow)
  * @return void
  * @see aud_output_info
 */
-/* @0xffffffc010cb2a40 */
+/* @0xffffffc010cb2a40: verified Image branch order. aimc_unregister_named_event
+ * (which flush_work()s the output_status worker) runs while _output_lock is
+ * held; event_id and pipeline are left stale. A notification hook that takes
+ * _output_lock can deadlock when this flush waits for that callback. The block
+ * manager invokes its destructor at 0xffffffc010c9f250, then frees block_info
+ * at ...f268. output_destroy itself marks closed without freeing the output.
+ * This native owner path is not a global join on another remover's detached
+ * work (see aimc_unregister_named_event). */
 static void output_destroy (struct aud_block_info *block)
 {
     struct aud_output_info *output = (struct aud_output_info *) block;
@@ -929,7 +945,9 @@ static void output_destroy (struct aud_block_info *block)
     AUD_OUTPUT_UNLOCK ();
 }
 
-/* @0xffffffc010cb2950 */
+/* @0xffffffc010cb2950: stop HAL, disable clock, delete/null pipeline, leave
+ * isOpened and event_id intact. No named-event unregister, flush, or output
+ * mutex acquisition here; suspend alone is not notification quiescence. */
 static int output_suspend (struct aud_block_info *block)
 {
     struct aud_output_info *output = (struct aud_output_info *) block;
@@ -957,7 +975,10 @@ static int output_suspend (struct aud_block_info *block)
     return 0;
 }
 
-/* @0xffffffc010cb3de0 */
+/* @0xffffffc010cb3de0: only when suspended, call output_set_type at ...3e4c
+ * to rebuild pipeline and OPTIC/ARC listener, then reapply cached settings.
+ * set_type first resets channel/rate to 2/48000. No output mutex acquisition
+ * here; an unsuspended ARC resume does not rebuild or register another event. */
 static int output_resume (struct aud_block_info *block)
 {
     struct aud_output_info *output = (struct aud_output_info *) block;

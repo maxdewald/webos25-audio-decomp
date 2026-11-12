@@ -10,10 +10,11 @@
  * FOR A PARTICULAR PURPOSE. See the GNU General Public License for details.
  */
 /*
- * Focused reconstruction of the sound-output helpers in alsa/alsa_decoder.c.
+ * Decoder/UserCodec conversion and sound-output helpers from alsa/alsa_decoder.c.
  * Image-5.4.268-329.decompressed, 5.4.268-329.ptl4tv.5, SHA256
  * 0606410b32b19fd10f77bb3bdd9b5c618380c717076638418169b7e7bbff80db.
- * Evidence: build/scratch/seek-chain/{decoder_set_output_mode,
+ * Evidence: build/scratch/kernel-hdmi-setup/{alsa_decoder_codec,
+ * alsa_decoder_start}.asm and build/scratch/seek-chain/{decoder_set_output_mode,
  * decoder_set_multi_pcm_out}.asm. Unlike the published output_drop enum, the
  * shipped decoder has independent main/bypass enable bytes +0x55/+0x56.
  */
@@ -55,6 +56,34 @@ enum decoder_output_mode
     DECODER_OUTPUT_MODE_MAIN = 0,
     DECODER_OUTPUT_MODE_BYPASS = 1,
 };
+
+/* Recovered inline conversion in alsa_decoder_codec (+0x110..+0x124) and
+ * alsa_decoder_start, NOT a separate native symbol or a DSP codec converter.
+ * The load uses (unsigned int)(UserCodec - 1) <= 65 and the byte table at
+ * 0xffffffc0115ed9d8 (ADRP 0xffffffc0115ec000 + 0xd70 + 0xc68).
+ * The earlier scratch label 0xffffffc0115ee9d8 was wrong by one page.
+ * Exhaustive ADRP/ADD scan of kernel text: only users are alsa_decoder_codec
+ * @0xffffffc010ccd244 and alsa_decoder_start @0xffffffc010cccaa8 (start
+ * check) and @0xffffffc010cccd34 (TP codec); all use the same bound.
+ * Numeric kernel results deliberately do not borrow a DTS-enabled enum:
+ * UserCodec 48..53 (DTS variants) all map to kernel AC3=2 even if the separate
+ * aud_hal_dts_supported() rejection is bypassed. This does not enable DTS/HBR.
+ */
+static inline enum audio_decoder_codec alsa_decoder_kernel_codec (int user_codec)
+{
+    switch (user_codec)
+    {
+        case 1: case 64: case 65: case 66: return 1;
+        case 17: case 18: return 3;
+        case 19: case 20: return 4;
+        case 21: case 22: case 23: case 24: return 5;
+        case 25: case 26: return 7;
+        case 32: return 8;
+        case 33: return 9;
+        case 34: return 10;
+        default: return 2;
+    }
+}
 
 /* This is the shipped unsigned range test, not a single HDMI enum comparison. */
 static bool sndout_decoder_is_hdmi (unsigned int input)

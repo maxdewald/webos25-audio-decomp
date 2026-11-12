@@ -289,7 +289,10 @@ bool updateWowCastCapability(umi_tv_audio *a, const struct umi_value *value)
  * mode iff changed. Raw 0x427ae..0x427c6 proves compare/store/call order.
  * The original ignores asBool's return and reads an uninitialized temporary on
  * malformed mix; [GAP] invalid types rejected here rather than emulating UB.
- * No file/database/Luna persistence occurs in this method. */
+ * No file/database/Luna persistence occurs in this method.
+ * Behavior: audiod sends setMixer via LSCallOneReply. An unchanged mix boolean
+ * does not reapply output settings (returns early if UMI_MIX matches). Store to
+ * +0x7c precedes setSoundOutputDigital; return value reflects the downstream call. */
 bool setMixerSettings(umi_tv_audio *a, const struct umi_value *value)
 {
     bool mix;

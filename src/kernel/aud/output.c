@@ -246,6 +246,20 @@ int output_set_delay (struct aud_block_info *block, unsigned int delay)
     return 0;
 }
 
+/*
+ * eARC TX result (HAL verified; PR behaviour inferred from dts_restore_plus kmod source):
+ *  - Stock, DTS core (dsp1 codec 5, 2ch, fs) and DTS-HD MA (7, 8ch, 192000):
+ *    _cb_output_status maps them to PCM -> DMAC mode 0 (2ch) / 1 (8ch L-PCM),
+ *    CS bit1=0 ("audio") while dsp1 sends IEC 61937. Wrong for any receiver.
+ *  - PR, DTS-HD MA: the codec-7 probe lets (7, 8, acmod kept, 192000) reach here;
+ *    then ES -> mode 6 (layout A), 8ch src layout, CS bit1=1, CS fs 0x9 (768 kHz),
+ *    CS1[15:12]=0 (no layout B), PLL 192k + 8ch. Its configure_hd() writes the same.
+ *    Identical to stock MAT/TrueHD HBR, but not "compressed layout B" (mode 7).
+ *  - PR, DTS core: codec 5 is not accepted (still PCM here). Its 48 kHz carrier
+ *    route calls set_output_format(ES, 48000) directly: mode 6, 2ch, CS bit1=1,
+ *    fs 48 kHz. Correct for DTS core at 48 kHz only. A later PCM output_status
+ *    re-applies PCM; the PR's watchdog then gives up the route.
+ */
 /* @0xffffffc010cb2694: verified Image; clock first, then ARC mute/channel/
  * format/unmute/on; cache codec/channel/rate/bypass, but not acmod. */
 static void _set_format (struct aud_output_info *output, enum output_codec_t codec,

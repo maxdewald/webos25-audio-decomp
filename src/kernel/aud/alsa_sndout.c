@@ -1665,6 +1665,13 @@ static enum sndout_input_codec _hdmi_convert_input_codec (enum audio_decoder_cod
 
     return input_codec;
 }
+/* Inlined at its 3 call sites as table @0xffffffc0115ef488[dec_codec - 2], with codec
+ * outside 2..17 -> OTHERS. Dump: AC3 1, EAC3 2, AC4 4, MAT/TRUE_HD 5, AAC 0, MPEG_H 6,
+ * OPUS 7, MP3 and DRA..FLAC 9. Input is input_get_hdmi_codec(), which input_set_hdmi
+ * only sets to PCM/AC3/EAC3/AAC/MAT, so HDMI DTS arrives as PCM (1) -> OTHERS (9).
+ * The "ADEC codec 48/51" of dts_restore_plus are not audio_decoder_codec values (max
+ * IAMF 21). They are the ALSA "Adec Codec" values DTS (0x30) and DTS_HD (0x33)
+ * (alsa_decoder.c), which _set_output/_get_output_format never read. */
 
 static enum sndout_input _decoder_input_convert_input (enum audio_decoder_input decoder_input)
 {

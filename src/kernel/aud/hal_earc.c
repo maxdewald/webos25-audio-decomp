@@ -145,6 +145,8 @@ static unsigned int gEarcOutputSamplingFreq = 48000;
 static unsigned int gEarcChannel = 2;
 static unsigned int gEarcAcmod = 2;
 
+/* The only in-kernel layout-B selector: aud.audio_compressed_layout (kernel_param
+ * @0xffffffc011a15e50, perm 0644, default 0); no code in the Image stores to it. */
 static int audio_compressed_layout = 0; // 0:compressed layout A, 1:compressed layout B
 module_param (audio_compressed_layout, int, 0644);
 #endif
@@ -739,6 +741,9 @@ unsigned int audio_hal_earc_get_sampling_bit (unsigned int sampling_freq)
     return sampling_bit;
 }
 
+/* Inlined: audio_hal_earc_set_output_format +0x168..+0x218 (0xffffffc010cf3bdc..3c8c),
+ * enable at +0x21c; verified. get_dmac_sampling_bit is hoisted to +0x38, before
+ * the DMAC-disable store. Mode 6 (layout A) unless audio_compressed_layout == 1. */
 static void audio_hal_earc_set_es_mode (unsigned int sampling_freq)
 {
     unsigned int sampling_bit = 0;
@@ -827,6 +832,8 @@ static void audio_hal_earc_set_es_mode (unsigned int sampling_freq)
         EARC_LINK_WR (0x00C, 0x1);
 }
 
+/* Inlined: audio_hal_earc_set_output_format +0x6c..+0x110 and +0x254..+0x338
+ * (0xffffffc010cf3ae0..3b84, 0xffffffc010cf3cc8..3dac); verified. */
 static void audio_hal_earc_set_pcm_mode (unsigned int sampling_freq)
 {
     unsigned int sampling_bit = 0;
@@ -932,6 +939,18 @@ static void audio_hal_earc_set_pcm_mode (unsigned int sampling_freq)
         EARC_LINK_WR (0x00C, 0x1);
 }
 
+/*
+ * Verified instruction by instruction. In-Image callers: only _set_format +0x88/+0xc0.
+ * Uses the cached gEarcChannel from the preceding set_channel; does not touch
+ * PHY 0x30 bit0 (2/8-ch bypass), which only set_channel sets.
+ * Final link state (layout param 0) after _set_format's set_channel + this:
+ *  PCM 2ch fs:  DMAC mode 0, src layout 2ch, CS bit1=0, CS fs=fs, CS1[15:12]=0.
+ *  ES 2ch fs:   mode 6 (compressed layout A), 2ch, ECC_CUV_SWAP, CS bit1=1, CS fs=fs.
+ *  ES 8ch 192k: mode 6, src layout 8ch, CS bit1=1, CS fs code 0x9 (768 kHz),
+ *               CS1[15:12]=0, DMAC fs 0xc, PLL 192k + 8-ch bypass. Same as stock MAT.
+ * Layout B (mode 7, CS1[15:12]=7) only with audio_compressed_layout=1 or
+ * set_audio_mode(7); nothing in the Image does either.
+ */
 /* @0xffffffc010cf3a74 */
 void audio_hal_earc_set_output_format (enum audio_hal_output_format output_format,
     unsigned int sampling_freq)
@@ -972,6 +991,8 @@ void audio_hal_earc_set_mute (bool on)
     noti ("eARC Mute : %d\n", on);
 }
 
+/* Verified. No caller in the Image (BL/B, ADRP+ADD, 64-bit literal and PREL32
+ * scans) and not exported; dead code unless a module calls it by address. */
 /* @0xffffffc010cf3e60 */
 void audio_hal_earc_set_audio_mode (unsigned int audio_mode)
 {
@@ -1002,6 +1023,9 @@ void audio_hal_earc_set_audio_mode (unsigned int audio_mode)
     noti ("eARC config : am(%d)\n", audio_mode);
 }
 
+/* Verified. Only caller: _set_format +0x78. Uses the PREVIOUS gEarcOutputFormat
+ * and gEarcOutputSamplingFreq: PCM->ES 8ch passes through mode 1 (8-ch L-PCM)
+ * until set_output_format follows. */
 /* @0xffffffc010cf3f24 */
 void audio_hal_earc_set_channel (unsigned int channel, unsigned int acmod)
 {
@@ -1239,6 +1263,7 @@ int aud_hal_get_number_of_dsp (void)
 }
 
 /* webOS25-shipped: returns false (mov w0, #0; ret) -> NOT_SUPPORTED_DTS. */
+/* Only caller: alsa_decoder_codec (BL @0xffffffc010ccd1f0); 1 = "Adec Codec" accepts 0x30..0x35 (DTS*), decoded as AC3. */
 /* @0xffffffc010cef140 */
 bool aud_hal_dts_supported (void)
 {

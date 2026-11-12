@@ -142,6 +142,10 @@ static int decoder_run_param (struct aud_block_info *block, char *name, char *da
 
 #define DECODER_PARAM_DELIMITER " =\\"
 
+/* es_info.codec (+0x44, decoded_info +0x4) is enum audio_decoder_codec 0..21 (names
+ * @0xffffffc0115e9538, IAMF 21), set by set_decoded_info.isra.0 from the DSP
+ * media_type via table @0xffffffc0115e96d8 (media_type 1..24, else 0). There is no
+ * DTS value; decoder->codec (+0x38) uses the same enum. */
 /* @0xffffffc010ca6950 */
 int decoder_get_decoded_info (struct aud_block_info *block, struct decoded_info *info)
 {

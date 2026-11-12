@@ -284,6 +284,7 @@ ffffffc010cc32a0	112	notifier_output_changed
 ffffffc010cc3310	112	notifier_input_changed
 ffffffc010cc3380	176	notifier_set_play_speed
 ffffffc010cc3430	48	notifier_get_play_speed
+ffffffc010ccd124	1280	alsa_decoder_codec
 ffffffc010ccf4a0	608	decoder_set_output_mode
 ffffffc010ccf700	400	decoder_set_multi_pcm_out
 ffffffc010ccfd40	32	sndout_open_info

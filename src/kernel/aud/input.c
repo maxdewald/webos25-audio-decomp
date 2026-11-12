@@ -34,10 +34,9 @@ logm_define (aud_input, log_level_noti);
 
 struct aud_input_info
 {
-    struct aud_block_info parent;
+    struct aud_block_info parent;       /* 0x18 bytes; parent.pipeline (+0x10) is the main pipeline */
 
-    struct apipeline *pipeline_queue;   /* +0x10, written by input_set_type */
-    void *unknown_18;                   /* not recovered */
+    struct apipeline *pipeline_queue;   /* +0x18 */
     struct apipeline *pipeline_bypass;  /* +0x20 */
 
     int dec_index;                      /* +0x28 */
@@ -290,8 +289,10 @@ extern int KDRV_HDMI21_HAL_Rx_GetAudioInfo (unsigned char port, void *arg, int s
  *   MAT / Unknown MAT                  4/7   MAT         4 mat       0x20000
  *   DTS, DTS_HD, DTS_HD_HRA (+1000),   1     PCM         0 pcm       -
  *   MPEG, NON_PCM, DVI, other
- * dsp0 codec 5 ("dts") and 6 ("dts_hd_ma") are never sent by this kernel. The
- * meaning of "mode" (200/201 also give 6) is not recovered.
+ * dsp0 codec 5 ("dts") and 6 ("dts_hd_ma") are never sent by this kernel. Modes (LG's
+ * module_cmd_hdmi.h): 0 PCM, 1 BITSTREAM, 4 BITSTREAM_HBR, 5 HBR_HRA, 6/7/8 BYTE0_PC_VALID(_HBR/_HRA).
+ * LG's published input.c sends DTS (codec 5/6) and decoder_convert_codec maps DTS to a DTS
+ * decoder codec; the shipped C5 build lacks both, so it is not that source.
  * 6.12 C5 (@0xffffffc080f293f0) has the same table. G3 5.4 (@0xffffffc010ca49b0) adds DTS:
  * 4/1004 -> mode 1/6 codec 5; 202/1202 -> mode 4/7 codec 6 + max-length; 203/1203 -> mode
  * 5/8, codec 6 if freq > 191999 else 5; hdmi_codec 0x11 (5) / 0x12 (6). */

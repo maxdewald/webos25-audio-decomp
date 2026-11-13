@@ -75,6 +75,34 @@
  * Raw DSP RAM from ARM is not established as a safe substitute here: fwload
  * exposes a physical RAM allocation, but cache visibility, live object lifetime
  * and pointer validation must also be established before dereferencing it.
+ * Shipped acquisition boundary (build/scratch/diag-acquire/fwload.c):
+ *  fwload_get_dsp_memory_info @ffffffc01107b0bc delegates to aud_get_img_info
+ *  @ffffffc010c8b350: "aud1"/"aud2", "ram" return allocation PA/size only.
+ *  /proc/mcu/aud{1,2}/area/ram, when registered, uses area_open
+ *  @ffffffc010c87bc0 (hma_map), area_read @ffffffc010c89cc0 (bounded
+ *  copy_to_user), and release (unmap); runtime presence was not checked.
+ *  Mode 0440, seek/read, no mmap method; image/rom reads the backup, not RAM.
+ *  Open's mapped-pointer busy check is unlocked and does not check map failure;
+ *  read has no DSP lock, halt, cache maintenance, or snapshot protocol.
+ *  hma_map @ffffffc010d3c094 selects vmap_phys/__ioremap with AttrIndx 3;
+ *  ARM mapping attributes alone do not establish DSP dirty-cache visibility.
+ *  aud_reset @ffffffc010c8b510 writes ROM PA to OFFSET5 and RAM allocation PA
+ *  to OFFSET6. DSP2 boot @4ff800c9 loads 0x2222442f, installs region attributes
+ *  with WITLB @4ff800f9 / WDTLB @4ff8010f, then enters main @600611e0.
+ *  DSP1 has the same attribute setup (0x60000000..0x7fffffff nibble 4).
+ *  Main sets SP=0x60d80000 and clears 0x60123c00..0x60170b68 @6006120c;
+ *  0x601... includes writable storage. Startup does not establish the external
+ *  OFFSET5/6 window selection/addition rule, so no VA-to-proc offset formula
+ *  or 0x601... heap/TCB backing is proven. Runtime allocation PA is dynamic.
+ *  Reset cache initialization/writeback is not maintenance during area_read;
+ *  neither dirty-data visibility nor an atomic queue snapshot is established.
+ *  initialize_shbuf @ffffffc010c91a90 separately allocates audio_buffer RAM;
+ *  its 32-bit offset = PA - aud_base_address() + 0x10000000, not a DSP RAM
+ *  offset. No ring lifetime pinning or coherent multi-field read is supplied.
+ *  _dump_dsp @ffffffc010cc1540 sends IRQ cmd 8; secure dump also programs IPC,
+ *  requests a DSP copy and temporarily exposes dump RAM. Not passive playback
+ *  acquisition. Whether halting plus cache handling suffices remains unknown;
+ *  no halt is authorized. Non-mutating reads are not established safe snapshots.
  */
 #include <linux/fs.h>
 #include <linux/list.h>

@@ -8,7 +8,7 @@
  * Linked at 0x60000000. Property table @0x60102950: delay (int +0x100, setter),
  * packet-count (ro +0x140), queued-length (getter), delayed (bool +0x15c),
  * number-packet (+0x150), au-length (+0x144). Branch FLIX now decoded with
- * tools/xtobjdump.sh; queued PCM fade/flush paths remain incomplete.
+ * tools/xtobjdump.sh; scalar PCM fades and queued-tail flush are recovered.
  * queued-length is a STRING getter (type 0), no geti: kernel aimc_get_property
  * cannot read it. packet-count, au-length, number-packet and delay are integers.
  * Evidence: build/scratch/a13/delay.asm, build/decomp/audio_a0_dsp2.main_60000000.bin.c ~122932.
@@ -19,8 +19,9 @@
  *    queued, and released once more than `delay` ms is queued.
  *  - Drops: a delay change flushes the queue (queued ES lost), may drop the
  *    current buffer ("return delay chain", lvl 4), then queues `delay` ms of zero
- *    packets (typed ES in ES mode). LAST flushes (pushing what is queued),
- *    synchronous DISCONNECT flushes and resets delay to 0.
+ *    packets (typed ES in ES mode). LAST scans until one PCM buffer is faded,
+ *    forwarding preceding non-PCM buffers; remaining bytes/events are dropped.
+ *    Synchronous DISCONNECT drops the queue and resets delay to 0.
  * For ES channels=8/data-rate=192000, bytes_per_ms_unit=16 and rate_khz=192;
  * unit=ceil(192*16/48)=64 bytes per 48-kHz tick. With au-length=256 and a
  * 32768-byte input, number-packet=max(1,ceil(floor(32768/256)/64))=2.
@@ -28,7 +29,8 @@
  * at 10 ms the minimum is 3 chunks. Normal positive values do not hold an
  * infinite stream forever; a short tail can remain queued until LAST.
  * FIRST uses sampling-rate in kHz (default 48), not a raw GStreamer 48000;
- * ES data-rate=192000 is explicitly normalized to 192. No live FIRST was read.
+ * ES data-rate=192000 is explicitly normalized to 192. The saved native-HD
+ * fault has an 8ch/16bit PCM delay instance; its exact FIRST entry is not traced.
  *  - No data-type based drop and no "drop until first" logic.
  */
 #include <stdbool.h>
@@ -199,35 +201,53 @@ int delay_add_zero(struct delay *dl, int ms)
     return 0;
 }
 
-/* 0x6008fffc: queued fadeout is not reconstructed. [FLIX] Declaration
- * only; set_delay gates it on !es, but flush does not. No +0x14c store.
- * Do not substitute a successful no-op. */
-extern int delay_queue_fadeout(struct delay *dl);
+/* @0x6008fffc: forward non-PCM until the first PCM buffer, fade that buffer
+ * in place, then return 1. Remaining buffers stay queued. No ES or bits gate;
+ * fadeout uses channels*4 stores with frames=size/+0xfc, just like fadein. */
+int delay_queue_fadeout(struct delay *dl)
+{
+    while (dl->q_in != dl->q_out) {
+        struct aud_data *d = aud_data_adapter_dequeue(dl->adapter);
+        if (!d)
+            continue;
+        if (d->type != 0) {
+            delay_push_output(dl, d);
+            continue;
+        }
+        dl->packet_count--;
+        delay_fadeout(dl, d->buf, d->buf,
+                      d->size / (unsigned)dl->bytes_per_ms_unit);
+        delay_push_output(dl, d);
+        return 1;
+    }
+    return 0;
+}
 
-/* Unresolved PCM flush hook. The original prefix @0x600900c1..600900d3
- * actually gates queue_fadeout on packet_count && push_all, including ES.
- * No +0x14c store occurs anywhere in flush @0x600900ac..60090180. */
-extern void delay_queue_flush_pcm_unrecovered(struct delay *, int push_all);
-
-/* @0x600900ac delay_queue_flush: recovered ES path; PCM remains unresolved. */
+/* @0x600900ac: push_all fades at most one PCM buffer, not the whole tail.
+ * The fade scan has no ES gate. Dolby PCM emits up to two zero buffers from
+ * the remaining packet count. All remaining bytes/events are discarded.
+ * Neither this path nor queued fadeout changes fadein_pending (+0x14c). */
 void delay_queue_flush(struct delay *dl, int push_all)
 {
-    struct aud_data *d;
-
-    if (!dl->es && push_all) {
-        delay_queue_flush_pcm_unrecovered(dl, push_all);
-        return;
-    }
     aud_mutex_lock(dl->mutex);
-    while ((d = aud_data_adapter_dequeue(dl->adapter)) != NULL) {
-        if (d->type != 2 && d->type != 3)
-            dl->packet_count--;
-        if (push_all)
-            delay_push_output(dl, d);
-        else
-            aud_object_put(d);
+    if (dl->packet_count && push_all) {
+        delay_queue_fadeout(dl);
+        if (dl->dolby && !dl->es) {
+            int count = dl->packet_count < 2 ? dl->packet_count : 2;
+            while (count > 0) {
+                struct aud_data *d = aud_data_new_zero(
+                    (unsigned)dl->bytes_per_ms_unit * (unsigned)dl->au_length);
+                if (!d)
+                    break;
+                delay_push_output(dl, d);
+                count--;
+            }
+        }
     }
-    _pending_events_empty(dl);
+    unsigned queued = dl->q_in - dl->q_out;
+    if (queued)
+        aud_data_adapter_flush(dl->adapter, queued);
+    _pending_events_empty(&dl->pending_events);
     dl->packet_count = 0;
     aud_mutex_unlock(dl->mutex);
 }

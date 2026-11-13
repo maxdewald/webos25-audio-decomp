@@ -11,11 +11,16 @@
 // @match src/dsp2/delay.c (?s)struct aud_data \{.*?\};
 // @match src/dsp2/delay.c (?s)struct delay \{.*?\};
 // @match src/dsp2/delay.c (?m)^extern[^;]+;
-// @extract src/dsp2/delay.c delay_fadein delay_fadeout delay_push_event delay_push_output delay_queue_push_locked delay_add_zero delay_queue_flush delay_set_delay delay_chain delay_event
+// @extract src/dsp2/delay.c delay_fadein delay_fadeout delay_push_event delay_push_output delay_queue_push_locked delay_add_zero delay_queue_fadeout delay_queue_flush delay_set_delay delay_chain delay_event
 static int pushes, new_chunks, releases, frees, locks;
 static unsigned bytes;
 static bool pcm_queue, dequeue_empty;
 static int event_es, default_events;
+static struct delay *queue_owner;
+static struct aud_data *queue_items[4], *sent_items[8];
+static unsigned queue_index, queue_count, sent_count, discarded_bytes;
+static bool fail_zero;
+static unsigned zero_attempts;
 void *aud_object_get(void *p) { return p; }
 void aud_object_put(void *p)
 {
@@ -28,6 +33,10 @@ int aud_module_push_data(void *m, int p, struct aud_data *d)
     (void)p;
     pushes++;
     bytes += d->size;
+    if (queue_owner) {
+        assert(sent_count < 8);
+        sent_items[sent_count++] = d;
+    }
     return 0;
 }
 int aud_module_sync(void *m, int p)
@@ -63,13 +72,37 @@ struct aud_data *aud_data_new(unsigned n)
     return &chunk;
 }
 static struct aud_data original = {.type = 1, .size = 32768};
+struct aud_data *aud_data_new_zero(unsigned size)
+{
+    zero_attempts++;
+    if (fail_zero)
+        return NULL;
+    struct aud_data *data = aud_data_new(size);
+    memset(data->buf, 0, size);
+    return data;
+}
 struct aud_data *aud_data_adapter_dequeue(void *a)
 {
     (void)a;
+    if (queue_owner) {
+        assert(a == queue_owner->adapter && queue_index < queue_count);
+        struct aud_data *data = queue_items[queue_index++];
+        queue_owner->q_out += data->size;
+        return data;
+    }
     if (dequeue_empty)
         return NULL;
     releases++;
     return &original;
+}
+void aud_data_adapter_flush(void *adapter, unsigned size)
+{
+    if (queue_owner) {
+        assert(adapter == queue_owner->adapter);
+        assert(size == queue_owner->q_in - queue_owner->q_out);
+        queue_owner->q_out += size;
+        discarded_bytes += size;
+    }
 }
 void _pending_events_empty(void *a) { (void)a; }
 int aud_event_has_name(struct aud_event *event, const char *name) { return 0; }
@@ -175,6 +208,62 @@ static void test_chain_fade_units(void)
     assert(storage[4096] == 0x12340102);
 }
 
+static void test_flush_tail(void)
+{
+    for (unsigned es = 0; es < 2; es++) {
+        for (unsigned dolby = 0; dolby < 2; dolby++) {
+            for (unsigned push_all = 0; push_all < 2; push_all++) {
+                int32_t samples[16];
+                for (unsigned index = 0; index < 16; index++)
+                    samples[index] = 1024;
+                struct aud_data metadata = {.type = 2, .size = 4};
+                struct aud_data pcm = {.type = 0, .size = 64, .buf = samples};
+                struct aud_data tail = {.type = 0, .size = 64};
+                struct delay dl = {.channels = 8, .bits = 32, .bytes_per_ms_unit = 32,
+                    .au_length = 2, .packet_count = 4, .q_in = 132,
+                    .es = es, .dolby = dolby, .fadein_pending = true};
+                queue_items[0] = &metadata;
+                queue_items[1] = &pcm;
+                queue_items[2] = &tail;
+                queue_count = 3;
+                queue_index = sent_count = discarded_bytes = 0;
+                queue_owner = &dl;
+                delay_queue_flush(&dl, push_all);
+                assert(!dl.packet_count && dl.q_in == dl.q_out && !locks);
+                assert(dl.fadein_pending);
+                assert(queue_index == (push_all ? 2u : 0u));
+                assert(discarded_bytes == (push_all ? 64u : 132u));
+                unsigned zeros = push_all && dolby && !es ? 2 : 0;
+                assert(sent_count == (push_all ? 2u : 0u) + zeros);
+                if (push_all) {
+                    assert(sent_items[0] == &metadata && sent_items[1] == &pcm);
+                    for (unsigned index = 0; index < 16; index++)
+                        assert(samples[index] == (index < 8 ? 1024 : 512));
+                }
+                queue_owner = NULL;
+            }
+        }
+    }
+}
+
+static void test_flush_zero_failure(void)
+{
+    int32_t samples[8] = {1024};
+    struct aud_data pcm = {.type = 0, .size = sizeof(samples), .buf = samples};
+    struct delay dl = {.channels = 8, .bytes_per_ms_unit = 32, .au_length = 1,
+                       .packet_count = 3, .q_in = 64, .dolby = true};
+    queue_items[0] = &pcm;
+    queue_count = 1;
+    queue_index = sent_count = discarded_bytes = zero_attempts = 0;
+    queue_owner = &dl;
+    fail_zero = true;
+    delay_queue_flush(&dl, 1);
+    fail_zero = false;
+    assert(zero_attempts == 1 && sent_count == 1 && discarded_bytes == 32);
+    assert(dl.q_in == dl.q_out && !dl.packet_count && !locks);
+    queue_owner = NULL;
+}
+
 static void test_event_arming_boundary(void)
 {
     struct aud_event first = {.type = 1}, last = {.type = 2};
@@ -257,7 +346,9 @@ int main(void)
     assert(!locks);
     test_fades();
     test_chain_fade_units();
-        test_event_arming_boundary();
+    test_event_arming_boundary();
+    test_flush_tail();
+    test_flush_zero_failure();
     puts("delay ES: MAT/192k/8ch/16bit recalculation=2 chunks, delay=0 forwards, delay=10 releases "
             "and leaves bounded tail; scalar fades, +0xfc call units, FIRST/LAST arming boundary: PASS");
     return 0;

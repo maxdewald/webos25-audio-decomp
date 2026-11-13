@@ -405,6 +405,10 @@ int Pcmcvt_Cmd(struct pcmcvt *m, uint32_t cmd, void *arg, unsigned len)
  * the saved divisor is zero despite cached 8ch/16bit/192000 formats; src's
  * context pointer and upstream pending slots are already damaged. This does
  * not identify the writer or justify hiding the shipped fault with a guard.
+ * Instance 0x602d6d00 (uid 0x0400f01d) has src handle 0x60293140 whose first
+ * word is 0x4c2727a1. getOutputFs @600a0e1c loads handle->context +0x10,
+ * not the cached module rate. Saved a11=0 at the divide; the derived context
+ * address lies outside captured RAM, so its contents cannot be reconstructed.
  */
 int Pcmcvt_Chai(struct aud_port *port, struct aud_data *data)
 {

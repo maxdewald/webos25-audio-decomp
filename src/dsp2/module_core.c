@@ -271,7 +271,12 @@ int aud_module_push_event(struct aud_module *m, int out_port_num, struct aud_eve
  * standalone firmware function. Reloads the array before each put and count
  * after each put; does not detach a batch before callbacks. The logged
  * foreach_sync+0xf4 is the return PC 0x600742cc of put at 0x600742c9.
- * Whether this capture mutated the pending array is unresolved. */
+ * native-hd-fault-20261113-140842 retains the bad arguments in pending slots:
+ * lipsync_0423000f out0 [0x60293098]=0x4b200670 and srcbin_0426000a out0
+ * [0x60293118]=0x4be4769c. Both counts are already zero in the later dump.
+ * aud_object_put @600699a4 reports old refcount==0, not proven prior valid
+ * destruction; the invalid targets are outside the captured RAM. In-place
+ * fade damage fits these slots; no callback-mutation history is established. */
 void reconstructed_port_release_pending(struct aud_port *port)
 {
     for (unsigned index = 0; index < port->pending_num; ++index)

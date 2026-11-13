@@ -602,7 +602,9 @@ int lgao_close(void *a)
 /* @0x14fa4: 1 skips the element's EOS wait; 0 selects it, not a delivery
  * guarantee. PLAY sends custom+LAST to bypass then main regardless of PCM flags;
  * push results are ignored. Non-PLAY also returns 0 and rearms PCM FIRST without
- * sending anything. Neither return proves both DSP paths drained or released. */
+ * sending anything. Neither return proves both DSP paths drained or released.
+ * The native-HD fault's main-tail PRESENT_END precedes the delivered DSP fault
+ * logs; it is not an acknowledgement that the bypass head has drained. */
 int lgao_eos(void *a)
 {
     lgao *ao = a;

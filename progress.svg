@@ -116,7 +116,7 @@
 <text class="name" x="24" y="798">dsp2</text>
 <text class="path" x="24" y="815">/lib/firmware/audio_a0_dsp2.bin</text>
 <rect class="track" x="330" y="792" width="340" height="14" rx="7"/>
-<rect class="dsp" x="330" y="792" width="41.4" height="14" rx="7"/>
+<rect class="dsp" x="330" y="792" width="41.5" height="14" rx="7"/>
 <text class="pct" x="686" y="804">12.2%</text>
 <text class="path" x="686" y="820">xtensa</text>
 <text class="name" x="24" y="844">libumi</text>

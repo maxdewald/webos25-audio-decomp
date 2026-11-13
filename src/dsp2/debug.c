@@ -45,7 +45,32 @@ extern int logm_message(const char *fmt, ...);
 extern char *aud_module_prop_str(void *module, const char *format);
 extern void aud_free(void *);
 
-/* @0x600708d4: argv[1] is the kernel's magic; argv[2] is a numeric uid. */
+/* @0x600708d4: argv[1] is the kernel's magic; argv[2] is a numeric uid.
+ * Property text is not a thread/condition-queue snapshot. Integer GET_PROP
+ * avoids string formatting, not queue-1 scheduling or module lifetime races;
+ * independent field reads cannot establish which thread is currently waiting.
+ * DSP2 tables/getters: build/scratch/diag-observe/{descriptors.txt,*get*.lst}.
+ * Fader class +0x30 @60101e40 selects descriptors @60101ec0..60102168:
+ * block-queue bool +24c (descriptor 60102118), wait-length int +1d8
+ * (60101ee8), max-length int +1e0 (60101ec0): direct GET_PROP, no getter lock.
+ * queued-length int (60101f88): geti 60087650 / gets 6008766c compute unsigned
+ * (u32[+10c]-u32[+110])/u32[+f8] frames, then WRITE cache +214, without a lock.
+ * Requires valid lifetime/nonzero frame size; concurrent loads can disagree.
+ * state (60101fd8) is string-only: gets 60087690 reads +1c8, duplicates
+ * wait/fadein/running/fadeout/stop (else unknown); integer GET_PROP returns -1.
+ * Neither first +250 nor first_sent byte +21c has a fader descriptor.
+ * Lipsync class +0x30 @60106290 selects descriptors @60106300..601068c8:
+ * state int +278 (60106878), BaseCT/BaseST int +204/+208 (60106580/601065a8),
+ * ui32BaseCT/ui32BaseST int +20c/+210 (601065d0/601065f8), and
+ * debug-skip-count/debug-repeat-count/debug-discontinuity-count/debug-free-run-count
+ * int +1a0/+1a4/+1a8/+1ac (60106300/328/350/378): direct reads, no getter lock.
+ * These are transition counters (600a22ec), saturating at 255, not frame counts
+ * or a current-action sample. Debug-reset can clear them.
+ * state is a stored control value, NOT action +15c. No descriptors expose
+ * action, last_stc +1b0, first +238, first_sent +110 or first_received byte +268.
+ * A retained FIRST pointer alone does not mean unsent: also check first_sent.
+ * GET_PROP does not invoke setters; generic get can still log under its mask.
+ */
 int audreg_print_property(int argc, char **argv)
 {
     void *module;
@@ -85,6 +110,10 @@ extern debug_function symbol_get_add(const char *name);
 /* @0x6007a714: magic-delimited legacy status; argc is ignored. The mask change
  * is not restored, and the dispatch result does not affect the return value.
  * The jump at 6007a789 rejoins this function; it is not a second handler.
+ * _lipsync_print_status @600a0f64 prints format, bytes, configuration, bases,
+ * idle_time and debug counts, NOT internal action, last_stc or held FIRST.
+ * Kernel instance status @ffffffc010c8f934 returns only name/uid; prop invokes
+ * audreg_print_property, not integer GET_PROP (src/kernel/aud/prop_read.c).
  */
 int debug_aimc_lstatus(const char *magic, int argc, char **argv)
 {
@@ -102,7 +131,12 @@ int debug_aimc_lstatus(const char *magic, int argc, char **argv)
     return 0;
 }
 
-/* @0x6007a790: argv[0] remains the function name; no argument shifting. */
+/* @0x6007a790: argv[0] remains the function name; no argument shifting.
+ * Symbol visibility is not ABI adaptation: fader_prop_get* and
+ * _lipsync_get_stc @600a2f08 take a native module pointer, NOT argc/argv.
+ * The latter samples MMIO according to module+200, not cached last_stc+1b0;
+ * fcall cannot safely invoke it or return its scalar as a property response.
+ */
 int debug_aimc_fcall(const char *magic, int argc, char **argv)
 {
     debug_function function = symbol_get_add(argv[0]);
@@ -219,6 +253,15 @@ static void debug_port_fields(struct debug_port *port)
  * Inputs expose one upstream pointer; outputs enumerate all
  * downstream peers. Output-root lock stays held while each peer-root is locked.
  * FLIX branch slots at 60070424/600704a7 confirm empty-list and loop-back tests.
+ * Fader wait interpretation (not fields printed here): WAIT releases only at
+ * queued > wait-length (60085e09), producer waits at queued > max-length
+ * (600868fa), block-queue parks output after a push at queued < max-length
+ * (600852af). Conditions/mutexes are +168/+13c, +158/+13c, +178/+188;
+ * lipsync waits on +258/+23c. Compare coherent TCB wait-queue membership,
+ * ready/reason and saved stack as documented in sched.c; thresholds alone
+ * cannot identify a waiter, and these diagnostics do not emit those TCB fields.
+ * For a condition wait: TCB ready byte +30 == 0, reason +3c == 6005a798,
+ * queue +48 == condition+4; validate membership, not +48 in isolation.
  */
 int dump_inst(struct debug_module *module)
 {

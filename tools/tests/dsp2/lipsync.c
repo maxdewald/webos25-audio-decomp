@@ -22,7 +22,8 @@ struct first_event {
 };
 static unsigned get_count, put_count, events, data_pushes, syncs, defaults, signals;
 static unsigned flushes, metadata_flushes, flushed_bytes;
-static int locks, named_last;
+static int locks, named_last, named_master;
+static int32_t master_base[2];
 static void *last_get, *last_put;
 static struct aud_event *last_event;
 static struct aud_data *last_data;
@@ -36,6 +37,9 @@ static unsigned fadeins, fadeouts;
 static bool active_output;
 static uint32_t adapter_timestamp;
 static bool have_timestamp;
+static unsigned waits;
+static int wait_timeout;
+static bool repeat_wait, advance_wait;
 
 uint32_t _lipsync_media_trick_unrecovered(struct lipsync *ls, uint32_t pts)
 {
@@ -45,11 +49,6 @@ uint32_t _lipsync_media_trick_unrecovered(struct lipsync *ls, uint32_t pts)
 int _lipsync_core_clock_unrecovered(struct lipsync *ls, uint32_t pts)
 {
     assert(!"unrecovered clock predicate");
-    return -1;
-}
-int _lipsync_state_unrecovered(struct lipsync *ls)
-{
-    assert(!"unrecovered state predicate");
     return -1;
 }
 
@@ -82,7 +81,7 @@ static void reset_observations(void)
 {
     get_count = put_count = events = data_pushes = syncs = defaults = signals = 0;
     flushes = metadata_flushes = flushed_bytes = 0;
-    locks = named_last = 0;
+    locks = named_last = named_master = 0;
     last_get = last_put = NULL;
     last_event = NULL;
     last_data = NULL;
@@ -93,6 +92,9 @@ static void reset_observations(void)
     active_output = true;
     adapter_timestamp = 42;
     have_timestamp = true;
+    waits = 0;
+    wait_timeout = 0;
+    repeat_wait = advance_wait = false;
     memset(gstc_values, 0, sizeof(gstc_values));
     memset(stc_values, 0, sizeof(stc_values));
 }
@@ -162,10 +164,16 @@ int msf_process_metadata(void *metadata, void *buf, unsigned size)
 void aud_mutex_lock(void *m) { (void)m; assert(locks++ == 0); }
 void aud_mutex_unlock(void *m) { (void)m; assert(--locks == 0); }
 void aud_cond_signal(void *c) { (void)c; assert(locks == 1); signals++; }
-void aud_cond_wait_timeout(void *cond, void *mutex, int ms)
+void aud_cond_wait_timeout(void *cond, void *mutex, int us)
 {
-    (void)cond; (void)mutex;
-    assert(locks == 1 && ms == 1000);
+    struct lipsync *ls = (void *)((char *)mutex - offsetof(struct lipsync, mutex));
+    assert(locks == 1 && cond == ls->cond);
+    waits++;
+    wait_timeout = us;
+    if (advance_wait)
+        stc_values[0x84 / 4] += 900;
+    else if (!repeat_wait)
+        ls->flush_async = true;
 }
 void aud_data_adapter_flush(void *a, unsigned n)
 {
@@ -221,6 +229,12 @@ void aimc_raise_named_event(void *imc, int uid, const char *name, void *p, int s
 {
     (void)imc;
     (void)uid;
+    if (!strcmp(name, "adec_master_info")) {
+        assert(p && size == sizeof(master_base));
+        memcpy(master_base, p, sizeof(master_base));
+        named_master++;
+        return;
+    }
     assert(!strcmp(name, "last") && p == NULL && size == 0);
     named_last++;
 }
@@ -561,8 +575,8 @@ static void test_clock_to_action(void)
         struct lipsync ls = {.channels = 8, .fs = 48, .bytePerSample = 2,
             .nSamplePerFrame = 2, .frame_bytes = 32, .adapter_in = 32,
             .first = &first, .dataType = 1, .LipsyncOnOff = 1, .clockType = 0x100,
-            .upperbound = 10, .lowerbound = 5, .unknown_1f8 = 20,
-            .unknown_1fc = 20, .idle_time = 1, .action = cases[index].previous};
+            .upperbound = 10, .lowerbound = 5, .freerunupperbound = 20,
+            .freerunlowerbound = 20, .idle_time = 1, .action = cases[index].previous};
         reset_observations();
         adapter_owner = &ls;
         frame_data = (struct aud_data){.buf = payload};
@@ -625,7 +639,7 @@ static void test_clock_reset_boundaries(void)
     struct lipsync ls = {.channels = 8, .fs = 48, .bytePerSample = 2,
         .nSamplePerFrame = 2, .frame_bytes = 32, .adapter_in = 31, .dataType = 1,
         .first = &first, .LipsyncOnOff = 1, .clockType = 0x100, .upperbound = 10,
-        .lowerbound = 5, .unknown_1f8 = 20, .unknown_1fc = 20, .idle_time = 2,
+        .lowerbound = 5, .freerunupperbound = 20, .freerunlowerbound = 20, .idle_time = 2,
         .action = LS_REPEAT, .idle_cnt = 9, .discard_param = 2};
     reset_observations();
     adapter_owner = &ls;
@@ -703,7 +717,7 @@ static void test_clock_counters(void)
         struct lipsync ls = {.channels = 8, .fs = 48, .bytePerSample = 2,
             .nSamplePerFrame = 2, .adapter_in = 32, .frame_bytes = 32, .dataType = 1,
             .LipsyncOnOff = 1, .clockType = cases[index].clock, .upperbound = 10,
-            .lowerbound = 5, .unknown_1f8 = 20, .action = LS_NORMAL,
+            .lowerbound = 5, .freerunupperbound = 20, .action = LS_NORMAL,
             .count_transition = cases[index].transition, .idle_total = cases[index].total,
             .repeat_cnt = cases[index].repeat, .skip_cnt = cases[index].skip};
         reset_observations();
@@ -743,7 +757,7 @@ static void test_clock_counters(void)
         ls = (struct lipsync){.channels = 8, .fs = 48, .bytePerSample = 2,
             .nSamplePerFrame = 2, .adapter_in = 32, .dataType = 1,
             .LipsyncOnOff = 1, .clockType = 0x100, .upperbound = 10,
-            .lowerbound = 5, .unknown_1f8 = 20, .idle_time = 1,
+            .lowerbound = 5, .freerunupperbound = 20, .idle_time = 1,
             .action = interrupted[index], .skip_cnt = 5, .idle_cnt = 7};
         reset_observations();
         adapter_owner = &ls;
@@ -753,6 +767,65 @@ static void test_clock_counters(void)
         assert(ls.discontinuity == 1 && !ls.idle_cnt && ls.adapter_out == 32);
         assert(!events && !data_pushes);
     }
+}
+
+static void test_repeat_wait(void)
+{
+    unsigned char payload[32];
+    struct aud_event first = {.type = 1};
+    struct lipsync ls = {.channels = 8, .fs = 48, .bytePerSample = 2,
+        .nSamplePerFrame = 2, .adapter_in = 32, .dataType = 1, .first = &first,
+        .LipsyncOnOff = 1, .clockType = 0x100, .upperbound = 10,
+        .lowerbound = 5, .freerunupperbound = 5000, .action = LS_REPEAT,
+        .repeat_stc = 10000};
+    reset_observations();
+    adapter_owner = &ls;
+    adapter_timestamp = 16840;
+    stc_values[0x84 / 4] = 10000;
+    repeat_wait = true;
+    assert(clock_lipsync_core(&ls) == 1 && waits == 11 && wait_timeout == 10000);
+    assert(!ls.unchanged_stc && ls.action == LS_REPEAT && ls.diff == 900 && ls.state_changed);
+    assert(!ls.adapter_out && !events && !data_pushes && !ls.first_sent);
+
+    reset_observations();
+    ls.state_changed = false;
+    adapter_owner = &ls;
+    adapter_timestamp = 16840;
+    stc_values[0x84 / 4] = 10000;
+    frame_data = (struct aud_data){.buf = payload};
+    advance_wait = true;
+    assert(clock_lipsync_core(&ls) == 0 && waits == 1 && wait_timeout == 10000);
+    assert(ls.action == LS_NORMAL && !ls.diff && ls.adapter_out == 32);
+    assert(events == 1 && data_pushes == 1 && ls.first_sent);
+
+    reset_observations();
+    ls.adapter_out = 0;
+    ls.action = LS_REPEAT;
+    ls.first_sent = 0;
+    adapter_timestamp = 16840;
+    stc_values[0x84 / 4] = 10000;
+    assert(clock_lipsync_core(&ls) == 0 && waits == 1 && ls.flush_async);
+    assert(!ls.adapter_out && !events && !data_pushes && !locks);
+
+    reset_observations();
+    ls.flush_async = false;
+    ls.disconnecting = true;
+    adapter_timestamp = 16840;
+    stc_values[0x84 / 4] = 10000;
+    repeat_wait = true;
+    assert(clock_lipsync_core(&ls) == 1 && waits == 1);
+    assert(!ls.disconnecting && ls.state_changed && !ls.adapter_out && !events && !locks);
+
+    reset_observations();
+    ls.state_changed = false;
+    ls.gap_handling = 1;
+    ls.start_pts = 1000;
+    ls.end_pts = 10000;
+    adapter_timestamp = 16840;
+    stc_values[0x84 / 4] = 10000;
+    assert(clock_lipsync_core(&ls) == 0 && waits == 1 && wait_timeout == 100000);
+    assert(!ls.gap_handling && !ls.start_pts && !ls.end_pts);
+    assert(!ls.adapter_out && !events && !data_pushes && !locks);
 }
 
 static void test_carrier_first_fields(void)
@@ -908,6 +981,82 @@ static void test_idle_boundary(void)
     assert(!flushes && !metadata_flushes && !events && !put_count && !get_count);
 }
 
+static int state_for(int previous, int32_t diff, uint32_t stc_now)
+{
+    struct lipsync ls = {.LipsyncOnOff = 1, .clockType = 0x100, .upperbound = 10,
+        .lowerbound = 5, .freerunupperbound = 20, .freerunlowerbound = 20,
+        .idle_time = 1, .action = previous, .diff = diff, .repeat_stc = 1000};
+    stc_values[0x84 / 4] = stc_now;
+    return _lipsync_state(&ls);
+}
+
+static void test_positive_gap_transitions(void)
+{
+    reset_observations();
+    /* IDLE escape: hold (REPEAT) up to freerun bound, otherwise FREE_RUN. */
+    assert(state_for(LS_IDLE, 1, 1000) == LS_REPEAT);
+    assert(state_for(LS_IDLE, 1800, 1000) == LS_REPEAT);
+    assert(state_for(LS_IDLE, 1801, 1000) == LS_FREE_RUN);
+    assert(state_for(LS_E_NORM, 901, 1000) == LS_REPEAT);
+    assert(state_for(LS_E_NORM, 1801, 1000) == LS_FREE_RUN);
+    /* REPEAT gives up only once the STC passes repeat_stc + bound. */
+    assert(state_for(LS_REPEAT, 1, 2800) == LS_REPEAT);
+    assert(state_for(LS_REPEAT, 1, 2801) == LS_WRONG);
+    assert(state_for(LS_WRONG, 1, 1000) == LS_WRONG);
+    assert(state_for(LS_WRONG, -5000, 1000) == LS_WRONG);
+
+    struct lipsync ls = {.LipsyncOnOff = 1, .clockType = 0x100, .upperbound = 10,
+        .lowerbound = 5, .freerunupperbound = 20, .action = LS_EXCEPT,
+        .diff = 901, .skip_cnt = 5};
+    assert(_lipsync_state(&ls) == LS_REPEAT && !ls.skip_cnt);
+    ls.action = LS_EXCEPT;
+    ls.diff = 1801;
+    ls.skip_cnt = 5;
+    assert(_lipsync_state(&ls) == LS_FREE_RUN);
+
+    /* Frozen STC with a held frame: the repeat window never expires. */
+    ls = (struct lipsync){.LipsyncOnOff = 1, .clockType = 0x100, .upperbound = 10,
+        .lowerbound = 5, .freerunupperbound = 20, .action = LS_IDLE, .idle_time = 1,
+        .diff = 900};
+    stc_values[0x84 / 4] = 5000;
+    for (int i = 0; i < 1000; i++) {
+        ls.action = _lipsync_state(&ls);
+        assert(ls.action == LS_REPEAT && ls.repeat_stc == 5000);
+    }
+    stc_values[0x84 / 4] = 6801;
+    assert(_lipsync_state(&ls) == LS_WRONG);
+}
+
+static void test_master_and_nodelay(void)
+{
+    reset_observations();
+    struct lipsync ls = {.LipsyncOnOff = 1, .clockType = 0x200, .upperbound = 10,
+        .lowerbound = 5, .action = LS_NORMAL, .count_transition = 1,
+        .BaseCT_copy = 7, .BaseST_copy = 9, .diff = 901};
+    assert(_lipsync_state(&ls) == LS_FREERUN_WITHNOTI && ls.skip_cnt == 1 && !named_master);
+    assert(_lipsync_state(&ls) == LS_FREERUN_WITHNOTI && !ls.skip_cnt && named_master == 1);
+    assert(ls.last_diff == 901 && ls.unknown_19c == 1);
+    assert(master_base[0] == 9 && master_base[1] == 7);
+    ls.diff = 901 - 450;
+    assert(_lipsync_state(&ls) == LS_FREERUN_WITHNOTI && named_master == 1);
+    ls.LipsyncOnOff = 0;
+    assert(_lipsync_state(&ls) == LS_FREERUN_WITHNOTI);
+
+    ls = (struct lipsync){.LipsyncOnOff = 1, .NodelayOnOff = 1, .action = LS_NORMAL,
+        .adapter_in = 100, .unknown_16c = 199, .unknown_170 = 99, .unknown_174 = 2};
+    assert(_lipsync_state(&ls) == LS_NODELAY);
+    ls.action = LS_NODELAY;
+    assert(_lipsync_state(&ls) == LS_SKIP);
+    ls.unknown_16c = 200;
+    assert(_lipsync_state(&ls) == LS_NODELAY);
+    ls.action = LS_SKIP;
+    assert(_lipsync_state(&ls) == LS_SKIP);
+    ls.unknown_170 = 200;
+    assert(_lipsync_state(&ls) == LS_NODELAY);
+    ls.NodelayOnOff = 2;
+    assert(_lipsync_state(&ls) == LS_OFF);
+}
+
 static void test_commands_and_replay(void)
 {
     struct first_event mat = {.event = {.type = 1}, .codec = "mat", .channels = 8,
@@ -948,11 +1097,11 @@ static void test_commands_and_replay(void)
     assert(!memcmp(&ls, &saved, sizeof(ls)));
     ls.start_pts = 11;
     ls.end_pts = 22;
-    ls.gap_handling = ls.gap_correction = ls.unknown_234 = 1;
+    ls.gap_handling = ls.gap_correction = ls.additional_bound = 1;
     ls.debug_count[0] = 99;
     assert(_lipsync_cmd(&ls, 0x10000000, NULL, 0) == 0);
     assert(!ls.start_pts && !ls.end_pts && !ls.gap_handling && !ls.gap_correction);
-    assert(!ls.debug_count[0] && !ls.unknown_234 && ls.first == &mat.event);
+    assert(!ls.debug_count[0] && !ls.additional_bound && ls.first == &mat.event);
     assert(ls.dataType == 1 && ls.bytePerSample == 2 && ls.nSamplePerFrame == 2);
     assert(_lipsync_cmd(&ls, 0xdeadbeef, NULL, 0) == 29);
 
@@ -1012,11 +1161,14 @@ int main(void)
     test_clock_to_action();
     test_clock_reset_boundaries();
     test_clock_counters();
+    test_repeat_wait();
     test_carrier_first_fields();
     test_set_base();
     test_set_base_null();
     test_gap_timestamps();
     test_idle_boundary();
+    test_positive_gap_transitions();
+    test_master_and_nodelay();
     test_commands_and_replay();
     puts("lipsync: clock-to-action, wrap/discontinuity, short-frame/base reset and FIRST/data ownership: PASS");
     return 0;

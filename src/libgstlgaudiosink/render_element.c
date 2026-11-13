@@ -406,7 +406,7 @@ gboolean gst_lg_audio_render_query (GstBaseSink *sink, GstQuery *query)
 }
 
 /* @0x5158 gst_lg_audio_render_update_clock: program renderer STC/PTS base.
- * lgao_set_basetime() was inlined here (GSTC ioctl, 90 kHz conversion, AREN_SET_BASETIME). */
+ * Tail-calls lgao_set_basetime@plt via the Thumb veneer at 0x3c14 (raw 0x5902). */
 void gst_lg_audio_render_update_clock (GstLgAudioRender *pAudioRen, gint64 base, gint64 start)
 {
     GstClockTime latency = gst_base_sink_get_latency (GST_BASE_SINK (pAudioRen));

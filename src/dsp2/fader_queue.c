@@ -166,7 +166,9 @@ extern void  aud_module_sync(struct fader *f, int port);
 extern int   aud_module_output_thread_create(struct fader *f, void *fn, void *arg,
                                              struct aud_mutex *mx, struct aud_cond *c);
 extern void  aud_module_output_thread_destroy(struct fader *f);
-extern int   aud_port_push_event(void *port, struct aud_event *e);
+/* @0x600f2c50: requeue the current XOS thread at its priority and switch; symtab's
+ * "aud_port_push_event" at this address is a look-alike. */
+extern void  xos_thread_yield(void);
 extern struct aud_data *aud_data_new(unsigned size);
 extern struct aud_data *aud_data_new_zero(unsigned size);
 extern struct aud_data *aud_data_new_metadata(void *md);
@@ -287,7 +289,8 @@ int _fader_write_metadata(struct fader *f, int frames, int consume, uint32_t ts)
     return 0;
 }
 
-/* @0x60084d1c */
+/* @0x60084d1c: the output thread delivers synchronously. aud_module_sync runs the
+ * downstream chain (delay -> mixerbin) in THIS thread, so any wait there stalls the queue. */
 int _fader_push_data(struct fader *f, struct aud_data *d)
 {
     if (!d) {
@@ -480,7 +483,7 @@ int _fader_process_data_running(struct fader *f)
     d = aud_data_adapter_dequeue(&f->q);
     if (d) {
         pending_events_update(f, (int)d->size);
-        if (QUEUED(f) < f->max_len)                             /* [FLIX?] @0x6008527d */
+        if (QUEUED(f) <= f->max_len)                            /* 0x6008527d */
             aud_cond_signal(&f->in_cond);
         aud_mutex_unlock(&f->lock);
         _fader_write_metadata(f, (int)(d->size / (unsigned)f->frame_bytes), 1, d->ts);
@@ -594,8 +597,11 @@ int _fader_process_data_fadeout(struct fader *f)
         aud_data_adapter_unmap(&f->q, src);
         aud_data_adapter_flush(&f->q, n);
         pe_shift(f, (int)n);
-        /* [FLIX?] @0x600856e2/0x600856ed: signal in_cond; zero the tail of a short chunk */
     }
+    if (QUEUED(f) <= f->max_len)                                /* 0x600856e2 */
+        aud_cond_signal(&f->in_cond);
+    if (n < f->chunk_bytes)                                     /* 0x600856ed */
+        memset((unsigned char *)d->ptr + n, 0, f->chunk_bytes - n);
     aud_mutex_unlock(&f->lock);
     _fader_write_metadata(f, (int)(d->size / (unsigned)f->frame_bytes), 1, d->ts);
     _fader_push_data(f, d);
@@ -609,8 +615,8 @@ int _fader_process_data_fadeout(struct fader *f)
     if (f->fade_pos != 0)
         return 0;
 
-    /* Fade finished: Dolby streams get 2 extra zero chunks ([FLIX?] count 0x6008574d). */
-    for (int i = 0, extra = f->dolby ? 2 : 0; i < extra; i++) {
+    /* Fade finished: one zero chunk, two for Dolby (0x60085626/0x6008574a). */
+    for (int i = 0, extra = f->dolby ? 2 : 1; i < extra; i++) {
         struct aud_data *z = aud_data_new_zero(f->chunk_bytes);
         if (!z) {
             if (f->debug & 1)
@@ -673,7 +679,10 @@ int _fader_process_data_fadein(struct fader *f)
         aud_data_adapter_flush(&f->q, n);
         pe_shift(f, (int)n);
     }
-    /* [FLIX?] @0x60085bd2/0x60085bdd: signal in_cond, short-chunk handling, log */
+    if (QUEUED(f) <= f->max_len)                                /* 0x60085bb5 */
+        aud_cond_signal(&f->in_cond);
+    if (n < f->chunk_bytes)                                     /* 0x60085bc0 */
+        memset((unsigned char *)d->ptr + n, 0, f->chunk_bytes - n);
     aud_mutex_unlock(&f->lock);
     _fader_write_metadata(f, (int)(d->size / (unsigned)f->frame_bytes), 1, d->ts);
     _fader_push_data(f, d);
@@ -702,14 +711,15 @@ int add_zero(struct fader *f, int frames)
     return 0;
 }
 
-/* @0x60085d50: wait for wait-length frames, sending FIRST/LAST events and the
- * "underflow_input" custom event on a 500 ms input timeout. */
+/* @0x60085d50: wait for MORE than wait-length frames, then send the held FIRST and
+ * the front padding. Only fader_chain (crossing wait-length), FIRST, CUSTOM/FLUSH
+ * (_fader_add_pe_and_signal) and fader_stop signal out_cond. Nothing downstream does.
+ * Queue variants never send LAST here and never time out into "underflow_input". */
 int _fader_process_data_wait(struct fader *f)
 {
     bool first_wait = f->first_sent;
 
-    /* [FLIX?] @0x60085d8c: the queue variants skip this */
-    if (f->first_sent) {                                        /* 0x60085d94: segment ended */
+    if (f->first_sent && !is_queue_variant(f)) {                /* 0x60085d8c/0x60085d9d */
         if (f->dot_on_wait > 0 && --f->dot_on_wait == 0)
             dot_module_connection(0, 0);
         aud_mutex_unlock(&f->lock);
@@ -724,7 +734,7 @@ int _fader_process_data_wait(struct fader *f)
             f->enable_underflow = true;
             return -1;
         }
-        if (QUEUED(f) >= f->wait_len)                           /* [FLIX?] @0x60085e09 */
+        if (QUEUED(f) > f->wait_len)                            /* 0x60085e09 */
             break;
         if (first_wait && f->enable_underflow) {
             if (aud_cond_wait_timeout(&f->out_cond, &f->lock, WAIT_TIMEOUT_US) == 1 &&
@@ -776,17 +786,17 @@ int _fader_process_data_wait(struct fader *f)
         logmm_printlm(f->name, 0, "_fader_process_data_wait", 0x484, "?? zero %d", f->zero_left);
         return 0;
     }
-    {
+    while (f->zero_left > 0) {                                  /* 0x60085fb8..0x60086063 */
         struct aud_data *d = aud_data_adapter_dequeue(&f->q);
-        if (d) {
-            pe_shift(f, (int)d->size);
-            f->zero_left -= (int)(d->size / (unsigned)f->frame_bytes);
-            aud_cond_signal(&f->in_cond);
-            aud_mutex_unlock(&f->lock);
-            _fader_write_metadata(f, (int)(d->size / (unsigned)f->frame_bytes), 0, d->ts);
-            _fader_push_data(f, d);
-            aud_mutex_lock(&f->lock);
-        }
+        if (!d)
+            break;
+        pe_shift(f, (int)d->size);
+        f->zero_left -= (int)(d->size / (unsigned)f->frame_bytes);
+        aud_cond_signal(&f->in_cond);
+        aud_mutex_unlock(&f->lock);
+        _fader_write_metadata(f, (int)(d->size / (unsigned)f->frame_bytes), 0, d->ts);
+        _fader_push_data(f, d);
+        aud_mutex_lock(&f->lock);
     }
     return 0;
 }
@@ -1033,8 +1043,9 @@ int fader_chain(struct aud_port *port, struct aud_data *d)
                       (int)(d->size / (unsigned)f->frame_bytes), d->size);
     aud_mutex_lock(&f->lock);
     /* 0x600868fa..0x60086925: back-pressure. The upstream thread blocks while the queue
-     * holds max-length frames or more, unless the port is disabled or a flush is running. */
-    while (!(port->flag & PORT_DISABLED) && QUEUED(f) >= f->max_len && !f->flushing) {
+     * holds MORE than max-length frames, unless the port is disabled or a flush is running.
+     * Only the output thread's dequeue/fade (<= max-length), FLUSH and disconnect wake it. */
+    while (!(port->flag & PORT_DISABLED) && QUEUED(f) > f->max_len && !f->flushing) {
         if (f->debug & 0x20)
             logmm_printlm(f->name, 5, "fader_chain", 0x5c1, "queue full. wait.. (%d/%d)\n",
                           QUEUED(f), f->max_len);
@@ -1043,7 +1054,8 @@ int fader_chain(struct aud_port *port, struct aud_data *d)
 
     aud_mutex_lock(&f->md_lock);
     if (f->set_flush) {                                         /* 0x60086966 */
-        /* [FLIX?] @0x60086972/0x60086980 log and queued != 0 test */
+        if (QUEUED_BYTES(f))                                    /* 0x60086980 */
+            aud_data_adapter_flush(&f->q, QUEUED_BYTES(f));
         msf_flush_metadata(&f->md_in);
         f->set_flush = false;
     }
@@ -1067,8 +1079,8 @@ int fader_chain(struct aud_port *port, struct aud_data *d)
         logmm_printlm(f->name, 4, "fader_chain", 0x5e9, "queued length %d(%d)\n",
                       QUEUED(f), (int)QUEUED_BYTES(f));
     aud_mutex_unlock(&f->lock);
-    /* [FLIX?] @0x600869d9: queue variant (desc->is_queue==1) -> aud_port_push_event tail
-     * at 0x60086b88 (arguments not recoverable). */
+    if (is_queue_variant(f))                                    /* 0x600869d9 -> 0x60086b88 */
+        xos_thread_yield();
     return r;
 }
 
@@ -1223,7 +1235,8 @@ int fader_event(struct fader *f, void *port, struct aud_event *e)
         aud_mutex_unlock(&f->lock);
         queue_module_unblock(f);
         if (is_queue_variant(f)) {
-            /* [FLIX?] @0x60086e1b (prop bit test) */
+            if (!(e->prop & AUD_EVENT_PROP_SYNC))               /* 0x60086e1b -> 0x60087098 */
+                return aud_module_default_event(f, port, e);
             logmm_printl(fader_log, 3, "fader_event", 0x6c5, "%s: set_flush = true\n", f->name);
             f->set_flush = true;
             return _fader_add_pe_and_signal(f, e);

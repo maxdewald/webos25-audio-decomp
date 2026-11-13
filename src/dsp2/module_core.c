@@ -107,6 +107,11 @@ struct aud_module {
     bool        do_chain_profile;           /* +0x97 property "do-chain-profile" */
     uint64_t    chain_profile;              /* +0x98 */
     struct aud_event *first_event_out;      /* +0xa8 last FIRST seen at an input */
+    bool        othread_running;            /* +0xac */
+    int (*othread_fn)(struct aud_module *, void *); /* +0xb0 */
+    void       *othread_arg;                /* +0xb4 */
+    void       *othread_mutex;              /* +0xb8 held while othread_fn runs */
+    void       *othread_cond;               /* +0xbc signalled on destroy only */
     void       *othread;                    /* +0xc0 */
     int         prop_access_lock;           /* +0x74 */
     int         block_cond;                 /* +0xc4 (0x100-0x3c) */
@@ -126,6 +131,9 @@ extern void aud_mutex_lock(void *);
 extern void aud_mutex_unlock(void *);
 extern void aud_cond_signal(void *);
 extern void aud_cond_wait(void *cond, void *mutex);
+extern void *aud_thread_create(const char *name, unsigned stack, int prio,
+                               void *fn, void *arg);                          /* @0x600a6634 */
+extern void aud_thread_destroy(void *);                                      /* @0x600a66ac */
 extern void *aud_object_get(void *);
 extern void aud_object_put(void *);
 extern struct aud_port *aud_module_get_output(struct aud_module *, int);      /* @0x60073984 */
@@ -448,6 +456,68 @@ int aud_module_default_command(struct aud_module *m, unsigned cmd, void *param, 
         /* "command not handled. %08x(%s) at %s" (lvl 3) */
         return -1;
     }
+}
+
+/* @0x600766f4 othread_loop: a dedicated XOS thread (priority 10), not a scheduler
+ * queue job. The callback owns the loop body and must wait on its own cond. */
+int othread_loop(struct aud_module *m)
+{
+    aud_mutex_lock(m->othread_mutex);
+    while (m->othread_running)
+        m->othread_fn(m, m->othread_arg);
+    aud_mutex_unlock(m->othread_mutex);
+    return 0;
+}
+
+/* @0x60076728 aud_module_output_thread_create */
+int aud_module_output_thread_create(struct aud_module *m,
+                                    int (*fn)(struct aud_module *, void *), void *arg,
+                                    void *mutex, void *cond)
+{
+    if (m->othread) {
+        if (LOG_ON(core_log_mask, 1))
+            logmm_printl(core_log_ctx, 1, "aud_module_output_thread_create", 0xa4b,
+                         "%s: output thread already running.\n", m->name);
+        return -1;
+    }
+    m->othread_fn = fn;
+    m->othread_arg = arg;
+    m->othread_running = true;
+    m->othread_mutex = mutex;
+    m->othread_cond = cond;
+    if (LOG_ON(core_log_mask, 3))
+        logmm_printl(core_log_ctx, 3, "aud_module_output_thread_create", 0xa55,
+                     "%s: create output thread.\n", m->name);
+    m->othread = aud_thread_create(m->name, 0x10000, 10, (void *)othread_loop, m);
+    if (!m->othread) {
+        if (LOG_ON(core_log_mask, 1))
+            logmm_printl(core_log_ctx, 1, "aud_module_output_thread_create", 0xa5a,
+                         "%s: cannot make output thread.\n", m->name);
+        return -1;
+    }
+    return 0;
+}
+
+/* @0x600767c4 aud_module_output_thread_destroy: wakes othread_cond only. A callback
+ * parked on any other cond (block_cond, a downstream chain wait) is not released. */
+int aud_module_output_thread_destroy(struct aud_module *m)
+{
+    if (!m->othread) {
+        if (LOG_ON(core_log_mask, 1))
+            logmm_printl(core_log_ctx, 1, "aud_module_output_thread_destroy", 0xa65,
+                         "%s: output thread not running..\n", m->name);
+        return -1;
+    }
+    aud_mutex_lock(m->othread_mutex);
+    if (LOG_ON(core_log_mask, 3))
+        logmm_printl(core_log_ctx, 3, "aud_module_output_thread_destroy", 0xa6a,
+                     "%s: stop output thread.\n", m->name);
+    m->othread_running = false;
+    aud_cond_signal(m->othread_cond);
+    aud_mutex_unlock(m->othread_mutex);
+    aud_thread_destroy(m->othread);
+    m->othread = NULL;
+    return 0;
 }
 
 /* @0x60076608 aud_module_default_event */

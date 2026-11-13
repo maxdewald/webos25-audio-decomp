@@ -28,55 +28,55 @@
 <rect class="track" x="330" y="102" width="340" height="14" rx="7"/>
 <rect class="cov" x="330" y="102" width="340.0" height="14" rx="7"/>
 <text class="pct" x="686" y="114">100.0%</text>
-<text class="path" x="686" y="130">build failed</text>
+<text class="path" x="686" y="130">not measured</text>
 <text class="name" x="24" y="154">libgstlgaudiodec</text>
 <text class="path" x="24" y="171">/usr/lib/gstreamer-1.0/libgstlgaudiodec.so</text>
 <rect class="track" x="330" y="148" width="340" height="14" rx="7"/>
 <rect class="cov" x="330" y="148" width="340.0" height="14" rx="7"/>
 <text class="pct" x="686" y="160">100.0%</text>
-<text class="path" x="686" y="176">build failed</text>
+<text class="path" x="686" y="176">not measured</text>
 <text class="name" x="24" y="200">libgstdecproxy</text>
 <text class="path" x="24" y="217">/usr/lib/gstreamer-1.0/libgstdecproxy.so</text>
 <rect class="track" x="330" y="194" width="340" height="14" rx="7"/>
 <rect class="cov" x="330" y="194" width="340.0" height="14" rx="7"/>
 <text class="pct" x="686" y="206">100.0%</text>
-<text class="path" x="686" y="222">build failed</text>
+<text class="path" x="686" y="222">not measured</text>
 <text class="name" x="24" y="246">libaudcommon</text>
 <text class="path" x="24" y="263">/usr/lib/libaudcommon.so.1.0.0</text>
 <rect class="track" x="330" y="240" width="340" height="14" rx="7"/>
 <rect class="cov" x="330" y="240" width="340.0" height="14" rx="7"/>
 <text class="pct" x="686" y="252">100.0%</text>
-<text class="path" x="686" y="268">build failed</text>
+<text class="path" x="686" y="268">not measured</text>
 <text class="name" x="24" y="292">libaabase</text>
 <text class="path" x="24" y="309">/usr/lib/libaabase.so.1.0.0</text>
 <rect class="track" x="330" y="286" width="340" height="14" rx="7"/>
 <rect class="cov" x="330" y="286" width="340.0" height="14" rx="7"/>
 <text class="pct" x="686" y="298">100.0%</text>
-<text class="path" x="686" y="314">build failed</text>
+<text class="path" x="686" y="314">not measured</text>
 <text class="name" x="24" y="338">libavacontroller</text>
 <text class="path" x="24" y="355">/usr/lib/libavacontroller.so.1.0.0</text>
 <rect class="track" x="330" y="332" width="340" height="14" rx="7"/>
 <rect class="cov" x="330" y="332" width="340.0" height="14" rx="7"/>
 <text class="pct" x="686" y="344">100.0%</text>
-<text class="path" x="686" y="360">build failed</text>
+<text class="path" x="686" y="360">not measured</text>
 <text class="name" x="24" y="384">libdile_audio_direct</text>
 <text class="path" x="24" y="401">/usr/lib/libdile_audio_direct.so.1.0.0</text>
 <rect class="track" x="330" y="378" width="340" height="14" rx="7"/>
 <rect class="cov" x="330" y="378" width="340.0" height="14" rx="7"/>
 <text class="pct" x="686" y="390">100.0%</text>
-<text class="path" x="686" y="406">build failed</text>
+<text class="path" x="686" y="406">not measured</text>
 <text class="name" x="24" y="430">libdile_audio_pcm</text>
 <text class="path" x="24" y="447">/usr/lib/libdile_audio_pcm.so.1.0.0</text>
 <rect class="track" x="330" y="424" width="340" height="14" rx="7"/>
 <rect class="cov" x="330" y="424" width="340.0" height="14" rx="7"/>
 <text class="pct" x="686" y="436">100.0%</text>
-<text class="path" x="686" y="452">build failed</text>
+<text class="path" x="686" y="452">not measured</text>
 <text class="name" x="24" y="476">libums_connector_wrapper</text>
 <text class="path" x="24" y="493">/usr/lib/libums_connector_wrapper.so.1.0.0</text>
 <rect class="track" x="330" y="470" width="340" height="14" rx="7"/>
 <rect class="cov" x="330" y="470" width="340.0" height="14" rx="7"/>
 <text class="pct" x="686" y="482">100.0%</text>
-<text class="path" x="686" y="498">build failed</text>
+<text class="path" x="686" y="498">not measured</text>
 <text class="name" x="24" y="522">kernel</text>
 <text class="path" x="24" y="539">/boot/Image-5.4.268-329.decompressed</text>
 <rect class="track" x="330" y="516" width="340" height="14" rx="7"/>
@@ -88,55 +88,55 @@
 <rect class="track" x="330" y="562" width="340" height="14" rx="7"/>
 <rect class="cov" x="330" y="562" width="339.5" height="14" rx="7"/>
 <text class="pct" x="686" y="574">99.8%</text>
-<text class="path" x="686" y="590">build failed</text>
+<text class="path" x="686" y="590">not measured</text>
 <text class="name" x="24" y="614">audiooutputd</text>
 <text class="path" x="24" y="631">/usr/sbin/audiooutputd</text>
 <rect class="track" x="330" y="608" width="340" height="14" rx="7"/>
 <rect class="cov" x="330" y="608" width="332.0" height="14" rx="7"/>
 <text class="pct" x="686" y="620">97.7%</text>
-<text class="path" x="686" y="636">build failed</text>
+<text class="path" x="686" y="636">not measured</text>
 <text class="name" x="24" y="660">libmedia-resource-calculator</text>
 <text class="path" x="24" y="677">/usr/lib/libmedia-resource-calculator.so.1</text>
 <rect class="track" x="330" y="654" width="340" height="14" rx="7"/>
 <rect class="cov" x="330" y="654" width="136.4" height="14" rx="7"/>
 <text class="pct" x="686" y="666">40.1%</text>
-<text class="path" x="686" y="682">build failed</text>
+<text class="path" x="686" y="682">not measured</text>
 <text class="name" x="24" y="706">libresource_mgr_client</text>
 <text class="path" x="24" y="723">/usr/lib/libresource_mgr_client.so.1.0.0</text>
 <rect class="track" x="330" y="700" width="340" height="14" rx="7"/>
 <rect class="cov" x="330" y="700" width="76.2" height="14" rx="7"/>
 <text class="pct" x="686" y="712">22.4%</text>
-<text class="path" x="686" y="728">build failed</text>
+<text class="path" x="686" y="728">not measured</text>
 <text class="name" x="24" y="752">libresource_mgr_client_c</text>
 <text class="path" x="24" y="769">/usr/lib/libresource_mgr_client_c.so.1.0.0</text>
 <rect class="track" x="330" y="746" width="340" height="14" rx="7"/>
 <rect class="cov" x="330" y="746" width="54.9" height="14" rx="7"/>
 <text class="pct" x="686" y="758">16.1%</text>
-<text class="path" x="686" y="774">build failed</text>
+<text class="path" x="686" y="774">not measured</text>
 <text class="name" x="24" y="798">dsp2</text>
 <text class="path" x="24" y="815">/lib/firmware/audio_a0_dsp2.bin</text>
 <rect class="track" x="330" y="792" width="340" height="14" rx="7"/>
-<rect class="dsp" x="330" y="792" width="40.6" height="14" rx="7"/>
-<text class="pct" x="686" y="804">11.9%</text>
+<rect class="dsp" x="330" y="792" width="41.0" height="14" rx="7"/>
+<text class="pct" x="686" y="804">12.1%</text>
 <text class="path" x="686" y="820">xtensa</text>
 <text class="name" x="24" y="844">libumi</text>
 <text class="path" x="24" y="861">/usr/lib/libumi.so.1.0.0</text>
 <rect class="track" x="330" y="838" width="340" height="14" rx="7"/>
 <rect class="cov" x="330" y="838" width="29.7" height="14" rx="7"/>
 <text class="pct" x="686" y="850">8.7%</text>
-<text class="path" x="686" y="866">build failed</text>
+<text class="path" x="686" y="866">not measured</text>
 <text class="name" x="24" y="890">starfish-media-pipeline</text>
 <text class="path" x="24" y="907">/usr/sbin/starfish-media-pipeline</text>
 <rect class="track" x="330" y="884" width="340" height="14" rx="7"/>
 <rect class="cov" x="330" y="884" width="18.0" height="14" rx="7"/>
 <text class="pct" x="686" y="896">5.3%</text>
-<text class="path" x="686" y="912">build failed</text>
+<text class="path" x="686" y="912">not measured</text>
 <text class="name" x="24" y="936">libpf</text>
 <text class="path" x="24" y="953">/usr/lib/libpf-1.0.so.1.0.0</text>
 <rect class="track" x="330" y="930" width="340" height="14" rx="7"/>
 <rect class="cov" x="330" y="930" width="10.8" height="14" rx="7"/>
 <text class="pct" x="686" y="942">3.2%</text>
-<text class="path" x="686" y="958">build failed</text>
+<text class="path" x="686" y="958">not measured</text>
 <text class="name" x="24" y="982">dsp1</text>
 <text class="path" x="24" y="999">/lib/firmware/audio_a0_dsp1.bin</text>
 <rect class="track" x="330" y="976" width="340" height="14" rx="7"/>
@@ -148,7 +148,7 @@
 <rect class="track" x="330" y="1022" width="340" height="14" rx="7"/>
 <rect class="cov" x="330" y="1022" width="3.0" height="14" rx="7"/>
 <text class="pct" x="686" y="1034">0.1%</text>
-<text class="path" x="686" y="1050">build failed</text>
+<text class="path" x="686" y="1050">not measured</text>
 <text class="name" x="24" y="1074">dsp0</text>
 <text class="path" x="24" y="1091">/lib/firmware/audio_a0_dsp0.bin</text>
 <rect class="track" x="330" y="1068" width="340" height="14" rx="7"/>

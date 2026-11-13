@@ -1561,28 +1561,21 @@ int lgao_config(void *a)
     }
     if (ao->isNoDelayMode) {
         lgao_add_rts(ao);
-        switch (ao->appType) {
-        case LGAO_APPTYPE_RTC:
-        case LGAO_APPTYPE_MIRACAST:
+        if (ao->appType == LGAO_APPTYPE_RTC || ao->appType == LGAO_APPTYPE_MIRACAST) {
             LOGI(0x917, "Set RTS mode ON - MIRACAST");
             _lgao_config_set_rts_param(ao, LGAO_APPTYPE_RTC);
-            break;
-        case LGAO_APPTYPE_R2R:
-            LOGI(0x91a, "Set R2R mode ON - R2R");
-            _lgao_config_set_rts_param(ao, LGAO_APPTYPE_R2R);
-            break;
-        case LGAO_APPTYPE_AIRPLAY:
-            LOGI(0x91d, "Set RTS mode ON - AIRPLAY");
-            _lgao_config_set_rts_param(ao, LGAO_APPTYPE_AIRPLAY);
-            break;
-        case LGAO_APPTYPE_DIRECTMEDIA:
+        } else if (ao->appType == LGAO_APPTYPE_DIRECTMEDIA) {
             LOGI(0x920, "Set RTS mode ON - DIRECTMEDIA");
             _lgao_config_set_rts_param(ao, LGAO_APPTYPE_DIRECTMEDIA);
-            break;
-        default:
+        } else if (ao->appType == LGAO_APPTYPE_R2R) {
+            LOGI(0x91a, "Set R2R mode ON - R2R");
+            _lgao_config_set_rts_param(ao, LGAO_APPTYPE_R2R);
+        } else if (ao->appType == LGAO_APPTYPE_AIRPLAY) {
+            LOGI(0x91d, "Set RTS mode ON - AIRPLAY");
+            _lgao_config_set_rts_param(ao, LGAO_APPTYPE_AIRPLAY);
+        } else {
             LOGI(0x923, "Set RTS mode ON - UNKNOWN");
             _lgao_config_set_rts_param(ao, LGAO_APPTYPE_UNKNOWN);
-            break;
         }
     }
     _lgao_config_set_renderer_param(ao);
@@ -2101,7 +2094,7 @@ int lgao_feed(void *a, void *buff, unsigned int buffLength, unsigned long long t
     if (buffLength == 0)
         return 0;
 
-    if (outType == LGAO_DATA_PCM && ao->isEnableDump)
+    if ((outType == LGAO_DATA_PCM) & ao->isEnableDump)
         _lgao_write_dump(ao, buff, buffLength);
 
     if (ao->drop_renderer) {

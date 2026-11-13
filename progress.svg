@@ -69,9 +69,9 @@
 <text class="path" x="24" y="401">/usr/lib/gstreamer-1.0/libgstlgaudiosink.so</text>
 <rect class="track" x="330" y="378" width="340" height="14" rx="7"/>
 <rect class="cov" x="330" y="378" width="340.0" height="14" rx="7"/>
-<rect class="match" x="330" y="378" width="217.7" height="14" rx="7"/>
+<rect class="match" x="330" y="378" width="220.5" height="14" rx="7"/>
 <text class="pct" x="686" y="390">100.0%</text>
-<text class="path" x="686" y="406">64.0% match</text>
+<text class="path" x="686" y="406">64.9% match</text>
 <text class="name" x="24" y="430">libaudcommon</text>
 <text class="path" x="24" y="447">/usr/lib/libaudcommon.so.1.0.0</text>
 <rect class="track" x="330" y="424" width="340" height="14" rx="7"/>

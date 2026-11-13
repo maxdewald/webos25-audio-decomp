@@ -260,6 +260,18 @@ static void caps_tests(void) {
     assert(gst_lg_audio_render_set_caps(&r,&c,&changed) && warnings==1 && r.isUnsupportedStream && !info_sets); clear_caps(&r);
     r=reset(); s=pcm(); number(&s,"channel-mask",UINT64_C(0x100000002)); number(&s,"atmos",0); c=(GstCaps){&s}; changed=0;
     assert(gst_lg_audio_render_set_caps(&r,&c,&changed) && saved_info.acmod==1 && first_pushes==1); clear_caps(&r);
+    r=reset(); s=pcm(); c=(GstCaps){&s}; changed=0;
+    const char *optional_flags[]={"lfe-enable","dolby","clock-x4","atmos","restart","downmix"};
+    for(unsigned index=0;index<sizeof(optional_flags)/sizeof(*optional_flags);++index)
+        number(&s,optional_flags[index],1);
+    assert(gst_lg_audio_render_set_caps(&r,&c,&changed));
+    assert(saved_info.lfe_enable && saved_info.dolby && saved_info.clock_x4 &&
+           saved_info.atmos && saved_info.restart && saved_info.downmix);
+    s=pcm();
+    assert(gst_lg_audio_render_set_caps(&r,&c,&changed));
+    assert(!saved_info.lfe_enable && !saved_info.dolby && !saved_info.clock_x4 &&
+           !saved_info.atmos && !saved_info.restart && !saved_info.downmix);
+    clear_caps(&r);
     r=reset(); s=(GstStructure){.name="video/x-raw"}; c=(GstCaps){&s}; changed=0;
     assert(!gst_lg_audio_render_set_caps(&r,&c,&changed) && r.pAudioCaps); clear_caps(&r);
 }

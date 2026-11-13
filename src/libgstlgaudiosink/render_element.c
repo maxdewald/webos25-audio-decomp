@@ -953,18 +953,21 @@ gst_lg_audio_render_set_caps (GstLgAudioRender *pAudioRen, GstCaps *caps, gboole
         SINK_LOG (4, GST_LEVEL_DEBUG, 1263, pAudioRen, "lfe_enable = %d", lfe_enable);
     } else {
         SINK_LOG (4, GST_LEVEL_DEBUG, 1265, pAudioRen, "lfe_enable field is empty");
+        AudioInfo.lfe_enable = FALSE;
     }
     if (gst_structure_get_boolean (structure, "dolby", &dolby)) {
         AudioInfo.dolby = dolby;
         SINK_LOG (4, GST_LEVEL_DEBUG, 1271, pAudioRen, "dolby = %d", dolby);
     } else {
         SINK_LOG (4, GST_LEVEL_DEBUG, 1273, pAudioRen, "dolby field is empty");
+        AudioInfo.dolby = FALSE;
     }
     if (gst_structure_get_boolean (structure, "clock-x4", &clock_x4)) {
         AudioInfo.clock_x4 = clock_x4;
         SINK_LOG (4, GST_LEVEL_DEBUG, 1279, pAudioRen, "clock_x4 (eac3) = %d", clock_x4);
     } else {
         SINK_LOG (4, GST_LEVEL_DEBUG, 1281, pAudioRen, "clock_x4 (eac3) field is empty");
+        AudioInfo.clock_x4 = FALSE;
     }
 
     /* application message "media-info" {stream-id, immersive} for the media pipeline */
@@ -980,6 +983,7 @@ gst_lg_audio_render_set_caps (GstLgAudioRender *pAudioRen, GstCaps *caps, gboole
         gst_structure_set (media_info, "immersive", G_TYPE_STRING, "ATMOS", NULL);
     } else {
         SINK_LOG (3, GST_LEVEL_INFO, 1300, pAudioRen, "atmos field is empty");
+        AudioInfo.atmos = FALSE;
         gst_structure_set (media_info, "immersive", G_TYPE_STRING, "none", NULL);
     }
     if (media_info) {
@@ -1005,6 +1009,7 @@ gst_lg_audio_render_set_caps (GstLgAudioRender *pAudioRen, GstCaps *caps, gboole
         SINK_LOG (4, GST_LEVEL_DEBUG, 1329, pAudioRen, "restart = %d", restart);
     } else {
         SINK_LOG (4, GST_LEVEL_DEBUG, 1331, pAudioRen, "restart field is empty");
+        AudioInfo.restart = FALSE;
     }
     if (gst_structure_get_int (structure, "gap-correction", &gap_correction)) {
         AudioInfo.gap_correction = gap_correction;
@@ -1047,19 +1052,20 @@ gst_lg_audio_render_set_caps (GstLgAudioRender *pAudioRen, GstCaps *caps, gboole
         SINK_LOG (4, GST_LEVEL_DEBUG, 1391, pAudioRen, "downmix = %d", downmix);
     } else {
         SINK_LOG (4, GST_LEVEL_DEBUG, 1393, pAudioRen, "downmix field is empty");
+        AudioInfo.downmix = FALSE;
     }
 
     pAudioRen->isUnsupportedStream = FALSE;
-    if (AudioInfo.freq > 384000 || AudioInfo.numberOfChannel > 10) {
-        if (AudioInfo.freq > 384000) {
-            SINK_LOG (0, GST_LEVEL_ERROR, 1400, pAudioRen, "freq(%u) is not supported", AudioInfo.freq);
-            pAudioRen->isUnsupportedStream = TRUE;
-        }
-        if (AudioInfo.numberOfChannel > 10) {
-            SINK_LOG (0, GST_LEVEL_ERROR, 1406, pAudioRen, "channels(%u) is not supported",
-                      AudioInfo.numberOfChannel);
-            pAudioRen->isUnsupportedStream = TRUE;
-        }
+    if (AudioInfo.freq > 384000) {
+        SINK_LOG (0, GST_LEVEL_ERROR, 1400, pAudioRen, "freq(%u) is not supported", AudioInfo.freq);
+        pAudioRen->isUnsupportedStream = TRUE;
+    }
+    if (AudioInfo.numberOfChannel > 10) {
+        SINK_LOG (0, GST_LEVEL_ERROR, 1406, pAudioRen, "channels(%u) is not supported",
+                  AudioInfo.numberOfChannel);
+        pAudioRen->isUnsupportedStream = TRUE;
+    }
+    if (pAudioRen->isUnsupportedStream) {
         SINK_LOG (0, GST_LEVEL_ERROR, 1413, pAudioRen, "Send ADEC Warning msg to upper layer");
         GST_ELEMENT_WARNING (pAudioRen, STREAM, CODEC_NOT_FOUND, ("This audio is not supported"),
                              ("This audio is not supported"));

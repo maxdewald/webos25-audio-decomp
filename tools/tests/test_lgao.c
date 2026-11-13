@@ -38,6 +38,8 @@ static struct aren_pcm_info last_pcm;
 static unsigned disconnected[3], destroyed[3];
 static int disconnects, destroys, messages, opens, connects, starts, stops, plays;
 static int sequence, open_order, connect_order, start_order;
+static int add_rts_order, rts_order, format_order, ease_order;
+static LGAO_APPTYPE_T rts_mode;
 
 static struct aud_object *aud_object_get(struct aud_object *o)
 {
@@ -143,6 +145,7 @@ static int module_appsrc_push_data(struct aud_module *m, struct aud_data *d, boo
 static int mock_ioctl(int fd, unsigned command, void *arg)
 {
     ++ioctls;
+    if (command == AREN_SET_JP4K_STREAM) format_order = ++sequence;
     if (command == AREN_SET_PCM_INFO) last_pcm = *(struct aren_pcm_info *)arg;
     return 0;
 }
@@ -191,9 +194,13 @@ int lgao_play(void *a) { ((lgao *)a)->rendererState = LGAO_STATE_PLAY; ++plays; 
 #define ioctl mock_ioctl
 #define close mock_close
 #define msgsnd mock_msgsnd
-void lgao_add_rts(void *a) {}
-static void _lgao_config_set_rts_param(lgao *ao, LGAO_APPTYPE_T type) {}
-static void _lgao_config_set_easevol(lgao *ao) {}
+void lgao_add_rts(void *a) { add_rts_order = ++sequence; }
+static void _lgao_config_set_rts_param(lgao *ao, LGAO_APPTYPE_T type)
+{
+    rts_mode = type;
+    rts_order = ++sequence;
+}
+static void _lgao_config_set_easevol(lgao *ao) { ease_order = ++sequence; }
 static void _lgao_write_dump(lgao *ao, void *buf, unsigned len) {}
 static unsigned ns_to_pts(unsigned long long ts) { return ts * 9 / 100000; }
 
@@ -238,6 +245,37 @@ static void reset(void)
     ioctls = closes = fail_data = 0;
     disconnects = destroys = messages = opens = connects = starts = stops = plays = 0;
     sequence = open_order = connect_order = start_order = 0;
+    add_rts_order = rts_order = format_order = ease_order = 0;
+}
+static void config_tests(void)
+{
+    const LGAO_APPTYPE_T modes[] = {
+        LGAO_APPTYPE_RTC, LGAO_APPTYPE_MIRACAST, LGAO_APPTYPE_R2R,
+        LGAO_APPTYPE_AIRPLAY, LGAO_APPTYPE_DIRECTMEDIA, LGAO_APPTYPE_UNKNOWN,
+        LGAO_APPTYPE_JP4K,
+    };
+    for (unsigned index = 0; index < sizeof(modes) / sizeof(modes[0]); ++index) {
+        reset();
+        lgao ao = context();
+        ao.isNoDelayMode = true;
+        ao.appType = modes[index];
+        assert(lgao_config(&ao) == 0);
+        LGAO_APPTYPE_T expected = modes[index];
+        if (expected == LGAO_APPTYPE_MIRACAST) expected = LGAO_APPTYPE_RTC;
+        if (expected == LGAO_APPTYPE_JP4K) expected = LGAO_APPTYPE_UNKNOWN;
+        assert(rts_mode == expected && ao.rendererState == LGAO_STATE_CONFIG);
+        assert(add_rts_order < rts_order && rts_order < format_order);
+        assert(format_order < ease_order && ioctls == 2);
+    }
+    reset();
+    lgao ao = context();
+    assert(lgao_config(&ao) == 0 && !add_rts_order && !rts_order);
+    assert(format_order < ease_order && ioctls == 2);
+    reset();
+    ao.rendererState = LGAO_STATE_PLAY;
+    ao.isNoDelayMode = true;
+    assert(lgao_config(&ao) == 0 && !sequence && !ioctls);
+    assert(ao.rendererState == LGAO_STATE_PLAY);
 }
 static void compare_caps_tests(void)
 {
@@ -270,6 +308,7 @@ static void compare_caps_tests(void)
 }
 int main(void)
 {
+    config_tests();
     compare_caps_tests();
     unsigned char bytes[] = {1, 3, 5, 7};
     lgao ao = context();
@@ -321,8 +360,9 @@ int main(void)
     assert(!ao.isFirstRender[LGAO_DATA_METADATA2]);
     reset(); ao = context(); ao.drop_renderer = 1;
     assert(lgao_push_first_event(&ao) == 0 && !events[0] && ao.isFirstRender[0]);
+    ao.bufferedSize[0] = ~0u - 1;
     assert(lgao_feed(&ao, bytes, 4, 0, LGAO_DATA_PCM) == 4);
-    assert(!events[0] && !pushes[0] && !ao.isFirstRender[0] && ao.bufferedSize[0] == 4);
+    assert(!events[0] && !pushes[0] && !ao.isFirstRender[0] && ao.bufferedSize[0] == 2);
     reset(); ao = context();
     assert(lgao_feed(&ao, bytes, 4, 0, LGAO_DATA_PCM) == 4);
     assert(pushes[0] == 1 && !pushes[1] && events[0] == 1 && events[1] == 1);

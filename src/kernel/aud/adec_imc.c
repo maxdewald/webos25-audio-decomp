@@ -43,7 +43,7 @@
 logm_define (com_imc, log_level_noti);
 #define info(fmt,args...) logm_info(com_imc,fmt,##args)
 #define error(fmt,args...) logm_error(com_imc,fmt,##args)
-enum { IMC_ACTION_NEVENT_ADD = 6 };
+enum imc_action { IMC_ACTION_NEVENT_ADD = 6 };
 
 struct named_event
 {

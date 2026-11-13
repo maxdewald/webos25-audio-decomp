@@ -24,6 +24,7 @@
 #include "block_manager.h"
 #include "input.h"
 #include "decoder.h"
+#include "renderer.h"
 #include "blind.h"
 #include "hal/hal.h"
 #include "log.h"
@@ -34,7 +35,7 @@ struct sndout_decoder_state
 {
     struct aud_block_info *dec_info;  /* +0x00 */
     bool is_open;                    /* +0x08 */
-    bool is_main;                    /* +0x09, set by decoder_set_main_audio_index */
+    bool is_main_dec;                /* +0x09, set by decoder_set_main_audio_index */
     bool is_started;                 /* +0x0a, "decoder is running" */
     unsigned char gap_0b;
     unsigned int input;              /* +0x0c, enum alsadec_input */
@@ -47,14 +48,14 @@ struct sndout_decoder_state
     int second_lang;                 /* +0x28 */
     int ad_type;                     /* +0x2c */
     int prio_ad_type;                /* +0x30 */
-    int pres_group_index;            /* +0x34, 0x20 is sent as -1 */
-    int de_gain;                     /* +0x38 */
-    int output_mode;                 /* +0x3c */
-    int drc_mode;                    /* +0x40 */
-    int downmix_mode;                /* +0x44 */
-    int ad_mixing;                   /* +0x48 */
+    int ac4_group_index;             /* +0x34, 0x20 is sent as -1 */
+    int dialog_gain;                 /* +0x38 */
+    int dualmono_mode;               /* +0x3c */
+    int drc;                        /* +0x40 */
+    int downmix;                    /* +0x44 */
+    int ac4_ad_on_off;               /* +0x48 */
     int default_prl;                 /* +0x4c, 0x7fffffff = not set */
-    int associate_volume;            /* +0x50 */
+    int associate_audio_volume;      /* +0x50 */
     bool unknown_54;                 /* +0x54, set -> sub input is never dropped */
     bool main_output;                /* +0x55 */
     bool bypass_output;              /* +0x56 */
@@ -73,8 +74,8 @@ struct sndout_renderer_state
     bool is_open;                    /* +0x08 */
     bool sync;                       /* +0x09, "sync=%d" */
     unsigned char gap_0a[6];
-    bool unknown_10;                 /* +0x10, one-shot: next TP start uses 300 ms idle, not 60 */
-    bool lipsync_master;             /* +0x11, registers renderer_master_info_cb */
+    bool is_play_paused;             /* +0x10, one-shot: next TP start uses 300 ms idle, not 60 */
+    bool master_syncmode;            /* +0x11, registers renderer_master_info_cb */
     unsigned char gap_12[2];
     int offset;                      /* +0x14, "offset=%d" */
 };                                  /* stride 0x18 */
@@ -89,15 +90,15 @@ extern bool audio_drop_enable;                         /* @0xffffffc0122d1f1c, i
 extern bool atmos_decoding_enable;                     /* @0xffffffc0122d1fc8, initially 1 */
 extern bool ad_on_off;                                 /* @0xffffffc012605318 */
 
-extern int input_get_type (struct aud_block_info *block);
+extern enum input_type input_get_type (struct aud_block_info *block);
 extern enum audio_decoder_codec input_get_hdmi_codec (struct aud_block_info *block);
 extern int input_set_hdmi (struct aud_block_info *block, bool forced_pcm);
 extern int input_set_tp (struct aud_block_info *block, enum audio_decoder_codec codec, bool clock_x4);
-extern int input_set_type (struct aud_block_info *block, int dec_index, int type, int sub_index,
-    bool unknown_arg4);
-extern int input_register_event (struct aud_block_info *block, int event,
-    int (*cb_func) (void *, int, void *), void *cb_param);
-extern int input_unregister_event (struct aud_block_info *block, int event);
+extern int input_set_type (struct aud_block_info *block, int dec_index, enum input_type type_input,
+    int index, bool update);
+extern int input_register_event (struct aud_block_info *block, enum input_evt event,
+    int (*cb_func) (void *, int, void *), struct aud_block_info *cb_target_block);
+extern int input_unregister_event (struct aud_block_info *block, enum input_evt event);
 extern int input_get_uid (struct aud_block_info *block);
 extern int input_start (struct aud_block_info *block);
 extern int input_stop (struct aud_block_info *block);
@@ -110,12 +111,12 @@ extern int decoder_decoded_info_cb (void *param, int len, void *cb_param);
 extern int decoder_hdmi_pcm_format_info_cb (void *param, int len, void *cb_param);
 extern int decoder_tp_es_exist_info_cb (void *param, int len, void *cb_param);
 extern int decoder_set_param (struct aud_block_info *block, char *fmt, ...);
-extern int decoder_register_event (struct aud_block_info *block, int event,
+extern int decoder_register_event (struct aud_block_info *block, enum audio_decoder_event event,
     int (*cb_func) (void *, int, void *), int repeat);
-extern int decoder_unregister_event (struct aud_block_info *block, int event);
+extern int decoder_unregister_event (struct aud_block_info *block, enum audio_decoder_event event);
 extern int decoder_connect (struct aud_block_info *block);
-extern int decoder_set_input (struct aud_block_info *block, int input);
-extern int decoder_convert_input (int alsa_input);
+extern int decoder_set_input (struct aud_block_info *block, enum audio_decoder_input input);
+extern enum audio_decoder_input decoder_convert_input (int alsa_input);
 extern int decoder_set_main_decoder_property (int index);
 extern int decoder_get_downmix_mode (int index);
 extern int decoder_get_drc_mode (int index);
@@ -148,8 +149,8 @@ logm_define (alsadec, log_level_info);
 #define error(fmt,args...) logm_error(alsadec,fmt,##args)
 #define debug_call() debug("ALSA_CALL# %s(): %ld %ld %ld", __func__, ucontrol->value.integer.value[0], ucontrol->value.integer.value[1], ucontrol->value.integer.value[2])
 
-/* ALSA "Adec Codec" values; names from the shipped 25-entry name table
- * @0xffffffc0115eda48 (our enum name). */
+/* ALSA "Adec Codec" values match adec_src_codec_ext_type_t; private aliases for
+ * the shipped 25-entry name table @0xffffffc0115eda48. */
 enum alsadec_codec
 {
     ALSADEC_CODEC_UNKNOWN = 0x00,
@@ -178,13 +179,6 @@ enum alsadec_codec
     ALSADEC_CODEC_SIF_BTSC = 0x41,
     ALSADEC_CODEC_SIF_A2 = 0x42,
 };
-
-/* input_get_type() values seen here and in alsa_decoder_start; names inferred. */
-#define ALSADEC_INPUT_SIF  0
-#define ALSADEC_INPUT_TP   1
-#define ALSADEC_INPUT_HDMI 2
-#define ALSADEC_INPUT_ADC  3
-#define ALSADEC_INPUT_NONE 4       /* alsa_decoder_start default when no input block */
 
 /* ALSA "Adec Connect" input values; names from alsadec_input_name. */
 enum alsadec_input
@@ -298,7 +292,7 @@ static void decoder_set_codec_param (int index)
     decoder_set_main_decoder_property (index);
     decoder_set_param (dec->dec_info,
         "drc-mode=%d downmix-mode=%d audio-description=%d output-mode=%d",
-        dec->drc_mode, dec->downmix_mode, ad_on_off, dec->output_mode);
+        dec->drc, dec->downmix, ad_on_off, dec->dualmono_mode);
 
     switch (dec->codec)
     {
@@ -315,9 +309,9 @@ static void decoder_set_codec_param (int index)
             decoder_set_param (dec->dec_info,
                 "iso-type=%d first-lang=%d second-lang=%d ad-type=%d prio-ad-type=%d ad-mixing=%d associate-volume=%d de-gain=%d",
                 dec->iso_type, dec->first_lang, dec->second_lang, dec->ad_type,
-                dec->prio_ad_type, dec->ad_mixing, dec->associate_volume, dec->de_gain);
+                dec->prio_ad_type, dec->ac4_ad_on_off, dec->associate_audio_volume, dec->dialog_gain);
             decoder_set_param (dec->dec_info, "pres-group-index=%d",
-                dec->pres_group_index == 0x20 ? -1 : dec->pres_group_index);
+                dec->ac4_group_index == 0x20 ? -1 : dec->ac4_group_index);
 legacy_ddp_out:
             if (sndout_get_atmos_encode_on ())
                 decoder_set_param (dec->dec_info, "legacy-ddp-out=0");
@@ -364,35 +358,38 @@ static void decoder_config (int index)
 {
     struct sndout_decoder_state *dec = &alsa_decoder_info[index];
     struct aud_block_info *input = alsa_input_info[index].input_info;
-    int type = ALSADEC_INPUT_NONE;
+    enum input_type type = INPUT_MAX;
 
     if (input)
         type = input_get_type (input);
 
     decoder_set_codec_param (index);
 
-    if (type == ALSADEC_INPUT_HDMI)
+    if (type == INPUT_HDMI)
     {
         if (!input)
             return;
         input_set_hdmi (input, dec->codec == ALSADEC_CODEC_PCM);
-        input_register_event (input, 1, decoder_hdmi_pcm_format_info_cb, dec->dec_info);
+        input_register_event (input, INPUT_EVT_HDMI_PCM_FORMAT, decoder_hdmi_pcm_format_info_cb,
+            dec->dec_info);
     }
-    else if (type == ALSADEC_INPUT_TP)
+    else if (type == INPUT_TP)
     {
         if (!input)
             return;
         input_set_tp (input, alsadec_convert_codec (dec->codec),
             (unsigned int) (dec->codec - ALSADEC_CODEC_EAC3) <= ALSADEC_CODEC_EAC3_ATMOS - ALSADEC_CODEC_EAC3);
-        input_register_event (input, 0, decoder_tp_es_exist_info_cb, dec->dec_info);
-        input_register_event (input, 2, input_tp_pdec_error_info_cb, input);
+        input_register_event (input, INPUT_EVT_TP_ES_EXIST_INFO, decoder_tp_es_exist_info_cb,
+            dec->dec_info);
+        input_register_event (input, INPUT_EVT_TP_PDEC_ERROR_INFO, input_tp_pdec_error_info_cb,
+            input);
         if (ad_on_off && index != main_audio_index)
         {
             aimc_set_property (input_get_uid (input), "discard-packet=%d", 7);
             noti ("index %d, discard-packet %d .\n", index, 7);
         }
     }
-    else if (type == ALSADEC_INPUT_ADC)
+    else if (type == INPUT_ADC)
     {
         noti ("adc_port_index %d .\n", adc_port_index);
         aud_hal_set_adc_port_number (adc_port_index);
@@ -443,7 +440,7 @@ static int alsa_decoder_start (struct snd_kcontrol *kcontrol,
     info ("dec%d is starting..\n", index);
     decoder_config (index);
 
-    decoder_register_event (dec->dec_info, 1, decoder_decoded_info_cb, 1);
+    decoder_register_event (dec->dec_info, AUDIO_DECODER_EVENT_INFO, decoder_decoded_info_cb, true);
     decoder_connect (dec->dec_info);
     if (!dec->is_connected)
     {
@@ -457,14 +454,14 @@ static int alsa_decoder_start (struct snd_kcontrol *kcontrol,
         enum audio_decoder_codec dec_codec = alsadec_convert_codec (dec->codec);
         enum audio_decoder_codec input_codec = AUDIO_DECODER_CODEC_PCM;
         bool valid_codec = false;
-        int type = input_get_type (input);
+        enum input_type type = input_get_type (input);
 
         /* HDMI DTS: hdmi_codec stays PCM and DTS converts to AC3, so it is never started/un-dropped. */
-        if (type == ALSADEC_INPUT_TP)
+        if (type == INPUT_TP)
             valid_codec = true;
         else
         {
-            if (type == ALSADEC_INPUT_HDMI)
+            if (type == INPUT_HDMI)
                 input_codec = input_get_hdmi_codec (input);
             if (input_codec != AUDIO_DECODER_CODEC_PCM || dec_codec == AUDIO_DECODER_CODEC_PCM)
                 valid_codec = true;
@@ -487,19 +484,19 @@ static int alsa_decoder_start (struct snd_kcontrol *kcontrol,
         {
             renderer_set_param (ren->ren_info, "sync=%d", ren->sync);
             renderer_set_param (ren->ren_info, "presented-pts-index=%d", index);
-            if (ren->unknown_10)
+            if (ren->is_play_paused)
             {
                 renderer_lipsync_set_idle_time (ren->ren_info, 300);
-                ren->unknown_10 = false;
+                ren->is_play_paused = false;
             }
             else
                 renderer_lipsync_set_idle_time (ren->ren_info, 60);
-            if (ren->lipsync_master)
+            if (ren->master_syncmode)
             {
                 renderer_set_param (ren->ren_info, "offset=%d", ren->offset);
-                renderer_set_param (ren->ren_info, "clock_type=%d", 0x200);
+                renderer_set_param (ren->ren_info, "clock_type=%d", RENDERER_CLK_TYPE_MASTER);
                 renderer_register_event (ren->ren_info, AUDIO_RENDERER_EVENT_MASTER_INFO,
-                    renderer_master_info_cb, 1);
+                    renderer_master_info_cb, true);
             }
         }
         if (sndout_decoder_is_hdmi (dec->input))
@@ -572,7 +569,7 @@ static int alsa_decoder_codec (struct snd_kcontrol *kcontrol,
     dec_codec = alsadec_convert_codec (codec);
     ret = 0;
     if (alsa_input_info[index].input_info
-        && input_get_type (alsa_input_info[index].input_info) == ALSADEC_INPUT_SIF
+        && input_get_type (alsa_input_info[index].input_info) == INPUT_SIF
         && dec_codec != AUDIO_DECODER_CODEC_PCM)
     {
         noti ("sif codec error index %d codec %d (%s) .\n", index, codec, alsadec_codec_str (codec));
@@ -580,7 +577,7 @@ static int alsa_decoder_codec (struct snd_kcontrol *kcontrol,
     }
     decoder_set_codec (dec->dec_info, dec_codec);
     if (alsa_input_info[index].input_info
-        && input_get_type (alsa_input_info[index].input_info) == ALSADEC_INPUT_HDMI)
+        && input_get_type (alsa_input_info[index].input_info) == INPUT_HDMI)
         bm_connect_block (dec->dec_info, 0x100, alsa_renderer_info[index].ren_info, 0x100);
     else
         bm_connect_block (dec->dec_info, 1, alsa_renderer_info[index].ren_info, 0x100);
@@ -615,11 +612,11 @@ static void decoder_set_input_drop (int index, bool drop)
         return;
     }
 
-    if (dec->is_main)
+    if (dec->is_main_dec)
     {
         if (main_audio_index == -1)
             return;
-        if ((input_get_type (input) == ALSADEC_INPUT_TP || input_get_type (input) == ALSADEC_INPUT_HDMI)
+        if ((input_get_type (input) == INPUT_TP || input_get_type (input) == INPUT_HDMI)
             && input_is_drop_data (input))
         {
             if (ren->is_open)
@@ -635,7 +632,7 @@ static void decoder_set_input_drop (int index, bool drop)
         return;
     }
 
-    if (input_get_type (input) == ALSADEC_INPUT_SIF && main_audio_index <= 1)
+    if (input_get_type (input) == INPUT_SIF && main_audio_index <= 1)
     {
         struct aud_block_info *main_input;
 
@@ -643,7 +640,7 @@ static void decoder_set_input_drop (int index, bool drop)
             return;
         /* main_audio_index -1 is used as an index here too (shipped). */
         main_input = alsa_input_info[main_audio_index].input_info;
-        if (!main_input || input_get_type (main_input) == ALSADEC_INPUT_SIF || dec->unknown_54)
+        if (!main_input || input_get_type (main_input) == INPUT_SIF || dec->unknown_54)
             return;
         noti ("INPUT_SIF is dropped by atmos_decoding_enable.(sub adec:%d)\n", index);
         input_drop_data (input, true);
@@ -714,16 +711,16 @@ static int alsa_decoder_stop (struct snd_kcontrol *kcontrol,
     input = alsa_input_info[index].input_info;
     if (input)
     {
-        int type = input_get_type (input);
+        enum input_type type = input_get_type (input);
 
-        if (type == ALSADEC_INPUT_HDMI)
-            input_unregister_event (input, 1);
-        else if (type == ALSADEC_INPUT_TP)
+        if (type == INPUT_HDMI)
+            input_unregister_event (input, INPUT_EVT_HDMI_PCM_FORMAT);
+        else if (type == INPUT_TP)
         {
-            input_unregister_event (input, 0);
-            input_unregister_event (input, 2);
+            input_unregister_event (input, INPUT_EVT_TP_ES_EXIST_INFO);
+            input_unregister_event (input, INPUT_EVT_TP_PDEC_ERROR_INFO);
         }
-        else if (type == ALSADEC_INPUT_SIF)
+        else if (type == INPUT_SIF)
         {
             if (main_audio_index == index)
             {
@@ -735,7 +732,7 @@ static int alsa_decoder_stop (struct snd_kcontrol *kcontrol,
             }
             else if ((unsigned int) main_audio_index <= 1
                 && alsa_input_info[main_audio_index].input_info
-                && input_get_type (alsa_input_info[main_audio_index].input_info) == ALSADEC_INPUT_SIF)
+                && input_get_type (alsa_input_info[main_audio_index].input_info) == INPUT_SIF)
             {
                 noti ("SUB INPUT_SIF is used by MAIN INPUT_SIF.\n");
                 goto input_done;
@@ -751,13 +748,13 @@ input_done:
 
     ren = &alsa_renderer_info[index];
     renderer_lipsync_clear_idle (ren->ren_info);
-    if (ren->lipsync_master)
+    if (ren->master_syncmode)
     {
         renderer_unregister_event (ren->ren_info, AUDIO_RENDERER_EVENT_MASTER_INFO);
         renderer_set_basetime_ipc (index, -1, -1, false, false);
     }
 
-    decoder_unregister_event (dec->dec_info, 1);
+    decoder_unregister_event (dec->dec_info, AUDIO_DECODER_EVENT_INFO);
     if (dec->is_connected)
     {
         bm_disconnect_block (ren->ren_info, 0);
@@ -784,7 +781,9 @@ static int alsa_decoder_connect (struct snd_kcontrol *kcontrol,
     struct sndout_decoder_state *dec;
     struct sndout_renderer_state *ren;
     struct aud_block_info *input;
-    int type, sub_index = alsa_input - 1, clock_type;
+    enum input_type type;
+    int sub_index = alsa_input - 1;
+    enum RENDERER_CLK_TYPE clock_type;
     bool is_hdmi = false;
     int ret = -1;
 
@@ -826,7 +825,7 @@ static int alsa_decoder_connect (struct snd_kcontrol *kcontrol,
     if (alsa_input == ALSADEC_IN_AAD)
     {
         /* SIF block 100 is owned by the sif module, not created here. */
-        input = bm_get_block_info_by_index ("input", 100);
+        input = bm_get_block_info_by_index ("input", INPUT_SIF_INDEX);
         alsa_input_info[index].input_info = input;
         if (!input)
         {
@@ -834,26 +833,26 @@ static int alsa_decoder_connect (struct snd_kcontrol *kcontrol,
             goto out;
         }
         sub_index = 0;
-        input_set_type (input, index, ALSADEC_INPUT_SIF, 0, true);
+        input_set_type (input, index, INPUT_SIF, 0, true);
     }
     else
     {
         if (alsa_input <= ALSADEC_IN_ATP1)
-            type = ALSADEC_INPUT_TP;
+            type = INPUT_TP;
         else if (alsa_input == ALSADEC_IN_ADC)
         {
-            type = ALSADEC_INPUT_ADC;
+            type = INPUT_ADC;
             sub_index = 0;
         }
         else if (alsa_input <= ALSADEC_IN_HDMI_PORT3)
         {
-            type = ALSADEC_INPUT_HDMI;
+            type = INPUT_HDMI;
             sub_index = alsa_input - ALSADEC_IN_HDMI_PORT0;
             is_hdmi = true;
         }
         else if (alsa_input == ALSADEC_IN_HDMI_FF)
         {
-            type = ALSADEC_INPUT_HDMI;
+            type = INPUT_HDMI;
             sub_index = 0;
             is_hdmi = true;
         }
@@ -867,7 +866,7 @@ static int alsa_decoder_connect (struct snd_kcontrol *kcontrol,
         if (input)
         {
             noti ("input%d (%p) already exist!!\n", index, input);
-            if (input_get_type (input) == ALSADEC_INPUT_SIF)
+            if (input_get_type (input) == INPUT_SIF)
                 debug ("INPUT_SIF is allocated in sif module.\n");
             else
                 bm_destroy_block (input);
@@ -884,10 +883,10 @@ static int alsa_decoder_connect (struct snd_kcontrol *kcontrol,
 
     alsa_input_info[index].index = sub_index;
     input = alsa_input_info[index].input_info;
-    clock_type = 0x100;
+    clock_type = RENDERER_CLK_TYPE_GSTC;
     if (input)
     {
-        if (input_get_type (input) != ALSADEC_INPUT_SIF)
+        if (input_get_type (input) != INPUT_SIF)
             input_drop_data (input, true);
         else if (main_audio_index == index)
         {
@@ -898,14 +897,14 @@ static int alsa_decoder_connect (struct snd_kcontrol *kcontrol,
         }
         else if ((unsigned int) main_audio_index <= 1
             && alsa_input_info[main_audio_index].input_info
-            && input_get_type (alsa_input_info[main_audio_index].input_info) == ALSADEC_INPUT_SIF)
+            && input_get_type (alsa_input_info[main_audio_index].input_info) == INPUT_SIF)
             noti ("SUB INPUT_SIF is used by MAIN INPUT_SIF.\n");
         else
             input_drop_data (input, true);
 
         input = alsa_input_info[index].input_info;
-        if (input && input_get_type (input) == ALSADEC_INPUT_TP)
-            clock_type = alsa_input_info[index].index + 1;
+        if (input && input_get_type (input) == INPUT_TP)
+            clock_type = RENDERER_CLK_TYPE_PCR_M + alsa_input_info[index].index;
     }
     renderer_set_param (ren->ren_info, "clock_type=%d", clock_type);
 

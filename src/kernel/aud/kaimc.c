@@ -31,6 +31,7 @@
 #include "imc/adec_imc.h"
 #include "imc/aimc_internal.h"
 #include "module/adec_module_list.h"
+#include "module_list.h"
 #include "log.h"
 
 /* Focused excerpt of kaimc.c; other transport code is not reconstructed here.
@@ -81,7 +82,6 @@ struct noti_param
 extern struct aimc *gaimc;
 /* Initialized by the omitted aimc_init, not by this excerpt. */
 static struct aud_mod_owner *gowner;
-extern int aud_inst_connect (struct aud_mod_owner *, unsigned int, int, unsigned int, int, bool);
 
 /* No event/clock operation here: module_list.c handles same-DSP connector
  * commands or cross-DSP glue creation and connection. */

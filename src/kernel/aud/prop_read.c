@@ -86,6 +86,10 @@
 #include <linux/uaccess.h>
 #include <linux/wait.h>
 
+#include "imc/adec_imc_cmd.h"
+#include "kaimc.h"
+#include "proc.h"
+
 static DEFINE_MUTEX(aud_log_lock);
 static DEFINE_MUTEX(lc_received_lock);
 static DECLARE_WAIT_QUEUE_HEAD(lc_wq);
@@ -100,9 +104,12 @@ struct log_capture_line {
 };
 extern void aud_log_default(int, unsigned int, const char *);
 extern void (*aud_log_print)(int, unsigned int, const char *);
-/* send_call_param is the existing DBG_CMD_CALL_FUNCTION transport; 0=arg, 1=funcv. */
-extern int send_call_param(int dspnum, const char *str, int type);
-int aproc_lc_trigger(int proc_num, const char *func_name, ...);
+enum call_param_type
+{
+    param_arg,
+    param_funcv,
+};
+extern int send_call_param(int dspnum, const char *str, enum call_param_type type);
 
 /* @0xffffffc010c90010: only reads confirmed fields, not a guessed full struct. */
 static int inst_prop_read_open(struct inode *inode, struct file *file)
@@ -171,12 +178,12 @@ int aproc_lc_trigger(int proc_num, const char *func_name, ...)
     lc_state = lc_state_wait;
     snprintf(lc_magic, sizeof(lc_magic), "_MAGIC_%d_", ++lc_magic_num);
     aud_log_print = log_capture_log;
-    send_call_param(proc_num - 2, lc_magic, 0);
+    send_call_param(proc_num - 2, lc_magic, param_arg);
     va_start(args, func_name);
     while ((arg = va_arg(args, char *)) != NULL)
-        send_call_param(proc_num - 2, arg, 0);
+        send_call_param(proc_num - 2, arg, param_arg);
     va_end(args);
-    return send_call_param(proc_num - 2, func_name, 1);
+    return send_call_param(proc_num - 2, func_name, param_funcv);
 }
 
 /* @0xffffffc010c97f10 */
@@ -229,7 +236,6 @@ int aproc_lc_release(struct inode *inode, struct file *file)
     return 0;
 }
 
-struct aimc;
 extern int send_command_sync(struct aimc *, unsigned cmd, unsigned source,
                              unsigned target, void *param, unsigned bytes,
                              int *result, bool copy_param);
@@ -237,14 +243,14 @@ extern int send_command_sync(struct aimc *, unsigned cmd, unsigned source,
 /* @0xffffffc010c8ee24: integer result returned separately from transport status. */
 int aimc_get_property(unsigned target, char *name, int *value)
 {
-    unsigned size = min_t(size_t, strlen(name) + 1, 32);
-    char *param = kzalloc(32, GFP_KERNEL);
+    unsigned size = min_t(size_t, strlen(name) + 1, sizeof(ImcCmdGetProp));
+    ImcCmdGetProp *param = kzalloc(sizeof(*param), GFP_KERNEL);
     int ret;
     if (!param)
         return -ENOMEM;
-    strncpy(param, name, size);
-    param[size - 1] = 0;
-    ret = send_command_sync(NULL, 0x10170020u, 0, target, param, size, value, false);
+    strncpy(param->name, name, size);
+    param->name[size - 1] = 0;
+    ret = send_command_sync(NULL, ADEC_CMD_GET_PROP, 0, target, param, size, value, false);
     kfree(param);
     return ret;
 }

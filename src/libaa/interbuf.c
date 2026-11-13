@@ -632,7 +632,10 @@ int InterBufWriter_CreateFromCommonBufferUser(ADEC_PROCESSOR_ADAP_IF_T *adap,
     return ret;
 }
 
-/* @0x25030: remote reader consumed data (BM_EVT_READ) */
+/* @0x25030: BM_EVT_READ copies only the remote read index/offset into this local
+ * cached status, not the shared AU header or our write progress. No lock, cache
+ * invalidate, wake or EOS acknowledgement here; Glue_Cmd updates then wakes the
+ * legacy writer, which must recheck GetFreeSize (a wake alone supplies no space). */
 int InterBufWriter_UpdateStatus(ADEC_BUF_T *buf, ADEC_COMMON_BUF_STATUS_T *status)
 {
     NULL_BUF_CHECK(0xfe);

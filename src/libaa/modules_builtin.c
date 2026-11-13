@@ -1003,8 +1003,13 @@ static void push_zero_buffers(struct mod_glue *g, int count, int size)
 }
 
 /* @0x2a234: async events cross to the coworker by IMC (writer: downward ones, reader:
- * upward ones). Only FIRST/LAST pass on locally; FIRST may pre-fill the legacy ring
- * with "with-zero-buffer" silent AUs. Other events are dropped here. */
+ * upward ones). Without output_buffer, non-FIRST events use default propagation:
+ * synchronous custom eos=last and LAST enter output 0's FIFO as separate serialized
+ * EVENT AUs, not IMC async commands. With output_buffer, FIRST/LAST pass on but custom
+ * EOS is put/dropped (@0x2a26c); LAST tail-calls push_event (@0x2a38c). FIRST may
+ * pre-fill with silent AUs. push_event can sync inline and wait for ring space;
+ * its return is ignored in FIRST paths, propagated in the output_buffer LAST path.
+ * No EOS-completion acknowledgement or deadline is implemented by this handler. */
 int Glue_Event(struct aud_module *m, struct aud_port *port, struct aud_event *e)
 {
     struct mod_glue *g = (struct mod_glue *)m;

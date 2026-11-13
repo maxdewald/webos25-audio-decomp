@@ -5,12 +5,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "libaa/buffers.h"
+#include "libaa/objects.h"
 
 static unsigned int mask;
 struct logmm_module logmm_module_commod = {.mask = &mask};
 struct logmm_module logmm_module_buf_com = {.mask = &mask};
 struct logmm_module logmm_module_aud = {.mask = &mask};
+struct logmm_module logmm_module_buf_writer = {.mask = &mask};
+struct logmm_module logmm_module_buf_reader = {.mask = &mask};
 static int assertions, dumps, updates, setters, invalidations;
 static void *invalidated[2];
 static int lengths[2];
@@ -32,6 +34,65 @@ static void invalidate(void *addr, int len, ADEC_BUF_T *buf)
 #define CACHE_INV(buf, p, n) (buf)->adap->pfnInvalidate((p), (n), (buf))
 // @extract src/libaa/module.c parse_bool aud_module_set_prop_locked
 // @extract src/libaa/buffers.c CommonBuffer_ReadData
+#define NULL_BUF_CHECK(line) BUF_ASSERT(buf != NULL, "buf", NULL, -ADEC_ERR_NULL, line, "null\n")
+// @extract src/libaa/buffers.c CommonBuffer_GetFreeSize
+// @extract src/libaa/interbuf.c InterBufWriter_UpdateStatus InterBufReader_UpdateStatus
+#undef NULL_BUF_CHECK
+
+static unsigned event_puts, event_defaults, event_pushes, event_commands;
+struct aud_object *aud_object_get(struct aud_object *object)
+{ assert(object->user); ++object->user; return object; }
+void aud_object_put(struct aud_object *object)
+{ assert(object->user); --object->user; ++event_puts; }
+const char *aud_event_name(struct aud_event *event) { return "event"; }
+void *aud_event_serialize(struct aud_event *event, unsigned *size)
+{ *size = 4; return calloc(1, *size); }
+int aud_module_default_event(struct aud_module *module, struct aud_port *port,
+                             struct aud_event *event)
+{ ++event_defaults; aud_event_put(event); return -37; }
+int aud_module_push_event(struct aud_module *module, int number, struct aud_event *event)
+{ assert(number == 0); ++event_pushes; aud_event_put(event); return -41; }
+int aimc_send_command(struct aimc *imc, unsigned command, unsigned sender,
+                       unsigned target, void *param, unsigned size)
+{ assert(command == 0x10190000u && target == 7); ++event_commands; return -43; }
+struct aud_port *aud_module_get_output_port(struct aud_module *module, unsigned number)
+{ assert(!"unexpected FIRST path"); return NULL; }
+int aud_event_value_get_int(struct aud_event *event, const char *name, int fallback)
+{ assert(!"unexpected FIRST path"); return fallback; }
+int logmm_printlm(const char *name, int level, const char *func, int line,
+                  const char *format, ...) { return 0; }
+static void push_zero_buffers(struct mod_glue *glue, int count, int size)
+{ assert(!"unexpected FIRST path"); }
+#define GLOG(g, lvl, line, fmt, ...) PLOG(&(g)->module, lvl, line, fmt, ##__VA_ARGS__)
+#define ADEC_CMD_ASYNC_EVENT 0x10190000u
+// @extract src/libaa/modules_builtin.c Glue_Event
+
+static void glue_eos_paths(void)
+{
+    for (int writer = 0; writer < 2; ++writer) {
+        for (int last = 0; last < 2; ++last) {
+            struct mod_glue glue = {0};
+            ADEC_BUF_T ring = {0};
+            struct aud_event event = {0};
+            glue.output_buffer = writer ? &ring : NULL;
+            glue.cowork_uid = 7;
+            event.object.user = 1;
+            event.type = last ? AUD_EVENT_TYPE_LAST_AU : AUD_EVENT_TYPE_CUSTOM;
+            event.prop = AUD_EVENT_PROP_DOWNWARD | AUD_EVENT_PROP_SYNC;
+            event_puts = event_defaults = event_pushes = event_commands = 0;
+            int result = Glue_Event(&glue.module, NULL, &event);
+            assert(!event.object.user && event_puts == 1 && !event_commands);
+            assert(event_defaults == !writer && event_pushes == (writer && last));
+            assert(result == (!writer ? -37 : last ? -41 : 0));
+        }
+    }
+    struct mod_glue glue = {.cowork_uid = 7};
+    struct aud_event event = {.object = {.user = 1}, .type = AUD_EVENT_TYPE_CUSTOM,
+                             .prop = AUD_EVENT_PROP_DOWNWARD};
+    event_puts = event_defaults = event_pushes = event_commands = 0;
+    assert(Glue_Event(&glue.module, NULL, &event) == -37);
+    assert(event_commands == 1 && event_defaults == 1 && !event.object.user);
+}
 
 struct values {
     struct aud_module module;
@@ -154,6 +215,40 @@ static void reads(void)
     assert(CommonBuffer_ReadData(&dst, NULL, &au, &b) == -ADEC_ERR_NULL);
     assert(assertions == 2 && dumps == 2);
 }
+static void cached_ring_status(void)
+{
+    ADEC_COMMON_BUF_T shared = {.maxSize = 64, .maxIndex = 4};
+    ADEC_BUF_T writer = {.commonBuf = &shared, .max_size = 64, .aui_count = 4};
+    writer.status.writeIndex = 3;
+    writer.status.writeOffset = 12;
+    writer.status.indexAllocated = 1;
+    writer.status.written = 7;
+    writer.status.passed = 9;
+    ADEC_COMMON_BUF_STATUS_T progress = {
+        .readIndex = 1, .readOffset = 8, .writeIndex = 2, .writeOffset = 24,
+        .indexAllocated = 0, .written = 99, .passed = 99
+    };
+    assert(CommonBuffer_GetFreeSize(&writer) == 0);
+    assert(InterBufWriter_UpdateStatus(&writer, &progress) == 0);
+    assert(CommonBuffer_GetFreeSize(&writer) == 56);
+    assert(writer.status.writeIndex == 3 && writer.status.writeOffset == 12);
+    assert(writer.status.indexAllocated == 1 && writer.status.written == 7);
+    assert(writer.status.passed == 9);
+    writer.status.readOffset = 16;
+    assert(CommonBuffer_GetFreeSize(&writer) == 0);
+    progress.readOffset = 20;
+    assert(CommonBuffer_GetFreeSize(&writer) == 0);
+    assert(InterBufWriter_UpdateStatus(&writer, &progress) == 0);
+    assert(CommonBuffer_GetFreeSize(&writer) == 4);
+    assert(shared.maxSize == 64 && shared.maxIndex == 4);
+    ADEC_BUF_T reader = {.status = {.readIndex = 1, .readOffset = 8, .passed = 5}};
+    progress.indexAllocated = 1;
+    assert(InterBufReader_UpdateStatus(&reader, &progress) == 0);
+    assert(reader.status.writeIndex == 2 && reader.status.writeOffset == 24);
+    assert(reader.status.indexAllocated == 1);
+    assert(reader.status.readIndex == 1 && reader.status.readOffset == 8);
+    assert(reader.status.passed == 5 && reader.status.written == 0);
+}
 int main(void)
 {
     properties();
@@ -161,6 +256,8 @@ int main(void)
     updates = setters = 0;
     properties();
     reads();
-    puts("libaa match regressions: property types/callbacks/logging and read wrapping/cache passed");
+    cached_ring_status();
+    glue_eos_paths();
+    puts("libaa match regressions: properties, read wrapping/cache, cached status and ring FULL passed");
     return 0;
 }

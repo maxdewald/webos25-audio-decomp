@@ -18,9 +18,10 @@ static struct aud_port *output;
 static struct aud_event first;
 static struct aud_data *retained;
 static unsigned destroyed, waits, broadcasts, free_bytes, writes;
-static unsigned seen, bypass_calls;
+static unsigned seen, bypass_calls, expected_wait_seen;
 static int order[32];
 static bool no_output, fail_port, fail_alloc, mutate, retain, flush_on_wait;
+static bool wake_without_progress, full_after_data;
 static struct aud_data *expected_shared;
 
 int foreach_sync(void *, void *);
@@ -103,9 +104,12 @@ static int mock_wait(pthread_cond_t *cond, pthread_mutex_t *mutex)
     assert(pthread_mutex_trylock(mutex) == EBUSY);
     assert(pthread_mutex_trylock(&output->stream_lock) == EBUSY);
     assert(bypass_calls == 0); /* later producer call cannot have happened */
+    assert(seen == expected_wait_seen && order[0] == 101);
+    for (unsigned index = 0; index < output->pending_obj_num; ++index)
+        assert(output->pending_objs[index]->user > 0);
     ++waits;
     if (flush_on_wait) output->flushing = 1;
-    else free_bytes = INT_MAX;
+    else if (!wake_without_progress || waits > 1) free_bytes = INT_MAX;
     return 0;
 }
 static int mock_broadcast(pthread_cond_t *cond) { ++broadcasts; return 0; }
@@ -158,7 +162,9 @@ static void setup(void)
     src.module.impl = registered;
     src.module.name = "appsrc_mock";
     destroyed = waits = broadcasts = writes = seen = bypass_calls = 0;
+    expected_wait_seen = 1;
     no_output = fail_port = fail_alloc = mutate = retain = flush_on_wait = false;
+    wake_without_progress = full_after_data = false;
     expected_shared = retained = NULL;
     aud_module_sync_at_push = false;
 }
@@ -170,7 +176,11 @@ static void teardown(void)
 }
 static int get_free(ADEC_BUF_T *b) { return (int)free_bytes; }
 static int insert(unsigned char *p, int size, ADEC_AU_INFO_T *i, ADEC_BUF_T *b)
-{ ++writes; return -1; /* write errors are not surfaced */ }
+{
+    ++writes;
+    if (full_after_data && i->dataType != AUDIO_DATA_TYPE_EVENT) free_bytes = 0;
+    return -1;
+}
 
 static void test_fifo_and_shared_reference(void)
 {
@@ -293,6 +303,58 @@ static void test_legacy_wait_and_flush(void)
     assert(!async.object.user && !sync.object.user);
     teardown();
 }
+static void test_eos_submission_wait(void)
+{
+    for (int mode = 0; mode < 3; ++mode) {
+        setup();
+        ADEC_BUF_T ring = {.get_free_size = get_free, .insert_au = insert};
+        output->legacy_buf = &ring;
+        free_bytes = 0;
+        flush_on_wait = mode == 1;
+        wake_without_progress = mode != 1;
+        full_after_data = mode == 2;
+        if (full_after_data) free_bytes = INT_MAX;
+        unsigned char bytes[4] = {0};
+        struct aud_data pending = data(sizeof(bytes), 1, bytes);
+        struct aud_event eos = event(AUD_EVENT_TYPE_CUSTOM, true);
+        struct aud_event last = event(AUD_EVENT_TYPE_LAST_AU, true);
+        expected_wait_seen = 2;
+        assert(module_appsrc_push_data(&src.module, &pending, false) == 0);
+        assert(!seen && output->pending_obj_num == 1);
+        assert(module_appsrc_push_event(&src.module, &eos) == 0);
+        assert(waits == (mode == 1 ? 1u : 2u));
+        assert(writes == (mode == 1 ? 0u : 2u));
+        assert(seen == 2 && order[0] == 101 && order[1] == AUD_EVENT_TYPE_CUSTOM);
+        assert(!pending.object.user && !eos.object.user);
+        assert(first.object.user == 1 && output->current_first == &first);
+        assert(module_appsrc_push_event(&src.module, &last) == 0);
+        assert(seen == 3 && order[2] == AUD_EVENT_TYPE_LAST_AU);
+        assert(!last.object.user && !first.object.user && !output->current_first);
+        assert(!output->pending_obj_num);
+        teardown();
+    }
+}
+static void test_event_worker_boundary(void)
+{
+    setup();
+    pthread_cond_t kick;
+    assert(pthread_cond_init(&kick, NULL) == 0);
+    src.module.othread = (struct aud_thread *)&src;
+    src.module.othread_kick = &kick;
+    struct aud_event queued = event(AUD_EVENT_TYPE_CUSTOM, true);
+    assert(aud_module_push_event(&src.module, 0, &queued) == 0);
+    assert(broadcasts == 1 && !seen && output->pending_obj_num == 1);
+    assert(queued.object.user == 1);
+    struct aud_event last = event(AUD_EVENT_TYPE_LAST_AU, true);
+    assert(module_appsrc_push_event(&src.module, &last) == 0);
+    assert(broadcasts == 2 && seen == 2);
+    assert(order[0] == AUD_EVENT_TYPE_CUSTOM && order[1] == AUD_EVENT_TYPE_LAST_AU);
+    assert(!queued.object.user && !last.object.user && !output->pending_obj_num);
+    src.module.othread = NULL;
+    src.module.othread_kick = NULL;
+    pthread_cond_destroy(&kick);
+    teardown();
+}
 int main(void)
 {
     assert(registered && !registered->flag && !registered->prop);
@@ -302,6 +364,8 @@ int main(void)
     test_drops_and_errors();
     test_callbacks();
     test_legacy_wait_and_flush();
-    puts("appsrc: FIFO, shared refs/mutation, debug sync, drops/OOM, legacy waits/flush, teardown passed");
+    test_eos_submission_wait();
+    test_event_worker_boundary();
+    puts("appsrc: FIFO, ownership, errors, legacy waits/flush, EOS before LAST, teardown passed");
     return 0;
 }

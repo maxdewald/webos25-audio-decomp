@@ -171,7 +171,7 @@ struct debug_port {
     unsigned char unused_0c[0xc0 - 0x0c];
     struct debug_root down_peers;            /* +0xc0, mutex +0xc8 */
     struct debug_port *up_peer;              /* +0xec */
-    unsigned unused_f0;
+    void **pending_objs;                    /* +0xf0, local object pointers */
     int pending_obj_alloced;                 /* +0xf4 */
     int pending_obj_num;                     /* +0xf8 */
     unsigned char unused_fc[0x13c - 0xfc];
@@ -184,6 +184,7 @@ _Static_assert(offsetof(struct debug_module, inputs) == 0x10, "module inputs");
 _Static_assert(offsetof(struct debug_module, outputs) == 0x3c, "module outputs");
 _Static_assert(offsetof(struct debug_port, down_peers) == 0xc0, "downstream peers");
 _Static_assert(offsetof(struct debug_port, up_peer) == 0xec, "upstream peer");
+_Static_assert(offsetof(struct debug_port, pending_objs) == 0xf0, "pending array");
 _Static_assert(offsetof(struct debug_port, pending_obj_num) == 0xf8, "pending count");
 _Static_assert(offsetof(struct debug_port, legacy_buf) == 0x13c, "legacy buffer");
 #endif
@@ -204,7 +205,18 @@ static void debug_port_fields(struct debug_port *port)
     logm_message("  legacy_buf=%p\n", port->legacy_buf);
 }
 
-/* @0x6007037c: inputs expose one upstream pointer; outputs enumerate all
+/* @0x6007037c: pending_obj_alloced/num are pointer slots, not byte sizes.
+ * add_pending_obj_locked @60072078 indexes +0xf0 with a four-byte stride;
+ * object +4 distinguishes 'data' (0x64617461) from 'evnt' (0x65766e74).
+ * aud_data_new @6006b198 confirms data bytes at +0x34, payload pointer +0x38;
+ * subtype is +0x10. aud_event_new @60069a64 confirms event payload bytes at
+ * +0x20, inline payload +0x24; event type is +0x0c. Event payload length is
+ * not its serialized size (properties are separate). Never apply data offsets
+ * to events or equate aud_data subtype with legacy AU dataType.
+ * This dump does not traverse those objects or dereference legacy_buf.
+ * It takes list mutexes, so it can block, and its logging changes debug state;
+ * it is not a lock-free, side-effect-free or coherent occupancy snapshot.
+ * Inputs expose one upstream pointer; outputs enumerate all
  * downstream peers. Output-root lock stays held while each peer-root is locked.
  * FLIX branch slots at 60070424/600704a7 confirm empty-list and loop-back tests.
  */
@@ -245,6 +257,70 @@ int dump_inst(struct debug_module *module)
     logm_message("\n");
     return 0;
 }
+
+/* Ordinary offline instruction evidence: listings in build/scratch/diag-buf/;
+ * CommonBuffer name/function pairs checked in the firmware symbol table.
+ * This is the local ADEC_BUF_T prefix, NOT the shared commonBuf allocation.
+ * Its status may be stale: neither getter refreshes shared registers, takes
+ * a lock, nor provides an atomic snapshot. Caller must ensure valid lifetime,
+ * aui_count > 0, valid indices/offsets and externally stable cached status.
+ * DSP writer wrappers @60065e38/60065ed0/60065f60 mask IRQs and store saved PS
+ * at ADEC_BUF_T +0xf4 before these queries; they are not strictly read-only.
+ * Those normal paths do not refresh shared status. No live call is prescribed.
+ * These native signatures are NOT the argc/argv debug fcall interface.
+ */
+struct debug_adec_status {
+    int32_t index_allocated, read_offset, write_offset;
+    int16_t read_index, write_index;
+    int32_t written, passed, repeat_count;
+};
+struct debug_adec_buf {
+    struct debug_adec_status status;
+    uint32_t common_buf_address;             /* DSP address, not host pointer */
+    uint32_t max_access_size, max_size, aui_count;
+};
+_Static_assert(sizeof(struct debug_adec_status) == 0x1c, "cached status size");
+_Static_assert(offsetof(struct debug_adec_buf, max_size) == 0x24, "buffer size");
+_Static_assert(offsetof(struct debug_adec_buf, aui_count) == 0x28, "AU slots");
+
+/* @0x600635cc: AU-slot exhaustion overrides free bytes; four-byte guard.
+ * No buffer writes, callbacks, logging or locks in this function itself.
+ */
+int32_t CommonBuffer_GetFreeSize(const struct debug_adec_buf *buf)
+{
+    uint32_t next = (uint32_t)((int32_t)buf->status.write_index + 1) % buf->aui_count;
+    if (next == (uint32_t)(int32_t)buf->status.read_index)
+        return 0;
+    uint32_t free_size = (uint32_t)buf->status.read_offset -
+                         (uint32_t)buf->status.write_offset;
+    if (buf->status.read_offset <= buf->status.write_offset)
+        free_size += buf->max_size;
+    return (int32_t)(free_size - 4u);
+}
+
+/* @0x60063680: committed AU count, not bytes or the indexAllocated flag.
+ * Same local-status and lifetime restrictions as GetFreeSize.
+ */
+int32_t CommonBuffer_GetAuCnt(const struct debug_adec_buf *buf)
+{
+    int32_t count = (int32_t)buf->status.write_index - buf->status.read_index;
+    return count < 0 ? (int32_t)((uint32_t)count + buf->aui_count) : count;
+}
+
+/* Not reconstructed as safe diagnostic calls:
+ * BufDbg_Dump @60061850 takes ADEC_BUF_T *, not commonBuf/uid/argv. It logs
+ * local status and dereferences commonBuf plus module links without locking;
+ * logging has IPC/debug side effects and provides no coherent snapshot.
+ * GetUsedSize @60063610 takes the same pointer; invalid occupancy logs, calls
+ * BufDbg_Dump and dump_backtrace, then spins forever at 6006367d.
+ * GetAuInfo @600640f0 takes (int index, int *offset_out, AU *out, ADEC_BUF_T *).
+ * out must hold 32 bytes; offset_out may be NULL. Index 0 is oldest, -1 newest;
+ * out-of-range returns -2 without writing outputs. It invokes adap->invalidate
+ * (buf+0x34, slot 0) as (entry, 40, buf) on each visited AU entry, then writes
+ * outputs. Entries start at commonBuf+0x10 with a 40-byte stride.
+ * NULL out/corrupt AU size reach logging/backtrace/infinite loops. Callback
+ * effects and shared-state freshness must be established separately.
+ */
 
 /* @0x600705c8: one directed edge per output peer, including fan-out. Both
  * endpoint names/uids come from each port's module, not the module being walked.

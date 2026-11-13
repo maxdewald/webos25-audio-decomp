@@ -443,6 +443,30 @@ int main(void)
     assert(!strcmp(string_value(1, "codec"), "mat"));
 
     reset(); ao = context();
+    ao.rendererState = LGAO_STATE_PLAY;
+    assert(lgao_set_pcm_multi_channel(&ao, 1) == 0);
+    assert(lgao_feed(&ao, bytes, 4, 0, LGAO_DATA_PCM) == 4);
+    assert(events[0] == 1 && events[1] == 1 && pushes[0] == 1 && pushes[1] == 1);
+    assert(value(1, "es", aud_value_bool, -1) == -1);
+    assert(lgao_set_pcm_multi_channel(&ao, 0) == 0);
+    assert(!ao.isFirstRender[LGAO_DATA_PCM] && !ao.isFirstRender[LGAO_DATA_ES]);
+    assert(lgao_config(&ao) == 0 && !ioctls && !opens && !connects && !closes);
+    assert(ao.appsrc == &main_src && ao.bypass_appsrc == &bypass_src);
+    assert(lgao_feed(&ao, bytes, 4, 0, LGAO_DATA_PCM) == 4);
+    assert(events[0] == 1 && events[1] == 1 && pushes[0] == 2 && pushes[1] == 1);
+    assert(value(1, "es", aud_value_bool, -1) == -1);
+    assert(lgao_eos(&ao) == 0 && events[0] == 3 && events[1] == 3);
+    assert(ao.isFirstRender[LGAO_DATA_PCM] && !ao.isFirstRender[LGAO_DATA_ES]);
+    assert(ao.rendererState == LGAO_STATE_PLAY && !ioctls && !disconnects && !destroys);
+    assert(lgao_feed(&ao, bytes, 4, 0, LGAO_DATA_PCM) == 4);
+    assert(events[0] == 4 && events[1] == 4 && pushes[0] == 3 && pushes[1] == 1);
+    assert(value(1, "es", aud_value_bool, -1) == 1);
+    assert(!strcmp(string_value(1, "codec"), "ac3"));
+    ao.rendererState = LGAO_STATE_CONFIG;
+    assert(lgao_eos(&ao) == 0 && events[0] == 4 && events[1] == 4);
+    assert(ao.isFirstRender[LGAO_DATA_PCM] && !live_objects);
+
+    reset(); ao = context();
     memset(ao.isFirstRender, 0, sizeof(ao.isFirstRender));
     assert(lgao_disconnect_renderer(&ao) == 0 && disconnects == 3 && destroys == 3);
     assert(disconnected[0] == 2 && disconnected[1] == 1 && disconnected[2] == 3);

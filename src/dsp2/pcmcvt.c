@@ -400,6 +400,11 @@ int Pcmcvt_Cmd(struct pcmcvt *m, uint32_t cmd, void *arg, unsigned len)
  * divides sample count by 16, not 8. Preserve the firmware's arithmetic.
  * Original code does not check output allocation before dereferencing it.
  * map failure leaves queued bytes in place (and retries while enough remain).
+ * Fault @6009bfc2 is signed timestamp division by lgsrc_getOutputFs(src),
+ * not cached output_rate or channel count. In native-hd-fault-20261113-140842,
+ * the saved divisor is zero despite cached 8ch/16bit/192000 formats; src's
+ * context pointer and upstream pending slots are already damaged. This does
+ * not identify the writer or justify hiding the shipped fault with a guard.
  */
 int Pcmcvt_Chai(struct aud_port *port, struct aud_data *data)
 {

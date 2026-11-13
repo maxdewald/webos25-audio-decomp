@@ -144,6 +144,14 @@ extern int   aud_prop_get_value_int(void *prop, const char *k, int def);
 /* 0x60088118: ONE 32-bit PCM frame, at src/dst + word_offset, not n frames.
  * Verified caller @60088ba2..60088bad: a2=src, a3=word_offset, a4=dst,
  * a5=channels, a6=effective Q23 gain. Dispatch is 2/4/6/8 channels.
+ * The 8ch stores are scalar s32i at dst+4*word_offset+[0,4,...,28]
+ * (60088182..60088256). FIRST 16bps does not double the extent: chain
+ * uses signed size/4 words (60088868..7c), steps by channels (60088bb3)
+ * and tests the end AFTER each frame (60088bb5). Processing therefore
+ * touches 4*channels*ceil(trunc(size/4)/channels) bytes when the positive
+ * word count enters the kernel; a partial final frame CAN overrun.
+ * Whole 8ch/16bit frames of 16 bytes are safe only at an even frame count
+ * (size divisible by 32). Unity forwarding below writes no payload at all.
  * Each channel decodes as mulf32s -> slaisq56s 8 -> sat48s -> trunca32q48;
  * exact fixed-point saturation/rounding semantics remain unvalidated. */
 /* [FLIX] Unresolved SIMD semantics: declaration only, not a no-op substitute. */
@@ -347,6 +355,19 @@ int gain_chain(struct aud_port *port, struct aud_data *d)
 
     if (d->type != AUD_DATA_PCM)                               /* 0x60088898 */
         return gain_handle_nonpcm(m, d, muted);
+
+    /* 600889c2 -> 60088f13..4a -> 60088cdd: no payload allocation/write.
+     * Saved failing route gain_041b0001 @60288360 has gain_changed=1,
+     * so its otherwise-unity/unmuted state does NOT qualify for this path. */
+    if (m->current_gain == GAIN_UNITY && m->fade_gain == GAIN_UNITY &&
+        m->delta_g == 0 && !m->gain_changed && m->prev_muted == 0 && !muted) {
+        aud_module_push_data(m, 0, d);
+        m->final_gain = GAIN_UNITY;
+        m->prev_muted = muted;
+        m->gain_changed = false;
+        m->delay_changed = false;
+        return 0;
+    }
 
     if (muted && m->prev_muted == 1 && !m->gain_changed &&
         m->delta_g == 0 && m->fade_gain == m->fade_target && m->channel > 0 &&

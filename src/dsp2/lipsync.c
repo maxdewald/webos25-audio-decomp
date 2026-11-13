@@ -170,8 +170,9 @@ extern void aud_cond_signal(void *);
 /* @0x600a6950: timeout in microseconds, raised to >= 1000; 0 returns at once.
  * Clears the signal count first, so only signals after the call wake it. */
 extern void aud_cond_wait_timeout(void *cond, void *mutex, int us);
-extern void lipsync_fadein(int ch, void *buf, unsigned size);                 /* @0x600a2138 */
-extern void lipsync_fadeout(int ch, void *buf, unsigned size);                /* @0x600a2218 */
+/* Byte size / channels / 4 sets the frame count, unlike delay's +0xfc divisor. */
+extern void lipsync_fadein(int ch, void *dst, const void *src, unsigned size); /* @0x600a2138 */
+extern void lipsync_fadeout(int ch, void *dst, const void *src, unsigned size);/* @0x600a2218 */
 extern void _lipsync_write_lipsync_state(struct lipsync *, int action);       /* @0x600a22ec */
 extern uint32_t _lipsync_get_stc(int clock_type);
 extern uint32_t _lipsync_get_pts(void *, int clock_type, uint32_t pts);
@@ -628,9 +629,9 @@ retry:
         }
         if (ls->dataType != 1) {
             if (action == LS_TONORM)
-                lipsync_fadein(ls->channels, d->buf, d->size);
+                lipsync_fadein(ls->channels, d->buf, d->buf, d->size);
             else if (action == LS_E_NORM)
-                lipsync_fadeout(ls->channels, d->buf, d->size);
+                lipsync_fadeout(ls->channels, d->buf, d->buf, d->size);
         }
         _lipsync_write_metadata(ls, ls->nSamplePerFrame, 0);
         _lipsync_write_output(ls, d);

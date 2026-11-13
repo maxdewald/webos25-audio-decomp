@@ -599,8 +599,10 @@ int lgao_close(void *a)
     return 0;
 }
 
-/* @0x14fa4: returns 1 when the element must post EOS itself (nothing will come
- * back from the renderer), 0 when PRESENT_END will arrive via the msg queue. */
+/* @0x14fa4: 1 skips the element's EOS wait; 0 selects it, not a delivery
+ * guarantee. PLAY sends custom+LAST to bypass then main regardless of PCM flags;
+ * push results are ignored. Non-PLAY also returns 0 and rearms PCM FIRST without
+ * sending anything. Neither return proves both DSP paths drained or released. */
 int lgao_eos(void *a)
 {
     lgao *ao = a;

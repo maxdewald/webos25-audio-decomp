@@ -200,15 +200,15 @@ struct aud_data *aud_data_adapter_peep(void *adapter)
     queued.timestamp = adapter_timestamp;
     return have_timestamp ? &queued : NULL;
 }
-void lipsync_fadein(int channels, void *buf, unsigned size)
+void lipsync_fadein(int channels, void *buf, const void *src, unsigned size)
 {
-    assert(channels == 8 && size && buf);
+    assert(channels == 8 && size && buf && src == buf);
     ++fadeins;
     memset(buf, 0x11, size);
 }
-void lipsync_fadeout(int channels, void *buf, unsigned size)
+void lipsync_fadeout(int channels, void *buf, const void *src, unsigned size)
 {
-    assert(channels == 8 && size && buf);
+    assert(channels == 8 && size && buf && src == buf);
     ++fadeouts;
     memset(buf, 0x22, size);
 }

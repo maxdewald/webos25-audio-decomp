@@ -86,6 +86,8 @@ struct aud_port {
     unsigned  flag;              /* +0x08 bit0 OUTPUT, bit1 DISABLED */
     int       stream_lock;       /* +0x0c */
     struct aud_port  *up_peer;   /* +0xec */
+    void **pending;              /* +0xf0 owned object references */
+    unsigned pending_num;        /* +0xf8 */
     int       throwing;          /* +0x12c */
     struct aud_event *current_first; /* +0x140 */
     unsigned  passed;            /* +0x144 */
@@ -138,8 +140,8 @@ extern void *aud_object_get(void *);
 extern void aud_object_put(void *);
 extern struct aud_port *aud_module_get_output(struct aud_module *, int);      /* @0x60073984 */
 extern struct aud_port *aud_module_new_output(struct aud_module *, int);      /* @0x60073c98 */
-extern int  aud_port_sync_locked(struct aud_port *, int);                    /* @0x600741d8 */
-extern void aud_link_foreach_cb(void *root, int arg, int (*cb)(struct aud_port *, int));
+extern int  aud_port_sync_locked(void *, struct aud_port *);                 /* @0x600741d8 foreach_sync */
+extern void aud_link_foreach_cb(void *root, int arg, int (*cb)(void *, struct aud_port *));
 extern int  foreach_down_peer_push_event(struct aud_event *, struct aud_port *); /* @0x60072860 */
 extern int  aud_module_propagate_event(struct aud_module *, struct aud_event *); /* @0x600741b0 */
 extern int  aud_module_event(struct aud_module *, struct aud_port *, struct aud_event *); /* @0x60075024 */
@@ -265,6 +267,18 @@ int aud_module_push_event(struct aud_module *m, int out_port_num, struct aud_eve
     return 0;
 }
 
+/* Inlined release tail of aud_port_sync_locked, 0x600742b3..742db, not a
+ * standalone firmware function. Reloads the array before each put and count
+ * after each put; does not detach a batch before callbacks. The logged
+ * foreach_sync+0xf4 is the return PC 0x600742cc of put at 0x600742c9.
+ * Whether this capture mutated the pending array is unresolved. */
+void reconstructed_port_release_pending(struct aud_port *port)
+{
+    for (unsigned index = 0; index < port->pending_num; ++index)
+        aud_object_put(port->pending[index]);
+    port->pending_num = 0;
+}
+
 /* @0x60072bb0 aud_module_sync */
 int aud_module_sync(struct aud_module *m, int out_port_num)
 {
@@ -277,7 +291,7 @@ int aud_module_sync(struct aud_module *m, int out_port_num)
     out = aud_module_get_output(m, out_port_num);
     if (!out)
         return 0;                                     /* "no output port %d on %s" (lvl 4) */
-    aud_port_sync_locked(out, 0);
+    aud_port_sync_locked(NULL, out);
     return 0;
 }
 

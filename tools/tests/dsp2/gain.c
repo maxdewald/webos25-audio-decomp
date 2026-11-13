@@ -12,6 +12,17 @@ int gain_chain_pcm_unrecovered(struct gain_module *m, struct aud_data *d, int mu
     abort();
 }
 
+void gain_control(const int32_t *src, int word_offset, int32_t *dst,
+                  int channels, int32_t effective_gain)
+{
+    abort();
+}
+
+void gain_set_fade_gain(struct gain_module *m)
+{
+    abort();
+}
+
 volatile uint32_t gain_log_mask;
 const void *const gain_log = NULL;
 static int pushed, freed, first_kind, fail_alloc;
@@ -143,6 +154,40 @@ static void test_steady_muted_pcm(void)
         assert(m.final_gain == 99 && m.delay_changed && m.es_pkt_pos == 2);
     }
 }
+static void test_unity_pcm_canary(void)
+{
+    struct {
+        uint32_t before[8];
+        unsigned char payload[32768];
+        uint32_t after[8];
+    } bounded, saved;
+    const unsigned sizes[] = {32, 48, 4096, 8192, 32768};
+    memset(&bounded, 0xa5, sizeof(bounded));
+    memcpy(&saved, &bounded, sizeof(saved));
+    for (unsigned index = 0; index < sizeof(sizes) / sizeof(sizes[0]); ++index) {
+        struct gain_module m = {.channel = 8, .current_gain = GAIN_UNITY,
+            .fade_gain = GAIN_UNITY, .gain = -1, .fadetime_ms = -1,
+            .fade_target = GAIN_UNITY, .target_gain = GAIN_UNITY,
+            .delay_changed = true};
+        struct aud_port port = {.module = (void *)&m};
+        struct aud_data data = {.type = AUD_DATA_PCM, .index = 7, .ts = 368902,
+            .size = sizes[index], .ptr = bounded.payload};
+        first_es = false;
+        reset();
+        assert(gain_event(&m, &port, &original) == 0);
+        assert(!m.es_mode && m.channel == 8);
+        reset();
+        fail_alloc = 1;
+        assert(gain_chain(&port, &data) == 0);
+        assert(pushed == 1 && last == &data && !freed && !first_kind);
+        assert(data.size == sizes[index] && data.ptr == bounded.payload);
+        assert(data.index == 7 && data.ts == 368902);
+        assert(!memcmp(&bounded, &saved, sizeof(bounded)));
+        assert(m.final_gain == GAIN_UNITY && m.got_first_data);
+        assert(!m.prev_muted && !m.gain_changed && !m.delay_changed);
+    }
+    first_es = true;
+}
 static void test_first_mute_policy(void)
 {
     unsigned char payload[32], saved[sizeof(payload)];
@@ -255,8 +300,9 @@ int main(void)
     assert(gain_chain(&p, &d) == 0 && last == &d);
     assert(m.current_gain == 0x800000 && m.gain == -1);
     test_steady_muted_pcm();
+    test_unity_pcm_canary();
     test_first_mute_policy();
     puts("gain ES: pass/zero/drop, 3-unit unmute boundary, allocation failure, FIRST/chain mute "
-         "threshold, fade persistence and settled PCM zeroing: PASS");
+            "threshold, fade persistence, settled PCM zeroing and unity PCM canaries: PASS");
     return 0;
 }

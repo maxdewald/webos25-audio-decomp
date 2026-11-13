@@ -8,7 +8,7 @@
  * Linked at 0x60000000. Property table @0x60102950: delay (int +0x100, setter),
  * packet-count (ro +0x140), queued-length (getter), delayed (bool +0x15c),
  * number-packet (+0x150), au-length (+0x144). Branch FLIX now decoded with
- * tools/xtobjdump.sh; remaining PCM fade math is explicitly incomplete.
+ * tools/xtobjdump.sh; queued PCM fade/flush paths remain incomplete.
  * queued-length is a STRING getter (type 0), no geti: kernel aimc_get_property
  * cannot read it. packet-count, au-length, number-packet and delay are integers.
  * Evidence: build/scratch/a13/delay.asm, build/decomp/audio_a0_dsp2.main_60000000.bin.c ~122932.
@@ -97,9 +97,35 @@ extern int  _pending_events_add(void *list, struct aud_event *, void *q, void *m
 extern void _pending_events_check(void *list);                           /* @0x6008fa08 */
 extern void _pending_events_empty(void *m);                              /* @0x6008fabc */
 extern void _pending_events_update(void *list, unsigned consumed);       /* inlined */
-extern void delay_fadein(struct delay *, void *buf, unsigned frames);    /* @0x6008fb68 */
-extern void delay_fadeout(struct delay *, void *buf, unsigned frames);   /* @0x6008fc40 */
 extern unsigned long strtoul(const char *, char **, int);
+
+/* @0x6008fb68: signed divide before multiply; always channels * 4 bytes/frame,
+ * even when +0xfc is channels * 2. Source is argument 3, frames argument 4.
+ * With 8ch/16bit, chain's 8192 / 16 frames write 16384 bytes. The ascending
+ * /512 ramp matches the captured damaged heap in native-hd-fault-20261113-140842;
+ * entry arguments are not recorded, so execution attribution remains inferred. */
+static void delay_fadein(struct delay *dl, int32_t *dst, const int32_t *src,
+                         unsigned frames)
+{
+    for (unsigned frame = 0; frame < frames; frame++) {
+        for (int channel = 0; channel < dl->channels; channel++) {
+            int32_t sample = *src++ / (int32_t)frames;
+            *dst++ = (int32_t)((uint32_t)sample * frame);
+        }
+    }
+}
+
+/* @0x6008fc40: starts at frames, ends at 1, with the same fixed 32-bit stride. */
+static void delay_fadeout(struct delay *dl, int32_t *dst, const int32_t *src,
+                          unsigned frames)
+{
+    for (unsigned frame = 0; frame < frames; frame++) {
+        for (int channel = 0; channel < dl->channels; channel++) {
+            int32_t sample = *src++ / (int32_t)frames;
+            *dst++ = (int32_t)((uint32_t)sample * (frames - frame));
+        }
+    }
+}
 
 /* @0x6008fb20 delay_push_event (syms: "delay_set_delay"; log string "push event %s") */
 int delay_push_event(void *m, struct aud_event *e)
@@ -173,11 +199,14 @@ int delay_add_zero(struct delay *dl, int ms)
     return 0;
 }
 
-/* 0x6008fffc: queued PCM fadeout is not reconstructed. [FLIX] Declaration
- * only; the ES paths do not call it. Do not substitute a successful no-op. */
+/* 0x6008fffc: queued fadeout is not reconstructed. [FLIX] Declaration
+ * only; set_delay gates it on !es, but flush does not. No +0x14c store.
+ * Do not substitute a successful no-op. */
 extern int delay_queue_fadeout(struct delay *dl);
 
-/* Unresolved PCM-only prefix of delay_queue_flush @0x600900ac. */
+/* Unresolved PCM flush hook. The original prefix @0x600900c1..600900d3
+ * actually gates queue_fadeout on packet_count && push_all, including ES.
+ * No +0x14c store occurs anywhere in flush @0x600900ac..60090180. */
 extern void delay_queue_flush_pcm_unrecovered(struct delay *, int push_all);
 
 /* @0x600900ac delay_queue_flush: recovered ES path; PCM remains unresolved. */
@@ -203,7 +232,7 @@ void delay_queue_flush(struct delay *dl, int push_all)
     aud_mutex_unlock(dl->mutex);
 }
 
-/* @0x60090180 delay_set_delay */
+/* @0x60090180 delay_set_delay: does not arm or clear +0x14c. */
 int delay_set_delay(struct delay *dl, int ms)
 {
     int pushed = 0;
@@ -265,7 +294,7 @@ int delay_chain(void **port, struct aud_data *d)
         if (dl->delay)                                /* 0x600904c7..600904e8 */
             delay_add_zero(dl, (dl->rate_khz * dl->delay + dl->rate_khz - 1) /
                               dl->rate_khz);
-        dl->fadein_pending = !dl->es;
+        dl->fadein_pending = !dl->es;                 /* 0x600904f7: only chain's delay-change path */
         if (pushed) {
             aud_object_put(d);                        /* current buffer dropped */
             /* "%s: return delay chain" (lvl 4) */
@@ -273,13 +302,15 @@ int delay_chain(void **port, struct aud_data *d)
         }
         if (old == 0 && dl->delay) {                  /* 0x60090608: 0 -> N */
             if (d->type == 0)
-                delay_fadeout(dl, d->buf, d->size / (unsigned)dl->bytes_per_ms_unit);
+                delay_fadeout(dl, d->buf, d->buf,
+                              d->size / (unsigned)dl->bytes_per_ms_unit);
             return delay_push_output(dl, d);
         }
     }
 
     if (d->type == 0 && dl->fadein_pending) {         /* 0x60090599 */
-        delay_fadein(dl, d->buf, d->size / (unsigned)dl->au_length);
+        delay_fadein(dl, d->buf, d->buf,
+                     d->size / (unsigned)dl->bytes_per_ms_unit);
         dl->fadein_pending = false;
     }
 
@@ -311,7 +342,9 @@ int delay_chain(void **port, struct aud_data *d)
     return 0;
 }
 
-/* @0x600906bc delay_event */
+/* @0x600906bc delay_event: FIRST does not arm +0x14c, even when applying a
+ * requested delay. LAST's flush does not clear it; consumption clears it
+ * only after delay_fadein returns @0x600905b2. */
 int delay_event(struct delay *dl, void *port, struct aud_event *e)
 {
     /* "%s: event %s" (lvl 4) */

@@ -23,6 +23,16 @@ static int visit(void *ctx,void *data)
     ++calls;aud_mutex_unlock(node->mutex);
     return ctx!=NULL;
 }
+static struct aud_link *rerouted_peer;
+static int reroute_during_visit(void *ctx,void *data)
+{
+    struct aud_link *root=ctx,*node=data;
+    ++calls;
+    aud_mutex_unlock(node->mutex);
+    aud_link_del(rerouted_peer);
+    aud_link_add_tail(root,rerouted_peer);
+    return 0;
+}
 int main(void)
 {
     struct aud_link root={0},a={0},b={0},c={0};
@@ -37,12 +47,20 @@ int main(void)
     aud_link_del(&b);assert(root.next==&a && !b.owner.root && root.payload.count==2);
     assert(b.next==&a);aud_link_del(&a);aud_link_del(&c);
     assert(root.next==&root && root.prev==&root && root.payload.count==0);
+    aud_link_add_tail(&root,&a);aud_link_add_tail(&root,&b);
+    uint32_t old_serial=b.serial;
+    rerouted_peer=&b;calls=0;
+    assert(aud_link_foreach_node(&root,&root,reroute_during_visit)==0);
+    assert(calls==1 && b.serial!=old_serial && root.payload.count==2 && held_count==0);
+    calls=0;
+    assert(aud_link_foreach_node(&root,NULL,visit)==0 && calls==2 && held_count==0);
+    aud_link_del(&a);aud_link_del(&b);
     struct aud_link *many=calloc(257,sizeof(*many));assert(many);
     for(unsigned i=0;i<257;++i) { aud_link_node_init(&many[i],&many[i]);aud_link_add_tail(&root,&many[i]); }
     fail_alloc=1;assert(aud_link_foreach_node(&root,NULL,visit)==-1 && !held_count);
     fail_alloc=0;calls=0;assert(aud_link_foreach_node(&root,NULL,visit)==0 && calls==257 && !held_count);
     for(unsigned i=0;i<257;++i) aud_link_del(&many[i]);free(many);
     root.payload.count=1;assert(aud_link_foreach_node(&root,NULL,visit)==-1 && !held_count);
-    puts("PASS aud_link: head/tail/order, callback mutex handoff, serial snapshot and heap failure");
+    puts("PASS aud_link: order/locks, reentrant reroute skips stale serial, heap failure");
     return 0;
 }

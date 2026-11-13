@@ -476,14 +476,32 @@ retry:
         if (bytes_per_ms)
             pts += (uint32_t)((int64_t)(int32_t)(ls->adapter_out * 90u) / bytes_per_ms);
     }
+    /* @0x600a3207..3224 ->3d01..3de0: first master baseline precedes the
+     * sync/seamless checks. Copies/event retain raw clocks; working bases
+     * use 31 bits. Clock 0x11 then invalidates its working bases. */
+    if ((ls->clockType == 0x11 || ls->clockType == 0x200) && ls->unknown_190 == 1) {
+        int32_t base[2];
+        stc = stc_regs[0x84 / 4];
+        ls->unknown_190 = 0;
+        ls->BaseST_copy = (int32_t)pts;
+        ls->BaseCT_copy = (int32_t)stc;
+        ls->BaseST = (int32_t)(pts & 0x7fffffffu);
+        ls->BaseCT = (int32_t)(stc & 0x7fffffffu);
+        base[0] = (int32_t)pts;
+        base[1] = (int32_t)stc;
+        aimc_raise_named_event(ls->imc, ls->uid, "adec_master_info", base, sizeof(base));
+        if (ls->clockType == 0x11)
+            ls->BaseST = ls->BaseCT = -1;
+        else
+            ls->unknown_19c = 1;
+        return 1;
+    }
     /* @0x600a312b..315e/33d3..3502: non-seamless clock path. The negative
      * correction compares against -mask, NOT -(mask/2), and adds mask, not
      * mask+1. Baseline initialization and seamless delay remain [GAP]. */
-    if (ls->LipsyncOnOff == 1 && ls->BaseST == -1 && ls->clockType != 0x200 &&
-        !(ls->clockType == 0x11 && ls->unknown_190 == 1))
+    if (ls->LipsyncOnOff == 1 && ls->BaseST == -1 && ls->clockType != 0x200)
         return 12;                                   /* @0x600a3248 ->3cfd */
-    if (ls->seamless || ls->clockType == 0x200 ||
-        (ls->clockType == 0x11 && ls->unknown_190 == 1)) {
+    if (ls->seamless || ls->clockType == 0x200) {
         return _lipsync_core_clock_unrecovered(ls, pts);
     } else {
         uint32_t clock_pts = _lipsync_get_pts(ls, ls->clockType, pts);

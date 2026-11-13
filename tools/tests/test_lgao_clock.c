@@ -12,6 +12,9 @@
 #define LOGI(...) ((void)0)
 #define LOGD(...) ((void)0)
 
+// @match src/libgstlgaudiosink/lgao.c typedef enum \{\n    AUD_GAIN_DURATION_MODE_LINEAR[^}]*\} aud_gain_duration_mode_t;
+// @match src/libgstlgaudiosink/lgao.c typedef struct \{\n    unsigned int volume;[^}]*\} aren_ease_volume_t;
+// @match src/libgstlgaudiosink/lgao.c (?m)^#define (Q23_UNITY|UNSET|AREN_SET_EASE_VOLUME) .*$
 // @match src/libgstlgaudiosink/lgao.c typedef struct \{ unsigned int clock_base_time, stream_base_time; \} aren_base_time_t;
 // @match src/libgstlgaudiosink/lgao.c typedef struct \{\n    unsigned int lower_bound[^}]*\} aren_lipsync_param_t;
 // @match src/libgstlgaudiosink/lgao.c (?m)^#define AREN_(GET_GSTC|SET_CLOCKTYPE|SET_ENABLE_LIPSYNC|SET_BASETIME|SET_LIPSYNC_PARAM|SET_SPEED) .*$
@@ -23,12 +26,18 @@ struct aud_event { int type; const char *eos; };
 static unsigned long reqs[16];
 static unsigned vals[16][2];
 static int nreq, msgs, last_msg, gstc = 1000000;
+static int current_volume;
+static aren_ease_volume_t fade_values[16];
+
+static int _lgao_get_ease_volume(lgao *ao) { return current_volume; }
 
 static int mock_ioctl(int fd, unsigned long req, void *arg)
 {
     assert(nreq < 16);
     reqs[nreq] = req;
-    if (req == AREN_GET_GSTC)
+    if (req == AREN_SET_EASE_VOLUME)
+        fade_values[nreq] = *(aren_ease_volume_t *)arg;
+    else if (req == AREN_GET_GSTC)
         *(unsigned *)arg = gstc;
     else if (req == AREN_SET_ENABLE_LIPSYNC)
         vals[nreq][0] = *(bool *)arg;   /* AREN_IOC size 4, but lgao passes a 1-byte bool */
@@ -55,7 +64,7 @@ static const char *aud_event_value_get_str(struct aud_event *e, const char *k, c
 #define ioctl mock_ioctl
 #define msgsnd mock_msgsnd
 
-// @extract src/libgstlgaudiosink/lgao.c sns_to_pts _lgao_set_basetime lgao_set_basetime _lgao_set_playspeed _lgao_set_lipsync_param lgao_play lgao_appsink_handle_event
+// @extract src/libgstlgaudiosink/lgao.c sns_to_pts _lgao_set_basetime lgao_set_basetime _lgao_set_playspeed _lgao_set_lipsync_param lgao_play lgao_appsink_handle_event _lgao_convert_ease_type lgao_keep_fade _lgao_config_set_easevol
 
 static lgao ctx(void)
 {
@@ -72,6 +81,39 @@ int main(void)
 {
     const long long s = 1000000000LL;
     lgao ao = ctx();
+
+    ao.targetVolume = 100; ao.duration = 1000; current_volume = 25;
+    assert(lgao_keep_fade(&ao) == 0 && ao.currVolume == 25 && ao.remainDuration == 750);
+    ao.fadeType = LGAO_EASE_INCUBIC;
+    _lgao_config_set_easevol(&ao);
+    assert(nreq == 2 && reqs[0] == AREN_SET_EASE_VOLUME && reqs[1] == AREN_SET_EASE_VOLUME);
+    assert(fade_values[0].volume == 0x200000 && !fade_values[0].duration);
+    assert(fade_values[0].type == AUD_GAIN_DURATION_MODE_LINEAR);
+    assert(fade_values[1].volume == 0x800000 && fade_values[1].duration == 750);
+    assert(fade_values[1].type == AUD_GAIN_DURATION_MODE_INCUBIC);
+    ao = ctx(); ao.targetVolume = 50; ao.duration = 1000; current_volume = 0;
+    assert(lgao_keep_fade(&ao) == 0 && ao.currVolume == 0 && ao.remainDuration == 500);
+    current_volume = 75;
+    assert(lgao_keep_fade(&ao) == 0 && ao.currVolume == 75 && ao.remainDuration == 500);
+    current_volume = -1;
+    assert(lgao_keep_fade(&ao) == 0 && ao.currVolume == UNSET && ao.remainDuration == UNSET);
+    ao.targetVolume = UNSET; ao.currVolume = 17; ao.remainDuration = 23;
+    assert(lgao_keep_fade(&ao) == 0 && ao.currVolume == 17 && ao.remainDuration == 23);
+    assert(lgao_keep_fade(NULL) == -1);
+    ao = ctx(); ao.targetVolume = 50; ao.duration = 1000;
+    ao.currVolume = UNSET; ao.fadeType = LGAO_EASE_OUTCUBIC;
+    _lgao_config_set_easevol(&ao);
+    assert(nreq == 1 && fade_values[0].volume == 0x400000 && fade_values[0].duration == 1000);
+    assert(fade_values[0].type == AUD_GAIN_DURATION_MODE_OUTCUBIC);
+    ao = ctx(); ao.targetVolume = 50; ao.duration = 1000;
+    ao.currVolume = 25; ao.remainDuration = 500; ao.fadeType = LGAO_EASE_NONE;
+    _lgao_config_set_easevol(&ao);
+    assert(nreq == 1 && fade_values[0].volume == 0x400000 && fade_values[0].duration == 500);
+    assert(fade_values[0].type == AUD_GAIN_DURATION_MODE_LINEAR);
+    ao = ctx(); ao.targetVolume = ao.duration = UNSET; ao.fadeType = LGAO_EASE_NONE;
+    _lgao_config_set_easevol(&ao);
+    assert(!nreq);
+    ao = ctx();
 
     /* basetime: 90 kHz, 28-bit; clock base = GSTC - running time, stream base = segment start */
     assert(lgao_set_basetime(&ao, 2 * s, 10 * s) == 0);

@@ -511,6 +511,50 @@ static void test_core_timestamp(void)
     assert(!flushes && !data_pushes && !events);
 }
 
+static void test_first_master_baseline(void)
+{
+    const int clocks[] = {0x11, 0x200};
+    const struct { int sync; bool seamless; uint32_t pts; int32_t base; } cases[] = {
+        {0, false, 0xfffffff0u, 164},
+        {1, true, 0xfffffff0u, 164},
+        {0, true, 0x80000100u, (int32_t)0x800001b4u},
+        {1, false, 0x80000100u, (int32_t)0x800001b4u}
+    };
+    for (unsigned index = 0; index < sizeof(clocks) / sizeof(clocks[0]); ++index) {
+        for (unsigned sample = 0; sample < sizeof(cases) / sizeof(cases[0]); ++sample) {
+            struct lipsync ls = {.channels = 8, .fs = 48, .bytePerSample = 2,
+                .nSamplePerFrame = 2, .adapter_in = 1600, .adapter_out = 1536,
+                .action = LS_SKIP, .clockType = clocks[index], .unknown_190 = 1,
+                .unknown_19c = 7, .LipsyncOnOff = cases[sample].sync,
+                .seamless = cases[sample].seamless,
+                .BaseST = -1, .BaseCT = -1, .diff = 123, .last_stc = 456,
+                .drop_count = 3, .bytes_in = 17, .bytes_out = 19, .print_cnt = 23};
+            reset_observations();
+            adapter_timestamp = cases[sample].pts;
+            stc_values[0x84 / 4] = 0x80000123u;
+            assert(clock_lipsync_core(&ls) == 1);
+            assert(!ls.unknown_190 && named_master == 1);
+            assert(master_base[0] == cases[sample].base &&
+                   (uint32_t)master_base[1] == 0x80000123u);
+            assert(ls.BaseST_copy == cases[sample].base &&
+                   (uint32_t)ls.BaseCT_copy == 0x80000123u);
+            assert(ls.BaseST == (clocks[index] == 0x11 ? -1 :
+                   (int32_t)((uint32_t)cases[sample].base & 0x7fffffffu)));
+            assert(ls.BaseCT == (clocks[index] == 0x11 ? -1 : 0x123));
+            assert(ls.unknown_19c == (clocks[index] == 0x11 ? 7 : 1));
+            assert(ls.out_ts == adapter_timestamp && ls.adapter_out == 1536);
+            assert(ls.action == LS_SKIP && ls.diff == 123 && ls.last_stc == 456);
+            assert(ls.drop_count == 3 && ls.bytes_in == 17 && ls.bytes_out == 19);
+            assert(ls.print_cnt == 23 && !waits && !flushes && !data_pushes && !events);
+            assert(!ls.first_output_sent && !get_count && !put_count && !locks);
+            if (clocks[index] == 0x11) {
+                ls.LipsyncOnOff = 1;
+                assert(clock_lipsync_core(&ls) == 12 && named_master == 1);
+            }
+        }
+    }
+}
+
 static void test_clock_difference(void)
 {
     const struct { int clock; uint32_t pts, stc; int offset, base_ct, base_st;
@@ -1157,6 +1201,7 @@ int main(void)
     test_last_and_flush();
     test_frame_dispatch();
     test_core_timestamp();
+    test_first_master_baseline();
     test_clock_difference();
     test_clock_to_action();
     test_clock_reset_boundaries();

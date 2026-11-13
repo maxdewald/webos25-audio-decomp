@@ -19,7 +19,7 @@
 #include "render_element.h"
 #include "lgao.h"
 
-static GType gst_lg_audio_render_get_type_once (void);
+static GType gst_lg_audio_render_get_type_once (void) __attribute__ ((noinline));
 static void gst_lg_audio_render_class_intern_init (gpointer klass);
 GType gst_lg_audio_render_get_type (void);
 void gst_lg_audio_render_dump_open (GstLgAudioRender *pAudioRen);
@@ -2075,7 +2075,7 @@ GstFlowReturn gst_lg_audio_render_chain (GstBaseSink *sink, GstBuffer *buffer)
 
     if (GST_BUFFER_PTS_IS_VALID (buffer)) {
         pAudioRen->currentPTS = GST_BUFFER_PTS (buffer);
-        SINK_GST (GST_LEVEL_LOG, 2592, pAudioRen, "current_timestamp %u:%02u:%02u.%09u, %s:%d",
+        SINK_GST (GST_LEVEL_DEBUG, 2592, pAudioRen, "current_timestamp %u:%02u:%02u.%09u, %s:%d",
                   GST_TIME_ARGS (pAudioRen->currentPTS), __func__, 2594);
     }
 
@@ -2091,49 +2091,47 @@ GstFlowReturn gst_lg_audio_render_chain (GstBaseSink *sink, GstBuffer *buffer)
 
         while (bufSize != 0) {
             GstBuffer *chunk;
-            gsize len;
 
             /* On copy failure the same chunk is retried and the remainder is lost. */
-            do {
-                remaining_size = 0;
-                if (bufSize > CHAIN_MAX_FEED_SIZE) {
-                    SINK_LOG (4, GST_LEVEL_DEBUG, 2609, pAudioRen, "bufSize = %d, limitSize = %d\n",
-                              (gint) bufSize, CHAIN_MAX_FEED_SIZE);
-                    remaining_size = bufSize - CHAIN_MAX_FEED_SIZE;
-                    bufSize = CHAIN_MAX_FEED_SIZE;
-                }
-                chunk = gst_buffer_copy_region (buffer, GST_BUFFER_COPY_ALL, offset, bufSize);
-                if (chunk == NULL)
-                    SINK_GST (GST_LEVEL_ERROR, 2619, pAudioRen, "gst_buffer_copy_region() Error");
-            } while (chunk == NULL);
+            remaining_size = 0;
+            if (bufSize > CHAIN_MAX_FEED_SIZE) {
+                SINK_LOG (4, GST_LEVEL_DEBUG, 2609, pAudioRen, "bufSize = %d, limitSize = %d\n",
+                          (gint) bufSize, CHAIN_MAX_FEED_SIZE);
+                remaining_size = bufSize - CHAIN_MAX_FEED_SIZE;
+                bufSize = CHAIN_MAX_FEED_SIZE;
+            }
+            chunk = gst_buffer_copy_region (buffer, GST_BUFFER_COPY_ALL, offset, bufSize);
+            if (chunk == NULL) {
+                SINK_LOG (0, GST_LEVEL_ERROR, 2619, pAudioRen, "gst_buffer_copy_region() Error");
+                continue;
+            }
 
             SINK_LOG (4, GST_LEVEL_DEBUG, 2621, pAudioRen,
                       "offset = %d, bufSize = %d, remainBufSize = %d\n",
                       (gint) offset, (gint) bufSize, (gint) remaining_size);
 
             if (!gst_buffer_map (chunk, &bufMapInfo, GST_MAP_READ)) {
-                SINK_GST (GST_LEVEL_ERROR, 2625, pAudioRen, "gst_buffer_map() Error");
-                len = bufSize;
+                SINK_LOG (0, GST_LEVEL_ERROR, 2625, pAudioRen, "gst_buffer_map() Error");
             } else {
-                len = bufMapInfo.size;
-                gst_lg_audio_render_log_timestamp (pAudioRen, buffer, outType, len);
+                bufSize = bufMapInfo.size;
+                gst_lg_audio_render_log_timestamp (pAudioRen, buffer, outType, bufSize);
                 lgao_get_size_buffered (pAudioRen->ao, outType, &bufferedsize);
                 /* every chunk carries the PTS of the whole input buffer */
-                if (lgao_feed (pAudioRen->ao, bufMapInfo.data, len, GST_BUFFER_PTS (buffer),
+                if (lgao_feed (pAudioRen->ao, bufMapInfo.data, bufSize, GST_BUFFER_PTS (buffer),
                                outType) < 0)
                     SINK_LOG (0, GST_LEVEL_ERROR, 2637, pAudioRen, "lgao_feed() is FAILED!!!");
                 SINK_LOG (4, GST_LEVEL_DEBUG, 2640, pAudioRen, "RENDER %" GST_PTR_FORMAT " out=%s",
                           chunk, out_type_name (outType));
                 gst_buffer_unmap (chunk, &bufMapInfo);
             }
-            offset += len;
+            offset += bufSize;
             gst_buffer_unref (chunk);
             bufSize = remaining_size;
         }
     }
 
 done:
-    SINK_LOG (4, GST_LEVEL_LOG, 2658, pAudioRen, "done");
+    SINK_LOG (4, GST_LEVEL_DEBUG, 2658, pAudioRen, "done");
     return GST_FLOW_OK;
 }
 

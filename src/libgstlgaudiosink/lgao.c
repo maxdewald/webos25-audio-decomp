@@ -1030,7 +1030,8 @@ int lgao_get_fade(void *a, LGAO_FADE_PROP_T prop, int *value)
 int lgao_keep_fade(void *a)
 {
     lgao *ao = a;
-    int volume, remain;
+    int volume;
+    unsigned int remain;
     unsigned int target;
     double ratio, left;
 
@@ -1038,39 +1039,38 @@ int lgao_keep_fade(void *a)
         LOGE(0x4ed, "context is null");
         return -1;
     }
-    if (ao->targetVolume == UNSET)
-        return 0;
-
-    volume = _lgao_get_ease_volume(ao);
-    if (volume < 0) {
-        LOGE(0x4f2, "GetVolume Err");
-        ao->currVolume = UNSET;
-        ao->remainDuration = UNSET;
-        return 0;
-    }
-
-    target = ao->targetVolume;
-    if (target == 100) {
-        left = (1.0 - volume / 100.0) * ao->duration;
-    } else if ((unsigned int)volume < target) {
-        if (volume == 100) {
-            LOGE(0x504, "set remainDuration Err");
-            volume = -1;
-            remain = -1;
-            goto out;
+    if (ao->targetVolume != UNSET) {
+        volume = _lgao_get_ease_volume(ao);
+        if (volume < 0) {
+            LOGE(0x4f2, "GetVolume Err");
+            ao->currVolume = UNSET;
+            ao->remainDuration = UNSET;
+            return 0;
         }
-        ratio = (double)(100 - target) / (double)(100 - volume);
-        left = (1.0 - ratio) * ao->duration;
-    } else {
-        ratio = (double)(100 - volume) / (double)(100 - target);
-        left = (1.0 - ratio) * ao->duration;
-    }
-    remain = left > 0.0 ? (int)left : 0;
+
+        target = ao->targetVolume;
+        if (target == 100) {
+            left = (1.0 - volume / 100.0) * ao->duration;
+        } else if ((unsigned int)volume < target) {
+            if (volume == 100) {
+                LOGE(0x504, "set remainDuration Err");
+                volume = -1;
+                remain = -1;
+                goto out;
+            }
+            ratio = (double)(100 - target) / (double)(100 - volume);
+            left = (1.0 - ratio) * ao->duration;
+        } else {
+            ratio = (double)(100 - volume) / (double)(100 - target);
+            left = (1.0 - ratio) * ao->duration;
+        }
+        remain = (unsigned int)left;
 out:
-    ao->currVolume = volume;
-    ao->remainDuration = remain;
-    LOGN(0x50a, "current Vol %u, dur %u, target vol %u, dur %u", volume, remain,
-         ao->targetVolume, ao->duration);
+        ao->currVolume = volume;
+        ao->remainDuration = remain;
+        LOGN(0x50a, "current Vol %u, dur %u, target vol %u, dur %u", volume, remain,
+             ao->targetVolume, ao->duration);
+        }
     return 0;
 }
 
@@ -1509,20 +1509,18 @@ void _lgao_config_set_easevol(lgao *ao)
         if (ao->currVolume != UNSET) {
             /* resume a fade captured by lgao_keep_fade */
             double cur = ao->currVolume / 100.0 * Q23_UNITY;
-            ease_volume.volume = cur > 0.0 ? (unsigned int)cur : 0;
+            ease_volume.volume = (unsigned int)cur;
             if (fade != LGAO_EASE_NONE) {
                 ioctl(ao->fd, AREN_SET_EASE_VOLUME, &ease_volume);   /* jump to current */
-                ease_volume.type = _lgao_convert_ease_type(ao->fadeType);
-            } else {
-                ease_volume.type = AUD_GAIN_DURATION_MODE_LINEAR;
             }
             ease_volume.duration = ao->remainDuration;
-            ease_volume.volume = pct_to_q23(ao->targetVolume);
+            ease_volume.volume = (unsigned int)(ao->targetVolume * Q23_UNITY / 100.0);
+            ease_volume.type = _lgao_convert_ease_type(ao->fadeType);
             ioctl(ao->fd, AREN_SET_EASE_VOLUME, &ease_volume);
             return;
         }
         double tv = target / 100.0 * Q23_UNITY;
-        ease_volume.volume = tv > 0.0 ? (unsigned int)tv : 0;
+        ease_volume.volume = (unsigned int)tv;
         ease_volume.duration = duration;
         if (fade == LGAO_EASE_INCUBIC || fade == LGAO_EASE_OUTCUBIC) {
             ease_volume.type = _lgao_convert_ease_type(fade);

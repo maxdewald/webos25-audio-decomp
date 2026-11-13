@@ -819,13 +819,13 @@ gst_lg_audio_render_set_caps (GstLgAudioRender *pAudioRen, GstCaps *caps, gboole
     gint out_channels;
     gboolean restart;
     gint gap_correction;
-    gboolean es = FALSE;
-    gint data_channels = 0, data_rate = 0, data_bps = 0;
+    gboolean es;
+    gint data_channels, data_rate, data_bps;
     const gchar *codec_str = NULL;
     gchar *str = NULL;
     const gchar *format = NULL;
-    gint mode_mixer = 0, port_index = -1;
-    guint curr_acmod = 0, curr_downmix = 0;
+    gint mode_mixer, port_index;
+    guint curr_acmod, curr_downmix;
     guint codec;
     gboolean send_first_event = FALSE;
     gchar *stream_id = NULL;
@@ -840,6 +840,11 @@ gst_lg_audio_render_set_caps (GstLgAudioRender *pAudioRen, GstCaps *caps, gboole
     pAudioRen->pAudioCaps = gst_caps_copy (caps);
     memset (&AudioInfo, 0, sizeof (AudioInfo));
 
+    es = FALSE;
+    data_channels = data_rate = data_bps = 0;
+    mode_mixer = 0;
+    port_index = -1;
+    curr_acmod = curr_downmix = 0;
     SINK_CHECK (lgao_get_mode_mixer (pAudioRen->ao, &mode_mixer), 1130);
     SINK_CHECK (lgao_get_port (pAudioRen->ao, &port_index), 1131);
 
@@ -1779,7 +1784,6 @@ static void gst_lg_audio_render_get_property (GObject *object, guint prop_id,
  * These events can invalidate borrowed appsrcs even without a render call. */
 gboolean gst_lg_audio_render_event (GstBaseSink *sink, GstEvent *event)
 {
-    gboolean ret = TRUE;
     GstLgAudioRender *pAudioRen = GST_LG_AUDIO_RENDER (sink);
     GstEventType type = GST_EVENT_TYPE (event);
 
@@ -1788,13 +1792,13 @@ gboolean gst_lg_audio_render_event (GstBaseSink *sink, GstEvent *event)
     switch (type) {
     case GST_EVENT_GAP:
         SINK_LOG (3, GST_LEVEL_INFO, 2226, pAudioRen, "Received Event = GST_EVENT_GAP");
-        break;
+        goto parent_event;
 
     case GST_EVENT_FLUSH_START:
         SINK_LOG (3, GST_LEVEL_INFO, 2231, pAudioRen, "Received GST_EVENT_FLUSH_START event");
         pAudioRen->isFlushing = TRUE;
         pAudioRen->bSeamlessSeek = FALSE;
-        break;
+        goto parent_event;
 
     case GST_EVENT_FLUSH_STOP:
         SINK_LOG (3, GST_LEVEL_INFO, 2238, pAudioRen, "Received Event = GST_EVENT_FLUSH_STOP");
@@ -1802,7 +1806,7 @@ gboolean gst_lg_audio_render_event (GstBaseSink *sink, GstEvent *event)
         lgao_flush (pAudioRen->ao);
         pAudioRen->isFlushing = FALSE;
         pAudioRen->decodedSize = 0;
-        break;
+        goto parent_event;
 
     case GST_EVENT_EOS: {
         gint buffered_size = 0, send_first_event = 0;
@@ -1829,7 +1833,7 @@ gboolean gst_lg_audio_render_event (GstBaseSink *sink, GstEvent *event)
             g_mutex_unlock (&pAudioRen->eos_mutex);
         }
         SINK_LOG (2, GST_LEVEL_INFO, 2278, pAudioRen, "EOS end");
-        break;
+        goto parent_event;
     }
 
     case GST_EVENT_SEGMENT: {
@@ -1868,8 +1872,11 @@ gboolean gst_lg_audio_render_event (GstBaseSink *sink, GstEvent *event)
                 gst_base_sink_set_render_delay (GST_BASE_SINK (pAudioRen), 0);
         }
         pAudioRen->avail_irc_vdec_pts = FALSE;
-        break;
     }
+
+    default:
+parent_event:
+        return GST_BASE_SINK_CLASS (parent_class)->event (sink, event);
 
     case GST_EVENT_CAPS: {
         GstCaps *caps;
@@ -1880,8 +1887,7 @@ gboolean gst_lg_audio_render_event (GstBaseSink *sink, GstEvent *event)
         if (!gst_lg_audio_render_set_caps (pAudioRen, caps, &caps_changed)) {
             SINK_LOG (0, GST_LEVEL_ERROR, 2344, pAudioRen, "gst_lg_audio_render_set_caps() Error");
             gst_event_unref (event);
-            ret = FALSE;
-            goto done;
+            return FALSE;
         }
         /* renderer (re)opened after PLAYING started: program the base time now */
         if (pAudioRen->currentState == GST_STATE_PLAYING && caps_changed) {
@@ -1891,7 +1897,7 @@ gboolean gst_lg_audio_render_event (GstBaseSink *sink, GstEvent *event)
                                               gst_clock_get_time (element->clock) - GST_BASE_SINK (element)->segment.base -
                                               element->base_time, GST_BASE_SINK (element)->segment.start);
         }
-        break;
+        goto parent_event;
     }
 
     case GST_EVENT_STREAM_START: {
@@ -1901,7 +1907,7 @@ gboolean gst_lg_audio_render_event (GstBaseSink *sink, GstEvent *event)
         gst_event_parse_stream_start (event, &stream_id);
         if (stream_id == NULL) {
             SINK_LOG (0, GST_LEVEL_ERROR, 2371, pAudioRen, "Stream ID is NULL");
-            break;
+            goto parent_event;
         }
         SINK_LOG (3, GST_LEVEL_INFO, 2375, pAudioRen, "Stream ID: %s", stream_id);
 
@@ -1922,7 +1928,7 @@ gboolean gst_lg_audio_render_event (GstBaseSink *sink, GstEvent *event)
         }
         g_free (pAudioRen->pStreamId);
         pAudioRen->pStreamId = g_strdup (stream_id);
-        break;
+        goto parent_event;
     }
 
     case GST_EVENT_CUSTOM_DOWNSTREAM: {
@@ -1932,7 +1938,7 @@ gboolean gst_lg_audio_render_event (GstBaseSink *sink, GstEvent *event)
         SINK_LOG (2, GST_LEVEL_INFO, 2404, pAudioRen, "got event(%s)", GST_EVENT_TYPE_NAME (event));
         s = gst_event_get_structure (event);
         if (s == NULL || !gst_structure_has_name (s, "audio-gap"))
-            break;
+            goto parent_event;
         if (gst_structure_has_field (s, "pts-before-gap"))
             gst_structure_get_uint64 (s, "pts-before-gap", &before);
         else
@@ -1947,7 +1953,7 @@ gboolean gst_lg_audio_render_event (GstBaseSink *sink, GstEvent *event)
                       (gint64) before, (gint64) after);
             lgao_audio_gap (pAudioRen->ao, before, after);
         }
-        break;
+        goto parent_event;
     }
 
     case GST_EVENT_CUSTOM_DOWNSTREAM_OOB:
@@ -1956,17 +1962,10 @@ gboolean gst_lg_audio_render_event (GstBaseSink *sink, GstEvent *event)
             SINK_LOG (3, GST_LEVEL_INFO, 2441, pAudioRen,
                       "received mpegh-object-ui event from upstream");
             gst_event_unref (event);
-            goto done;
+            return TRUE;
         }
-        break;
-
-    default:
-        break;
+        goto parent_event;
     }
-
-    ret = GST_BASE_SINK_CLASS (parent_class)->event (sink, event);
-done:
-    return ret;
 }
 
 /* @0xbbf4 gst_lg_audio_render_chain: GstBaseSink::render. Feeds the buffer to lgao in

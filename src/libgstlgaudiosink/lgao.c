@@ -1390,84 +1390,86 @@ int lgao_connect_renderer(void *a)
 /* @0x16cf8: RTS (rate/latency control) defaults per app type; user values are ms */
 void _lgao_config_set_rts_param(lgao *ao, LGAO_APPTYPE_T mode)
 {
-    unsigned int opmode = ao->rts_params.opmode;
-    unsigned int upper = ao->rts_params.upper_threshold;
-    unsigned int lower = ao->rts_params.lower_threshold;
-    unsigned int rec_upper = ao->rts_params.recover_upper;
-    unsigned int rec_lower = ao->rts_params.recover_lower;
-    unsigned int skipping = ao->rts_params.skipping_threshold;
-    unsigned int rec_skipping = ao->rts_params.recover_skipping;
-    unsigned int fast_freq = ao->rts_params.fast_freq;
-    unsigned int normal_freq = ao->rts_params.normal_freq;
-    unsigned int slow_freq = ao->rts_params.slow_freq;
-    unsigned int mix_fade_len = ao->rts_params.mix_fade_len;
-    unsigned int mix_wait_len = ao->rts_params.mix_wait_len;
-    unsigned int level = ao->rts_params.buffering_level;
+    aren_rts_param_t src = ao->rts_params;
     aren_rts_param_t dst;
 
 #define MS_OR(v, def) ((v) == UNSET ? (def) : RTS_MS(v))
     memset(&dst, 0, sizeof(dst));
     switch (mode) {
-    case LGAO_APPTYPE_DIRECTMEDIA:
+    case LGAO_APPTYPE_AIRPLAY:
         dst.onoff = true;
-        dst.opmode = opmode == UNSET ? 2 : opmode;
-        dst.upper_threshold    = MS_OR(upper,        RTS_MS(80));
-        dst.recover_upper      = MS_OR(rec_upper,    RTS_MS(60));
-        dst.lower_threshold    = MS_OR(lower,        0);
-        dst.recover_lower      = MS_OR(rec_lower,    RTS_MS(70));
-        dst.skipping_threshold = MS_OR(skipping,     RTS_MS(400));
-        dst.recover_skipping   = MS_OR(rec_skipping, RTS_MS(60));
+        dst.opmode = src.opmode == UNSET ? 2 : src.opmode;
+        dst.upper_threshold    = MS_OR(src.upper_threshold,    RTS_MS(15));
+        dst.recover_upper      = MS_OR(src.recover_upper,      RTS_MS(5));
+        dst.lower_threshold    = MS_OR(src.lower_threshold,    0);
+        dst.recover_lower      = MS_OR(src.recover_lower,      RTS_MS(150));
+        dst.skipping_threshold = MS_OR(src.skipping_threshold, RTS_MS(200));
+        dst.recover_skipping   = MS_OR(src.recover_skipping,   RTS_MS(5));
+        dst.normal_freq  = src.normal_freq  == UNSET ? 48000 : src.normal_freq;
+        dst.slow_freq    = src.slow_freq    == UNSET ? 48000 : src.slow_freq;
+        dst.fast_freq    = src.fast_freq    == UNSET ? 47250 : src.fast_freq;
+        dst.mix_fade_len = src.mix_fade_len == UNSET ? 8 : src.mix_fade_len;
+        dst.mix_wait_len = src.mix_wait_len == UNSET ? 0x800 : src.mix_wait_len;
         break;
     case LGAO_APPTYPE_RTC:
     case LGAO_APPTYPE_MIRACAST:
         dst.onoff = true;
-        dst.opmode = opmode == UNSET ? 2 : opmode;
-        dst.upper_threshold    = MS_OR(upper,        RTS_MS(200));
-        dst.recover_upper      = MS_OR(rec_upper,    RTS_MS(100));
-        dst.lower_threshold    = MS_OR(lower,        0);
-        dst.recover_lower      = MS_OR(rec_lower,    RTS_MS(150));
-        dst.skipping_threshold = MS_OR(skipping,     RTS_MS(400));
-        dst.recover_skipping   = MS_OR(rec_skipping, RTS_MS(100));
+        dst.opmode = src.opmode == UNSET ? 2 : src.opmode;
+        dst.upper_threshold    = MS_OR(src.upper_threshold,    RTS_MS(200));
+        dst.recover_upper      = MS_OR(src.recover_upper,      RTS_MS(100));
+        dst.lower_threshold    = MS_OR(src.lower_threshold,    0);
+        dst.recover_lower      = MS_OR(src.recover_lower,      RTS_MS(150));
+        dst.skipping_threshold = MS_OR(src.skipping_threshold, RTS_MS(400));
+        dst.recover_skipping   = MS_OR(src.recover_skipping,   RTS_MS(100));
+        dst.normal_freq  = src.normal_freq  == UNSET ? 48000 : src.normal_freq;
+        dst.slow_freq    = src.slow_freq    == UNSET ? 48000 : src.slow_freq;
+        dst.fast_freq    = src.fast_freq    == UNSET ? 47250 : src.fast_freq;
+        dst.mix_fade_len = src.mix_fade_len == UNSET ? 8 : src.mix_fade_len;
+        dst.mix_wait_len = src.mix_wait_len == UNSET ? 0x800 : src.mix_wait_len;
         break;
-    case LGAO_APPTYPE_AIRPLAY:
+    case LGAO_APPTYPE_DIRECTMEDIA:
         dst.onoff = true;
-        dst.opmode = opmode == UNSET ? 2 : opmode;
-        dst.upper_threshold    = MS_OR(upper,        RTS_MS(15));
-        dst.recover_upper      = MS_OR(rec_upper,    RTS_MS(5));
-        dst.lower_threshold    = MS_OR(lower,        0);
-        dst.recover_lower      = MS_OR(rec_lower,    RTS_MS(150));
-        dst.skipping_threshold = MS_OR(skipping,     RTS_MS(200));
-        dst.recover_skipping   = MS_OR(rec_skipping, RTS_MS(5));
+        dst.opmode = src.opmode == UNSET ? 2 : src.opmode;
+        dst.upper_threshold    = MS_OR(src.upper_threshold,    RTS_MS(80));
+        dst.recover_upper      = MS_OR(src.recover_upper,      RTS_MS(60));
+        dst.lower_threshold    = MS_OR(src.lower_threshold,    0);
+        dst.recover_lower      = MS_OR(src.recover_lower,      RTS_MS(70));
+        dst.skipping_threshold = MS_OR(src.skipping_threshold, RTS_MS(400));
+        dst.recover_skipping   = MS_OR(src.recover_skipping,   RTS_MS(60));
+        dst.normal_freq  = src.normal_freq  == UNSET ? 48000 : src.normal_freq;
+        dst.slow_freq    = src.slow_freq    == UNSET ? 48000 : src.slow_freq;
+        dst.fast_freq    = src.fast_freq    == UNSET ? 47250 : src.fast_freq;
+        dst.mix_fade_len = src.mix_fade_len == UNSET ? 8 : src.mix_fade_len;
+        dst.mix_wait_len = src.mix_wait_len == UNSET ? 0x800 : src.mix_wait_len;
         break;
     case LGAO_APPTYPE_R2R:
         /* everything follows the buffering level (default 200 ms) */
         dst.onoff = true;
-        dst.opmode = opmode == UNSET ? 2 : opmode;
-        if (level == UNSET) {
-            level = 200;
+        dst.opmode = src.opmode == UNSET ? 2 : src.opmode;
+        if (src.buffering_level == UNSET) {
+            src.buffering_level = 200;
             dst.upper_threshold    = RTS_MS(400);
             dst.recover_upper      = RTS_MS(100);
             dst.recover_lower      = RTS_MS(300);
             dst.skipping_threshold = RTS_MS(700);
         } else {
-            dst.upper_threshold    = RTS_MS(level) + RTS_MS(200);
-            dst.recover_upper      = RTS_MS(level) - RTS_MS(100);
-            dst.recover_lower      = RTS_MS(level) + RTS_MS(100);
-            dst.skipping_threshold = RTS_MS(level) + RTS_MS(500);
+            dst.upper_threshold    = RTS_MS(src.buffering_level) + RTS_MS(200);
+            dst.recover_upper      = RTS_MS(src.buffering_level) - RTS_MS(100);
+            dst.recover_lower      = RTS_MS(src.buffering_level) + RTS_MS(100);
+            dst.skipping_threshold = RTS_MS(src.buffering_level) + RTS_MS(500);
         }
         dst.recover_skipping = dst.recover_upper;
-        dst.buffering_level = level;
+        dst.buffering_level = src.buffering_level;
+        dst.normal_freq  = src.normal_freq  == UNSET ? 48000 : src.normal_freq;
+        dst.slow_freq    = src.slow_freq    == UNSET ? 48000 : src.slow_freq;
+        dst.fast_freq    = src.fast_freq    == UNSET ? 47250 : src.fast_freq;
+        dst.mix_fade_len = src.mix_fade_len == UNSET ? 8 : src.mix_fade_len;
+        dst.mix_wait_len = src.mix_wait_len == UNSET ? 0x800 : src.mix_wait_len;
         break;
     default:            /* UNKNOWN, JP4K, IDGAPLESS, APPCAST, SYE: RTS off (all zero) */
-        goto out;
+        break;
     }
 #undef MS_OR
-    dst.normal_freq  = normal_freq  == UNSET ? 48000 : normal_freq;
-    dst.slow_freq    = slow_freq    == UNSET ? 48000 : slow_freq;
-    dst.fast_freq    = fast_freq    == UNSET ? 47250 : fast_freq;
-    dst.mix_fade_len = mix_fade_len == UNSET ? 8 : mix_fade_len;
-    dst.mix_wait_len = mix_wait_len == UNSET ? 0x800 : mix_wait_len;
-out:
     ioctl(ao->fd, AREN_SET_RTS_PARAM, &dst);
 }
 

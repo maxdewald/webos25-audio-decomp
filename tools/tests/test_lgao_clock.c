@@ -18,6 +18,7 @@
 // @match src/libgstlgaudiosink/lgao.c typedef struct \{ unsigned int clock_base_time, stream_base_time; \} aren_base_time_t;
 // @match src/libgstlgaudiosink/lgao.c typedef struct \{\n    unsigned int lower_bound[^}]*\} aren_lipsync_param_t;
 // @match src/libgstlgaudiosink/lgao.c (?m)^#define AREN_(GET_GSTC|SET_CLOCKTYPE|SET_ENABLE_LIPSYNC|SET_BASETIME|SET_LIPSYNC_PARAM|SET_SPEED) .*$
+// @match src/libgstlgaudiosink/lgao.c (?m)^#define (RTS_MS|AREN_SET_RTS_PARAM).*\n
 
 enum { AUD_EVENT_TYPE_LAST_AU = 2, AUD_EVENT_TYPE_CUSTOM = 13 };
 enum appsink_event_return { appsink_event_handled = 0, appsink_event_not_handled = 1 };
@@ -28,6 +29,7 @@ static unsigned vals[16][2];
 static int nreq, msgs, last_msg, gstc = 1000000;
 static int current_volume;
 static aren_ease_volume_t fade_values[16];
+static aren_rts_param_t rts_value;
 
 static int _lgao_get_ease_volume(lgao *ao) { return current_volume; }
 
@@ -35,7 +37,9 @@ static int mock_ioctl(int fd, unsigned long req, void *arg)
 {
     assert(nreq < 16);
     reqs[nreq] = req;
-    if (req == AREN_SET_EASE_VOLUME)
+    if (req == AREN_SET_RTS_PARAM)
+        rts_value = *(aren_rts_param_t *)arg;
+    else if (req == AREN_SET_EASE_VOLUME)
         fade_values[nreq] = *(aren_ease_volume_t *)arg;
     else if (req == AREN_GET_GSTC)
         *(unsigned *)arg = gstc;
@@ -64,7 +68,7 @@ static const char *aud_event_value_get_str(struct aud_event *e, const char *k, c
 #define ioctl mock_ioctl
 #define msgsnd mock_msgsnd
 
-// @extract src/libgstlgaudiosink/lgao.c sns_to_pts _lgao_set_basetime lgao_set_basetime _lgao_set_playspeed _lgao_set_lipsync_param lgao_play lgao_appsink_handle_event _lgao_convert_ease_type lgao_keep_fade _lgao_config_set_easevol
+// @extract src/libgstlgaudiosink/lgao.c sns_to_pts _lgao_set_basetime lgao_set_basetime _lgao_set_playspeed _lgao_set_lipsync_param lgao_play lgao_appsink_handle_event _lgao_convert_ease_type lgao_keep_fade _lgao_config_set_easevol _lgao_config_set_rts_param
 
 static lgao ctx(void)
 {
@@ -81,6 +85,87 @@ int main(void)
 {
     const long long s = 1000000000LL;
     lgao ao = ctx();
+
+    for (int mode = LGAO_APPTYPE_UNKNOWN; mode < LGAO_APPTYPE_MAX; ++mode) {
+        ao = ctx();
+        memset(&ao.rts_params, 0xff, sizeof(ao.rts_params));
+        _lgao_config_set_rts_param(&ao, mode);
+        assert(nreq == 1 && reqs[0] == AREN_SET_RTS_PARAM);
+        if (mode == LGAO_APPTYPE_DIRECTMEDIA || mode == LGAO_APPTYPE_RTC ||
+            mode == LGAO_APPTYPE_MIRACAST || mode == LGAO_APPTYPE_AIRPLAY ||
+            mode == LGAO_APPTYPE_R2R) {
+            assert(rts_value.onoff && rts_value.opmode == 2);
+            assert(rts_value.normal_freq == 48000 && rts_value.slow_freq == 48000);
+            assert(rts_value.fast_freq == 47250);
+            assert(rts_value.mix_fade_len == 8 && rts_value.mix_wait_len == 2048);
+            assert(!rts_value.lower_threshold);
+            if (mode == LGAO_APPTYPE_DIRECTMEDIA) {
+                assert(rts_value.upper_threshold == 80 * 384);
+                assert(rts_value.recover_upper == 60 * 384);
+                assert(rts_value.recover_lower == 70 * 384);
+                assert(rts_value.skipping_threshold == 400 * 384);
+                assert(rts_value.recover_skipping == 60 * 384);
+            } else if (mode == LGAO_APPTYPE_AIRPLAY) {
+                assert(rts_value.upper_threshold == 15 * 384);
+                assert(rts_value.recover_upper == 5 * 384);
+                assert(rts_value.recover_lower == 150 * 384);
+                assert(rts_value.skipping_threshold == 200 * 384);
+                assert(rts_value.recover_skipping == 5 * 384);
+            } else if (mode == LGAO_APPTYPE_R2R) {
+                assert(rts_value.upper_threshold == 400 * 384);
+                assert(rts_value.recover_upper == 100 * 384);
+                assert(rts_value.recover_lower == 300 * 384);
+                assert(rts_value.skipping_threshold == 700 * 384);
+                assert(rts_value.recover_skipping == 100 * 384);
+                assert(rts_value.buffering_level == 200);
+            } else {
+                assert(rts_value.upper_threshold == 200 * 384);
+                assert(rts_value.recover_upper == 100 * 384);
+                assert(rts_value.recover_lower == 150 * 384);
+                assert(rts_value.skipping_threshold == 400 * 384);
+                assert(rts_value.recover_skipping == 100 * 384);
+            }
+        } else {
+            const aren_rts_param_t zero = {0};
+            assert(!memcmp(&rts_value, &zero, sizeof(zero)));
+        }
+    }
+    for (int mode = LGAO_APPTYPE_DIRECTMEDIA; mode <= LGAO_APPTYPE_R2R; ++mode) {
+        if (mode > LGAO_APPTYPE_AIRPLAY && mode != LGAO_APPTYPE_R2R) continue;
+        ao = ctx();
+        ao.rts_params = (aren_rts_param_t){
+            .opmode = 7, .upper_threshold = 11, .lower_threshold = 12,
+            .recover_upper = 13, .recover_lower = 14, .skipping_threshold = 15,
+            .recover_skipping = 16, .normal_freq = 48001, .slow_freq = 48002,
+            .fast_freq = 47000, .mix_fade_len = 9, .mix_wait_len = 17,
+            .buffering_level = 50,
+        };
+        _lgao_config_set_rts_param(&ao, mode);
+        assert(rts_value.opmode == 7 && rts_value.normal_freq == 48001);
+        assert(rts_value.slow_freq == 48002 && rts_value.fast_freq == 47000);
+        assert(rts_value.mix_fade_len == 9 && rts_value.mix_wait_len == 17);
+        if (mode == LGAO_APPTYPE_R2R) {
+            assert(rts_value.upper_threshold == 250 * 384);
+            assert(rts_value.recover_upper == 50u * 384 - 100u * 384);
+            assert(rts_value.recover_lower == 150 * 384);
+            assert(rts_value.skipping_threshold == 550 * 384);
+            assert(rts_value.recover_skipping == rts_value.recover_upper);
+            assert(rts_value.buffering_level == 50 && !rts_value.lower_threshold);
+        } else {
+            assert(rts_value.upper_threshold == 11 * 384);
+            assert(rts_value.lower_threshold == 12 * 384);
+            assert(rts_value.recover_upper == 13 * 384);
+            assert(rts_value.recover_lower == 14 * 384);
+            assert(rts_value.skipping_threshold == 15 * 384);
+            assert(rts_value.recover_skipping == 16 * 384);
+            assert(!rts_value.buffering_level);
+        }
+    }
+    ao = ctx();
+    _lgao_config_set_rts_param(&ao, LGAO_APPTYPE_RTC);
+    assert(rts_value.onoff && !rts_value.opmode && !rts_value.fast_freq);
+    assert(!rts_value.upper_threshold && !rts_value.mix_wait_len);
+    ao = ctx();
 
     ao.targetVolume = 100; ao.duration = 1000; current_volume = 25;
     assert(lgao_keep_fade(&ao) == 0 && ao.currVolume == 25 && ao.remainDuration == 750);
